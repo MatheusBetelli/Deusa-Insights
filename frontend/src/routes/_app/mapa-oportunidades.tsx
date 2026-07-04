@@ -49,6 +49,7 @@ function OpportunityMap() {
   const mapRef = useRef<Leaflet.Map | null>(null);
   const leafletRef = useRef<typeof Leaflet | null>(null);
   const markerLayerRef = useRef<Leaflet.LayerGroup | null>(null);
+  const markerMapRef = useRef<Map<string, Leaflet.Marker>>(new Map());
 
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [dataLoading, setDataLoading] = useState(true);
@@ -106,11 +107,18 @@ function OpportunityMap() {
           zoom: DEFAULT_ZOOM,
           zoomControl: true,
           scrollWheelZoom: true,
+          maxBounds: [
+            [-90, -180],
+            [90, 180]
+          ],
+          maxBoundsViscosity: 1.0,
         });
 
         L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
           attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
           maxZoom: 18,
+          minZoom: 3,
+          noWrap: true,
         }).addTo(map);
 
         markerLayerRef.current = L.layerGroup().addTo(map);
@@ -138,6 +146,7 @@ function OpportunityMap() {
     if (!L || !map || !markerLayer || status !== "ready") return;
 
     markerLayer.clearLayers();
+    markerMapRef.current.clear();
 
     pointsWithCoordinates.forEach((point) => {
       const category = getClientCategory(point.status);
@@ -145,17 +154,19 @@ function OpportunityMap() {
       const icon = L.divIcon({
         className: "deusa-score-marker",
         html: `<span style="background:${color}; border-color:${color === "#F59E0B" ? "#0B1F33" : "#ffffff"}">${point.score}</span>`,
-        iconSize: [44, 44],
-        iconAnchor: [22, 22],
-        popupAnchor: [0, -18],
+        iconSize: [32, 32],
+        iconAnchor: [16, 16],
+        popupAnchor: [0, -14],
       });
 
-      L.marker([point.latitude!, point.longitude!], { icon })
+      const marker = L.marker([point.latitude!, point.longitude!], { icon })
         .bindPopup(
           `<div class="deusa-map-popup"><strong>${point.companyName}</strong><span>${formatCnpj(point.cnpj)} · ${point.city}/${point.uf}</span><dl><div><dt>Bairro</dt><dd>${point.bairro ?? "-"}</dd></div><div><dt>Score</dt><dd>${point.score}</dd></div><div><dt>Categoria</dt><dd>${clientCategoryLabels[category]}</dd></div></dl></div>`,
           { maxWidth: 280, minWidth: 220 },
         )
         .addTo(markerLayer);
+      
+      markerMapRef.current.set(point.id, marker);
     });
 
     if (pointsWithCoordinates.length === 0) {
@@ -229,8 +240,8 @@ function OpportunityMap() {
 
       {dataLoading ? (
         <LoadingState message="Carregando oportunidades do mapa..." />
-      ) : filteredPoints.length === 0 ? (
-        <EmptyState title="Nenhuma oportunidade encontrada" description="Não há oportunidades para os filtros selecionados. Limpe os filtros ou importe novos CNPJs." />
+      ) : opportunities.length === 0 ? (
+        <EmptyState title="Nenhuma oportunidade encontrada" description="Não há oportunidades cadastradas. Importe novos CNPJs." />
       ) : (
         <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
           <div className="overflow-hidden rounded-xl border border-[#DDE5EF] bg-white shadow-sm">
@@ -252,7 +263,12 @@ function OpportunityMap() {
                   <LoadingState message="Carregando mapa..." />
                 </div>
               )}
-              {pointsWithCoordinates.length === 0 && status === "ready" && (
+              {filteredPoints.length === 0 && status === "ready" && (
+                <div className="absolute inset-0 z-[500] flex items-center justify-center bg-white/90 p-6">
+                  <EmptyState title="Nenhuma oportunidade encontrada" description="Não há oportunidades para os filtros selecionados. Limpe os filtros ou importe novos CNPJs." />
+                </div>
+              )}
+              {filteredPoints.length > 0 && pointsWithCoordinates.length === 0 && status === "ready" && (
                 <div className="absolute inset-0 z-[500] flex items-center justify-center bg-white/75 p-6">
                   <EmptyState title="Sem coordenadas para exibir" description="Os registros selecionados ainda não possuem latitude e longitude." />
                 </div>
@@ -262,9 +278,22 @@ function OpportunityMap() {
 
           <aside className="rounded-xl border border-[#DDE5EF] bg-white p-4 shadow-sm">
             <h2 className="text-lg font-bold text-[#0B1F33]">Top oportunidades</h2>
-            <div className="mt-4 space-y-3">
-              {topOpportunities.map((point) => (
-                <div key={point.id} className="rounded-lg border border-[#EEF2F7] p-3">
+            {topOpportunities.length === 0 ? (
+              <p className="mt-4 text-sm text-[#64748B]">Nenhuma oportunidade para listar.</p>
+            ) : (
+              <div className="mt-4 space-y-3">
+                {topOpportunities.map((point) => (
+                <div
+                  key={point.id}
+                  className={`rounded-lg border border-[#EEF2F7] p-3 transition-colors ${typeof point.latitude === "number" ? "cursor-pointer hover:border-[#1061AF]" : ""}`}
+                  onClick={() => {
+                    if (typeof point.latitude === "number" && typeof point.longitude === "number") {
+                      mapRef.current?.flyTo([point.latitude, point.longitude], 15);
+                      markerMapRef.current.get(point.id)?.openPopup();
+                      window.scrollTo({ top: 0, behavior: "smooth" });
+                    }
+                  }}
+                >
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="font-bold leading-snug text-[#0B1F33]">{point.companyName}</div>
@@ -276,6 +305,7 @@ function OpportunityMap() {
                 </div>
               ))}
             </div>
+            )}
           </aside>
         </section>
       )}

@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, redirect } from "@tanstack/react-router";
 import { useState } from "react";
 import {
   ArrowRight,
@@ -15,6 +15,11 @@ import { DeusaLogo } from "@/components/app/Logo";
 import { AuthService } from "@/lib/auth";
 
 export const Route = createFileRoute("/login")({
+  beforeLoad: () => {
+    if (typeof window !== "undefined" && AuthService.isAuthenticated()) {
+      throw redirect({ to: "/dashboard" });
+    }
+  },
   component: LoginPage,
 });
 

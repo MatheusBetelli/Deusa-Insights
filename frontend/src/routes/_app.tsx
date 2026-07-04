@@ -6,7 +6,7 @@ import { useEffect } from "react";
 
 export const Route = createFileRoute("/_app")({
   beforeLoad: () => {
-    if (!AuthService.isAuthenticated()) {
+    if (typeof window !== "undefined" && !AuthService.isAuthenticated()) {
       throw redirect({
         to: "/login",
       });
