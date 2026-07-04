@@ -1,3 +1,5 @@
+import { getMockApiResponse } from "./mockApi";
+
 export class ApiError extends Error {
   status?: number;
 
@@ -20,7 +22,11 @@ function buildUrl(path: string, query?: Record<string, string | number | undefin
   return url.toString();
 }
 
-export async function apiRequest<T>(path: string, options: RequestInit = {}, query?: Record<string, string | number | undefined | null>): Promise<T> {
+export async function apiRequest<T>(
+  path: string,
+  options: RequestInit = {},
+  query?: Record<string, string | number | undefined | null>,
+): Promise<T> {
   try {
     const response = await fetch(buildUrl(path, query), {
       ...options,
@@ -34,7 +40,9 @@ export async function apiRequest<T>(path: string, options: RequestInit = {}, que
       let message = "Não foi possível carregar os dados da API.";
       try {
         const payload = await response.json();
-        message = Array.isArray(payload.message) ? payload.message.join(", ") : payload.message || message;
+        message = Array.isArray(payload.message)
+          ? payload.message.join(", ")
+          : payload.message || message;
       } catch {
         // Keep default friendly message.
       }
@@ -45,6 +53,8 @@ export async function apiRequest<T>(path: string, options: RequestInit = {}, que
     return (await response.json()) as T;
   } catch (error) {
     if (error instanceof ApiError) throw error;
+    const mockResponse = getMockApiResponse<T>(path, options, query);
+    if (mockResponse !== undefined) return mockResponse;
     throw new ApiError("API indisponível. Verifique se o backend está rodando e tente novamente.");
   }
 }

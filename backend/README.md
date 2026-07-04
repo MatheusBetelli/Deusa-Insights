@@ -57,7 +57,12 @@ npx prisma studio
 ```text
 admin@deusa.com.br / admin123
 rafael.mendes@deusa.com.br / deusa123
+mariana.alves@deusa.com.br / deusa123
+camila.rocha@deusa.com.br / deusa123
+felipe.lima@deusa.com.br / deusa123
 ```
+
+O seed também cria dados mockados para visualização do produto: cidades monitoradas, CNAEs alvo, 15 empresas/leads com scores variados, responsáveis comerciais, próximas ações, histórico de contatos, coordenadas para o mapa e jobs de importação.
 
 ## Endpoints
 

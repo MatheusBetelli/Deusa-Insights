@@ -4,9 +4,9 @@ import type * as Leaflet from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { PageHeader } from "@/components/app/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "@/components/app/InterfaceStates";
-import { formatCnpj, potentialLabels } from "@/lib/commercial-formatters";
+import { formatCnpj } from "@/lib/commercial-formatters";
 import { mapService } from "@/services/mapService";
-import type { PotentialLevel } from "@/types/lead";
+import type { LeadStatus } from "@/types/lead";
 import type { MapOpportunity } from "@/types/mapOpportunity";
 import { AlertTriangle, FileUp, Filter, RotateCcw } from "lucide-react";
 
@@ -17,16 +17,31 @@ export const Route = createFileRoute("/_app/mapa-oportunidades")({
 const DEFAULT_CENTER: [number, number] = [-22.05, -50.18];
 const DEFAULT_ZOOM = 9;
 
-function priorityClass(priority: PotentialLevel) {
-  if (priority === "CRITICAL") return "bg-[#ED1C24] text-white";
-  if (priority === "HIGH") return "bg-[#FFF200] text-[#0B1F33]";
-  return "bg-[#1061AF] text-white";
+type ClientCategory = "CLIENTE" | "POTENCIAL" | "NAO_CLIENTE";
+
+const clientCategoryLabels: Record<ClientCategory, string> = {
+  CLIENTE: "Cliente",
+  POTENCIAL: "Potencial Cliente",
+  NAO_CLIENTE: "Não Cliente",
+};
+
+function getClientCategory(status: LeadStatus): ClientCategory {
+  if (status === "CONVERTED") return "CLIENTE";
+  if (status === "NOT_INTERESTED" || status === "INACTIVE") return "NAO_CLIENTE";
+  return "POTENCIAL";
 }
 
-function markerColor(score: number) {
-  if (score >= 90) return "#ED1C24";
-  if (score >= 80) return "#F2C600";
-  return "#1061AF";
+function categoryClass(category: ClientCategory) {
+  if (category === "CLIENTE") return "bg-[#22C55E] text-white";
+  if (category === "POTENCIAL") return "bg-[#F59E0B] text-[#0B1F33]";
+  return "bg-[#EF4444] text-white";
+}
+
+function markerColor(status: LeadStatus) {
+  const category = getClientCategory(status);
+  if (category === "CLIENTE") return "#22C55E";
+  if (category === "POTENCIAL") return "#F59E0B";
+  return "#EF4444";
 }
 
 function OpportunityMap() {
@@ -40,7 +55,7 @@ function OpportunityMap() {
   const [dataError, setDataError] = useState<string | null>(null);
   const [opportunities, setOpportunities] = useState<MapOpportunity[]>([]);
   const [selectedCity, setSelectedCity] = useState("Todas");
-  const [selectedPriority, setSelectedPriority] = useState("Todas");
+  const [selectedCategory, setSelectedCategory] = useState("Todas");
 
   async function loadOpportunities() {
     setDataLoading(true);
@@ -61,10 +76,10 @@ function OpportunityMap() {
   const filteredPoints = useMemo(() => {
     return opportunities.filter((point) => {
       const matchCity = selectedCity === "Todas" || point.city === selectedCity;
-      const matchPriority = selectedPriority === "Todas" || point.potentialLevel === selectedPriority;
-      return matchCity && matchPriority;
+      const matchCategory = selectedCategory === "Todas" || getClientCategory(point.status) === selectedCategory;
+      return matchCity && matchCategory;
     });
-  }, [opportunities, selectedCity, selectedPriority]);
+  }, [opportunities, selectedCity, selectedCategory]);
 
   const pointsWithCoordinates = useMemo(
     () => filteredPoints.filter((point) => typeof point.latitude === "number" && typeof point.longitude === "number"),
@@ -114,7 +129,7 @@ function OpportunityMap() {
       mapRef.current?.remove();
       mapRef.current = null;
     };
-  }, []);
+  }, [dataLoading]);
 
   useEffect(() => {
     const L = leafletRef.current;
@@ -125,10 +140,11 @@ function OpportunityMap() {
     markerLayer.clearLayers();
 
     pointsWithCoordinates.forEach((point) => {
-      const color = markerColor(point.score);
+      const category = getClientCategory(point.status);
+      const color = markerColor(point.status);
       const icon = L.divIcon({
         className: "deusa-score-marker",
-        html: `<span style="background:${color}; border-color:${color === "#F2C600" ? "#0B1F33" : "#ffffff"}">${point.score}</span>`,
+        html: `<span style="background:${color}; border-color:${color === "#F59E0B" ? "#0B1F33" : "#ffffff"}">${point.score}</span>`,
         iconSize: [44, 44],
         iconAnchor: [22, 22],
         popupAnchor: [0, -18],
@@ -136,7 +152,7 @@ function OpportunityMap() {
 
       L.marker([point.latitude!, point.longitude!], { icon })
         .bindPopup(
-          `<div class="deusa-map-popup"><strong>${point.companyName}</strong><span>${formatCnpj(point.cnpj)} · ${point.city}/${point.uf}</span><dl><div><dt>Bairro</dt><dd>${point.bairro ?? "-"}</dd></div><div><dt>Score</dt><dd>${point.score}</dd></div><div><dt>Potencial</dt><dd>${potentialLabels[point.potentialLevel]}</dd></div></dl></div>`,
+          `<div class="deusa-map-popup"><strong>${point.companyName}</strong><span>${formatCnpj(point.cnpj)} · ${point.city}/${point.uf}</span><dl><div><dt>Bairro</dt><dd>${point.bairro ?? "-"}</dd></div><div><dt>Score</dt><dd>${point.score}</dd></div><div><dt>Categoria</dt><dd>${clientCategoryLabels[category]}</dd></div></dl></div>`,
           { maxWidth: 280, minWidth: 220 },
         )
         .addTo(markerLayer);
@@ -188,19 +204,18 @@ function OpportunityMap() {
             </select>
           </label>
           <label className="block min-w-[180px]">
-            <span className="mb-1 block text-[11px] font-bold uppercase text-[#64748B]">Potencial</span>
-            <select value={selectedPriority} onChange={(event) => setSelectedPriority(event.target.value)} className="h-10 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-sm text-[#0B1F33] outline-none focus:border-[#1061AF]">
+            <span className="mb-1 block text-[11px] font-bold uppercase text-[#64748B]">Categoria</span>
+            <select value={selectedCategory} onChange={(event) => setSelectedCategory(event.target.value)} className="h-10 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-sm text-[#0B1F33] outline-none focus:border-[#1061AF]">
               <option>Todas</option>
-              <option value="CRITICAL">Crítico</option>
-              <option value="HIGH">Alto</option>
-              <option value="MEDIUM">Médio</option>
-              <option value="LOW">Baixo</option>
+              <option value="CLIENTE">Cliente</option>
+              <option value="POTENCIAL">Potencial Cliente</option>
+              <option value="NAO_CLIENTE">Não Cliente</option>
             </select>
           </label>
           <button
             onClick={() => {
               setSelectedCity("Todas");
-              setSelectedPriority("Todas");
+              setSelectedCategory("Todas");
             }}
             className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#DDE5EF] bg-white text-[#64748B] transition hover:bg-[#F8FAFC] hover:text-[#0B1F33]"
             title="Limpar filtros"
@@ -222,9 +237,9 @@ function OpportunityMap() {
             <div className="flex flex-col gap-3 border-b border-[#DDE5EF] px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
               <h2 className="text-lg font-bold text-[#0B1F33]">Oportunidades no mapa</h2>
               <div className="flex flex-wrap gap-2">
-                {(["CRITICAL", "HIGH", "MEDIUM"] as PotentialLevel[]).map((priority) => (
-                  <span key={priority} className={`rounded-full px-3 py-1 text-xs font-bold ${priorityClass(priority)}`}>
-                    {potentialLabels[priority]}
+                {(["CLIENTE", "POTENCIAL", "NAO_CLIENTE"] as ClientCategory[]).map((category) => (
+                  <span key={category} className={`rounded-full px-3 py-1 text-xs font-bold ${categoryClass(category)}`}>
+                    {clientCategoryLabels[category]}
                   </span>
                 ))}
               </div>
@@ -257,7 +272,7 @@ function OpportunityMap() {
                     </div>
                     <span className="rounded-md bg-[#1061AF]/10 px-2 py-1 text-xs font-bold text-[#0F58A0]">{point.score}</span>
                   </div>
-                  <div className="mt-3 text-xs font-bold text-[#64748B]">{potentialLabels[point.potentialLevel]}</div>
+                  <div className="mt-3 text-xs font-bold text-[#64748B]">{clientCategoryLabels[getClientCategory(point.status)]}</div>
                 </div>
               ))}
             </div>
