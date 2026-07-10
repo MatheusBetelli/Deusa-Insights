@@ -23,10 +23,20 @@ export class DashboardService {
       topLead,
       topCnae,
     ] = await Promise.all([
-      this.prisma.lead.count({ where: { status: { notIn: [LeadStatus.CONVERTED, LeadStatus.INACTIVE, LeadStatus.NOT_INTERESTED] } } }),
+      this.prisma.lead.count({
+        where: {
+          status: { notIn: [LeadStatus.CONVERTED, LeadStatus.INACTIVE, LeadStatus.NOT_INTERESTED] },
+          company: { situacaoCadastral: "ATIVA" },
+        },
+      }),
       this.prisma.lead.count({ where: { status: LeadStatus.CONVERTED } }),
       this.prisma.lead.count({ where: { status: LeadStatus.INACTIVE } }),
-      this.prisma.lead.count({ where: { potentialLevel: PotentialLevel.CRITICAL } }),
+      this.prisma.lead.count({
+        where: {
+          potentialLevel: PotentialLevel.CRITICAL,
+          company: { situacaoCadastral: "ATIVA" },
+        },
+      }),
       this.prisma.city.count({ where: { isActive: true } }),
       this.prisma.cnae.count({ where: { isTarget: true } }),
       this.prisma.lead.findFirst({

@@ -1,5 +1,5 @@
 import { Bell, Search, LogOut, User, Lock, ChevronDown, CheckCircle2, Clock, RefreshCw } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AuthService } from "@/lib/auth";
 import { useNavigate } from "@tanstack/react-router";
 import {
@@ -16,6 +16,11 @@ export function Topbar() {
   const navigate = useNavigate();
   const user = AuthService.getUser();
   const [searchQuery, setSearchQuery] = useState("");
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const handleLogout = () => {
     AuthService.logout();
@@ -97,14 +102,16 @@ export function Topbar() {
         <DropdownMenuTrigger asChild>
           <div className="flex items-center gap-3 pl-3 border-l border-[#DDE5EF] cursor-pointer group outline-none">
             <div className="hidden sm:block text-right">
-              <div className="text-sm font-semibold text-[#0B1F33] leading-tight group-hover:text-[#1061AF] transition-colors">{user?.name || "Usuário"}</div>
+              <div className="text-sm font-semibold text-[#0B1F33] leading-tight group-hover:text-[#1061AF] transition-colors">
+                {mounted ? (user?.name || "Usuário") : "Usuário"}
+              </div>
               <div className="text-[11px] text-[#64748B] flex items-center justify-end gap-1">
-                {user?.role || "Comercial"} · {user?.location || "SP"}
+                {mounted ? (user?.role || "Comercial") : "Comercial"} · {mounted ? (user?.location || "SP") : "SP"}
                 <ChevronDown className="h-3 w-3" />
               </div>
             </div>
             <div className="h-10 w-10 rounded-full bg-gradient-to-br from-[#1061AF] to-[#0F58A0] text-white text-sm font-semibold flex items-center justify-center shadow-sm">
-              {user?.name?.substring(0, 2).toUpperCase() || "U"}
+              {mounted ? (user?.name?.substring(0, 2).toUpperCase() || "U") : "U"}
             </div>
           </div>
         </DropdownMenuTrigger>

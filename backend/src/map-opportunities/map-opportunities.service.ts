@@ -11,6 +11,7 @@ export class MapOpportunitiesService {
         company: {
           latitude: { not: null },
           longitude: { not: null },
+          situacaoCadastral: "ATIVA",
         },
       },
       include: { company: true },
@@ -29,6 +30,12 @@ export class MapOpportunitiesService {
       score: lead.score,
       status: lead.status,
       potentialLevel: lead.potentialLevel,
+      // Rastreabilidade de coordenadas — usada pelo frontend para exibir
+      // aviso de localização aproximada quando origemCoordenada for "municipio_centroide_jitter"
+      origemCoordenada: lead.company.origemCoordenada,
+      statusVerificacaoEndereco: lead.company.statusVerificacaoEndereco,
+      confiancaVerificacao: lead.company.confiancaVerificacao,
     }));
   }
 }
+

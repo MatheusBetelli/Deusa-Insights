@@ -35,3 +35,6 @@ dist-ssr
 .env
 .env.*
 !.env.example
+
+# Large data files
+dadosCNAE/K3241.K03200Y1.D60613.ESTABELE

@@ -151,21 +151,36 @@ function OpportunityMap() {
     pointsWithCoordinates.forEach((point) => {
       const category = getClientCategory(point.status);
       const color = markerColor(point.status);
+      const isAprox = point.origemCoordenada?.includes("centroide") || point.origemCoordenada?.includes("jitter");
+
+      // Ícone diferenciado para pontos com localização aproximada (borda tracejada)
+      const borderStyle = isAprox
+        ? `border: 2.5px dashed ${color === "#F59E0B" ? "#0B1F33" : "#ffffff"}; opacity: 0.85;`
+        : `border-color:${color === "#F59E0B" ? "#0B1F33" : "#ffffff"};`;
+
       const icon = L.divIcon({
         className: "deusa-score-marker",
-        html: `<span style="background:${color}; border-color:${color === "#F59E0B" ? "#0B1F33" : "#ffffff"}">${point.score}</span>`,
+        html: `<span style="background:${color}; ${borderStyle}">${point.score}</span>`,
         iconSize: [32, 32],
         iconAnchor: [16, 16],
         popupAnchor: [0, -14],
       });
 
+      // Aviso de localização aproximada no popup (somente quando centroide/jitter)
+      const avisoLocalizacao = isAprox
+        ? `<div style="margin-top:8px;padding:6px 8px;background:#e0f2fe;border-radius:6px;font-size:11px;color:#0369a1;display:flex;align-items:flex-start;gap:4px;">
+            <span style="font-size:13px;">📍</span>
+            <span>Localização aproximada por município.<br>A Receita Federal não fornece o endereço exato deste estabelecimento.</span>
+           </div>`
+        : "";
+
       const marker = L.marker([point.latitude!, point.longitude!], { icon })
         .bindPopup(
-          `<div class="deusa-map-popup"><strong>${point.companyName}</strong><span>${formatCnpj(point.cnpj)} · ${point.city}/${point.uf}</span><dl><div><dt>Bairro</dt><dd>${point.bairro ?? "-"}</dd></div><div><dt>Score</dt><dd>${point.score}</dd></div><div><dt>Categoria</dt><dd>${clientCategoryLabels[category]}</dd></div></dl></div>`,
-          { maxWidth: 280, minWidth: 220 },
+          `<div class="deusa-map-popup"><strong>${point.companyName}</strong><span>${formatCnpj(point.cnpj)} · ${point.city}/${point.uf}</span><dl><div><dt>Bairro</dt><dd>${point.bairro ?? "-"}</dd></div><div><dt>Score</dt><dd>${point.score}</dd></div><div><dt>Categoria</dt><dd>${clientCategoryLabels[category]}</dd></div></dl>${avisoLocalizacao}</div>`,
+          { maxWidth: 300, minWidth: 220 },
         )
         .addTo(markerLayer);
-      
+
       markerMapRef.current.set(point.id, marker);
     });
 
@@ -316,6 +331,25 @@ function OpportunityMap() {
           <span>{pointsWithoutCoordinates.length} oportunidade(s) sem latitude/longitude não aparecem no mapa.</span>
         </div>
       )}
+
+      {/* Banner: se >80% dos pontos tiverem localização aproximada, informa a limitação */}
+      {pointsWithCoordinates.length > 0 && (() => {
+        const aproxCount = pointsWithCoordinates.filter(
+          (p) => p.origemCoordenada?.includes("centroide") || p.origemCoordenada?.includes("jitter")
+        ).length;
+        const aproxRatio = aproxCount / pointsWithCoordinates.length;
+        return aproxRatio > 0.8 ? (
+          <div className="mt-4 flex items-start gap-2 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-sky-600" />
+            <span>
+              <strong>Localizações aproximadas:</strong> {aproxCount} de {pointsWithCoordinates.length} pontos neste mapa
+              representam aproximações visuais baseadas no centroide do município, não o endereço exato dos estabelecimentos.
+              A base da Receita Federal não fornece latitude e longitude dos estabelecimentos.
+              Pontos aproximados são exibidos com marcador de borda tracejada.
+            </span>
+          </div>
+        ) : null;
+      })()}
     </div>
   );
 }

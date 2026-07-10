@@ -2,7 +2,6 @@ import path from "node:path";
 import { openDatabase, resetImportedTables } from "./db.js";
 import { readRowsFromFile } from "./file-reader.js";
 import { mapCustomer, mapExternal, mapSale } from "./mapper.js";
-import { mockCustomers, mockExternalEstablishments, mockSales } from "./mock-data.js";
 import { PROCESSED_DIR, inferFileKind, listImportFiles, writeJson } from "./utils.js";
 
 function insertRegion(db, cidade, regiao) {
@@ -107,16 +106,6 @@ function importRows(db, kind, rows, sourceFile) {
   return counters;
 }
 
-function seedMocks(db) {
-  const source = "mock-seed";
-
-  return {
-    customers: importRows(db, "customers", mockCustomers, source),
-    external: importRows(db, "external", mockExternalEstablishments, source),
-    sales: importRows(db, "sales", mockSales, source),
-  };
-}
-
 export function importData() {
   const db = openDatabase();
   resetImportedTables(db);
@@ -131,12 +120,7 @@ export function importData() {
   };
 
   if (files.length === 0) {
-    const seeded = seedMocks(db);
-    report.usedMockData = true;
-    report.files.push({ file: "mock-seed", kind: "mock", ...seeded });
-    report.totals.imported =
-      seeded.customers.imported + seeded.external.imported + seeded.sales.imported;
-    report.totals.invalid = seeded.customers.invalid + seeded.external.invalid + seeded.sales.invalid;
+    console.log("Nenhum arquivo encontrado para importação em data/imports.");
   } else {
     files.forEach((filePath) => {
       const sourceFile = path.basename(filePath);

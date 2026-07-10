@@ -1,4 +1,5 @@
-import { getMockApiResponse } from "./mockApi";
+
+import { AuthService } from "@/lib/auth";
 
 export class ApiError extends Error {
   status?: number;
@@ -28,10 +29,14 @@ export async function apiRequest<T>(
   query?: Record<string, string | number | undefined | null>,
 ): Promise<T> {
   try {
+    const token = AuthService.getToken();
+    const authHeader = token ? { Authorization: `Bearer ${token}` } : {};
+
     const response = await fetch(buildUrl(path, query), {
       ...options,
       headers: {
         "Content-Type": "application/json",
+        ...authHeader,
         ...(options.headers ?? {}),
       },
     });
@@ -53,8 +58,6 @@ export async function apiRequest<T>(
     return (await response.json()) as T;
   } catch (error) {
     if (error instanceof ApiError) throw error;
-    const mockResponse = getMockApiResponse<T>(path, options, query);
-    if (mockResponse !== undefined) return mockResponse;
     throw new ApiError("API indisponível. Verifique se o backend está rodando e tente novamente.");
   }
 }
