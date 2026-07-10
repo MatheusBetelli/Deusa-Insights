@@ -100,6 +100,43 @@ model Company {
   lastSyncAt        DateTime?
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
+
+  // ─── Rastreabilidade de Coordenadas ───────────────────────────────────────
+  // origemCoordenada: "municipio_centroide_jitter" | "municipio_centroide" |
+  //                   "cep" | "geocodificado" | "estabelecimento" | "sem_coordenada"
+  // IMPORTANTE: coordenadas com origem "centroide" ou "jitter" são apenas visuais
+  // e NÃO representam o endereço físico exato do estabelecimento.
+  origemCoordenada      String?
+
+  // statusVerificacaoEndereco: "aproximado" | "nao_verificado" |
+  //                            "confiavel_cadastralmente" | "verificado" |
+  //                            "divergente" | "nao_encontrado"
+  // ATENÇÃO: "confiavel_cadastralmente" indica dados cadastrais completos,
+  // NÃO que o endereço foi validado fisicamente.
+  statusVerificacaoEndereco String?
+
+  // Pontuação de confiança dos dados cadastrais (0–100)
+  confiancaVerificacao  Int?
+
+  // ─── Qualidade Cadastral ──────────────────────────────────────────────────
+  enderecoCompleto      Boolean   @default(false)
+  pendenteValidacao     Boolean   @default(false)
+  motivosPendencia      Json?     // String[] — lista de motivos de pendência
+
+  // ─── Pontuação Comercial ──────────────────────────────────────────────────
+  pontuacaoOportunidade Int       @default(0)
+  nivelOportunidade     String?   // "alta" | "media" | "baixa"
+  motivoPontuacao       Json?     // String[] — lista de razões da pontuação
+
+  // ─── Geocodificação Futura (Google Maps / outras APIs) ───────────────────
+  // Estes campos serão preenchidos quando GOOGLE_MAPS_API_KEY for configurado.
+  // Nunca usar esses campos como fonte primária de coordenadas na ausência da chave.
+  latitudeVerificada    Float?
+  longitudeVerificada   Float?
+  enderecoVerificado    String?
+  fonteGeocodificacao   String?
+  dataVerificacaoGeo    DateTime?
+
   cnaes             CompanyCnae[]
   lead              Lead?
 
@@ -125,10 +162,11 @@ model Lead {
   id             String            @id @default(cuid())
   companyId      String            @unique
   status         LeadStatus         @default(NEW)
-  score          Int               @default(0)
-  potentialLevel PotentialLevel     @default(LOW)
-  assignedToId   String?
-  notes          String?
+  score             Int               @default(0)
+  potentialLevel    PotentialLevel    @default(LOW)
+  pendenteValidacao Boolean           @default(false)
+  assignedToId      String?
+  notes             String?
   lastContactAt  DateTime?
   nextActionAt   DateTime?
   createdAt      DateTime          @default(now())

@@ -4,11 +4,12 @@ import { LeadsModule } from "../leads/leads.module";
 import { ImportsController } from "./imports.controller";
 import { ImportsService } from "./imports.service";
 import { CNPJ_PROVIDER } from "./providers/cnpj-provider.interface";
-import { MockCnpjProvider } from "./providers/mock-cnpj.provider";
+import { ReceitaFederalProvider } from "./providers/receita-federal.provider";
 
 @Module({
   imports: [CompaniesModule, LeadsModule],
   controllers: [ImportsController],
-  providers: [ImportsService, { provide: CNPJ_PROVIDER, useClass: MockCnpjProvider }],
+  providers: [ImportsService, { provide: CNPJ_PROVIDER, useClass: ReceitaFederalProvider }],
 })
 export class ImportsModule {}
+

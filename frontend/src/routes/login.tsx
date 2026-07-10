@@ -26,8 +26,9 @@ export const Route = createFileRoute("/login")({
 function LoginPage() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
-  const [email, setEmail] = useState("rafael.mendes@deusa.com.br");
-  const [password, setPassword] = useState("••••••••");
+  const [email, setEmail] = useState("admin@deusa.com.br");
+  const [password, setPassword] = useState("");
+  const [loginError, setLoginError] = useState<string | null>(null);
 
   const benefits = [
     { icon: Map, title: "Mapa de oportunidades" },
@@ -35,16 +36,18 @@ function LoginPage() {
     { icon: CheckCircle2, title: "Recomendações por CNPJ" },
   ];
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    
-    // Simulate API delay
-    setTimeout(() => {
-      AuthService.login(email);
+    setLoginError(null);
+    try {
+      await AuthService.login(email, password);
       navigate({ to: "/dashboard" });
+    } catch (err) {
+      setLoginError(err instanceof Error ? err.message : "Credenciais inválidas.");
+    } finally {
       setLoading(false);
-    }, 800);
+    }
   };
 
   return (
@@ -158,6 +161,12 @@ function LoginPage() {
                   Esqueci minha senha
                 </button>
               </div>
+
+              {loginError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+                  {loginError}
+                </div>
+              )}
 
               <button
                 type="submit"

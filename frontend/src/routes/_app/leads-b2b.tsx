@@ -5,8 +5,15 @@ import { EmptyState, ErrorState, LoadingState } from "@/components/app/Interface
 import { companyName, formatCnae, formatDateTime, potentialLabels, statusLabels } from "@/lib/commercial-formatters";
 import { leadsService } from "@/services/leadsService";
 import type { Lead, LeadStatus, PotentialLevel } from "@/types/lead";
-import { Building2, Download, Eye, FileUp, PhoneCall, Search } from "lucide-react";
+import { Building2, Download, Eye, FileUp, PhoneCall, Search, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
+import {
+  SituacaoCadastralBadge,
+  NivelOportunidadeBadge,
+  StatusVerificacaoBadge,
+  ConfiancaBadge,
+  PendenteBadge
+} from "@/components/app/QualityBadges";
 
 export const Route = createFileRoute("/_app/leads-b2b")({
   component: LeadsB2B,
@@ -43,6 +50,10 @@ function LeadsB2B() {
   const [status, setStatus] = useState("Todos");
   const [potentialLevel, setPotentialLevel] = useState("Todos");
   const [assignedToId, setAssignedToId] = useState("Todos");
+  const [statusVerificacaoEndereco, setStatusVerificacaoEndereco] = useState("Todos");
+  const [pendenteValidacao, setPendenteValidacao] = useState("Todos");
+  const [nivelOportunidade, setNivelOportunidade] = useState("Todos");
+  const [situacaoCadastral, setSituacaoCadastral] = useState("ATIVA");
   const [page, setPage] = useState(1);
 
   async function loadLeads() {
@@ -74,7 +85,7 @@ function LeadsB2B() {
     setPage(1);
     const timer = window.setTimeout(loadLeads, 250);
     return () => window.clearTimeout(timer);
-  }, [query, city, cnae, status, potentialLevel, assignedToId]);
+  }, [query, city, cnae, status, potentialLevel, assignedToId, statusVerificacaoEndereco, pendenteValidacao, nivelOportunidade, situacaoCadastral]);
 
   const optionSource = referenceLeads.length ? referenceLeads : leads;
   const cities = Array.from(new Set(optionSource.map((lead) => lead.company.cidade))).sort();
@@ -85,8 +96,29 @@ function LeadsB2B() {
     [optionSource],
   );
   const highPotentialCount = leads.filter((lead) => lead.potentialLevel === "HIGH" || lead.potentialLevel === "CRITICAL").length;
-  const totalPages = Math.max(1, Math.ceil(leads.length / PAGE_SIZE));
-  const visibleLeads = leads.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  const filteredLeads = useMemo(() => {
+    return leads.filter((lead) => {
+      if (statusVerificacaoEndereco !== "Todos" && lead.company.statusVerificacaoEndereco !== statusVerificacaoEndereco) {
+        return false;
+      }
+      if (pendenteValidacao !== "Todos") {
+        const isPendente = !!lead.company.pendenteValidacao;
+        if (pendenteValidacao === "Sim" && !isPendente) return false;
+        if (pendenteValidacao === "Não" && isPendente) return false;
+      }
+      if (nivelOportunidade !== "Todos" && lead.company.nivelOportunidade !== nivelOportunidade) {
+        return false;
+      }
+      if (situacaoCadastral !== "Todos" && lead.company.situacaoCadastral !== situacaoCadastral) {
+        return false;
+      }
+      return true;
+    });
+  }, [leads, statusVerificacaoEndereco, pendenteValidacao, nivelOportunidade, situacaoCadastral]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredLeads.length / PAGE_SIZE));
+  const visibleLeads = filteredLeads.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   async function handleContact(lead: Lead) {
     if (!lead.assignedToId) {
@@ -141,8 +173,8 @@ function LeadsB2B() {
       </section>
 
       <section className="mb-4 rounded-xl border border-[#DDE5EF] bg-white p-4 shadow-sm">
-        <div className="grid gap-3 xl:grid-cols-[minmax(240px,1.4fr)_repeat(5,minmax(130px,1fr))]">
-          <label className="block">
+        <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+          <label className="block sm:col-span-2 lg:col-span-3 xl:col-span-2">
             <span className="mb-1 block text-[11px] font-bold uppercase text-[#64748B]">Busca</span>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#94A3B8]" />
@@ -152,8 +184,7 @@ function LeadsB2B() {
           {[
             { label: "Cidade", value: city, set: setCity, options: ["Todas", ...cities] },
             { label: "CNAE", value: cnae, set: setCnae, options: ["Todos", ...cnaes] },
-            { label: "Status", value: status, set: setStatus, options: ["Todos", ...Object.keys(statusLabels)] },
-            { label: "Potencial", value: potentialLevel, set: setPotentialLevel, options: ["Todos", ...Object.keys(potentialLabels)] },
+            { label: "Status Comercial", value: status, set: setStatus, options: ["Todos", ...Object.keys(statusLabels)] },
             { label: "Responsável", value: assignedToId, set: setAssignedToId, options: ["Todos", ...owners.map((owner) => owner.id)], labels: Object.fromEntries(owners.map((owner) => [owner.id, owner.name])) },
           ].map((filter) => (
             <label key={filter.label} className="block">
@@ -167,6 +198,67 @@ function LeadsB2B() {
               </select>
             </label>
           ))}
+        </div>
+
+        {/* Segunda linha de filtros: Qualidade e Validação */}
+        <div className="mt-3 border-t border-[#EEF2F7] pt-3 grid gap-3 grid-cols-1 sm:grid-cols-2 md:grid-cols-4 xl:grid-cols-5">
+          <label className="block">
+            <span className="mb-1 block text-[11px] font-bold uppercase text-[#64748B]">Oportunidade</span>
+            <select value={nivelOportunidade} onChange={(event) => setNivelOportunidade(event.target.value)} className="h-10 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-sm text-[#0B1F33] outline-none focus:border-[#1061AF]">
+              <option value="Todos">Todas as oportunidades</option>
+              <option value="alta">Alta</option>
+              <option value="media">Média</option>
+              <option value="baixa">Baixa</option>
+            </select>
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-[11px] font-bold uppercase text-[#64748B]">Verificação Endereço</span>
+            <select value={statusVerificacaoEndereco} onChange={(event) => setStatusVerificacaoEndereco(event.target.value)} className="h-10 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-sm text-[#0B1F33] outline-none focus:border-[#1061AF]">
+              <option value="Todos">Todos os status</option>
+              <option value="confiavel_cadastralmente">Confiável Cadastralmente</option>
+              <option value="aproximado">Aproximado</option>
+              <option value="nao_verificado">Não Verificado</option>
+              <option value="verificado">Verificado</option>
+              <option value="divergente">Divergente</option>
+            </select>
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-[11px] font-bold uppercase text-[#64748B]">Pendente Validação</span>
+            <select value={pendenteValidacao} onChange={(event) => setPendenteValidacao(event.target.value)} className="h-10 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-sm text-[#0B1F33] outline-none focus:border-[#1061AF]">
+              <option value="Todos">Qualquer estado</option>
+              <option value="Sim">Apenas pendentes ⚠️</option>
+              <option value="Não">Sem pendências</option>
+            </select>
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-[11px] font-bold uppercase text-[#64748B]">Situação Cadastral</span>
+            <select value={situacaoCadastral} onChange={(event) => setSituacaoCadastral(event.target.value)} className="h-10 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-sm text-[#0B1F33] outline-none focus:border-[#1061AF]">
+              <option value="Todos">Todas as situações</option>
+              <option value="ATIVA">ATIVA</option>
+              <option value="BAIXADA">BAIXADA</option>
+              <option value="INAPTA">INAPTA</option>
+              <option value="SUSPENSA">SUSPENSA</option>
+              <option value="NULA">NULA</option>
+            </select>
+          </label>
+          <div className="flex items-end">
+            <button
+              onClick={() => {
+                setCity("Todas");
+                setCnae("Todos");
+                setStatus("Todos");
+                setPotentialLevel("Todos");
+                setAssignedToId("Todos");
+                setStatusVerificacaoEndereco("Todos");
+                setPendenteValidacao("Todos");
+                setNivelOportunidade("Todos");
+                setSituacaoCadastral("Todos");
+              }}
+              className="w-full h-10 flex items-center justify-center gap-2 rounded-lg border border-[#DDE5EF] bg-white text-xs font-bold text-[#64748B] transition hover:bg-[#F8FAFC] hover:text-[#0B1F33]"
+            >
+              Limpar Filtros
+            </button>
+          </div>
         </div>
       </section>
 
@@ -183,17 +275,16 @@ function LeadsB2B() {
       ) : (
         <section className="overflow-hidden rounded-xl border border-[#DDE5EF] bg-white shadow-sm">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1120px] text-left text-sm">
+            <table className="w-full min-w-[1200px] text-left text-sm">
               <thead className="border-b border-[#DDE5EF] bg-[#F8FAFC] text-[11px] font-bold uppercase text-[#64748B]">
                 <tr>
                   <th className="px-4 py-3">Empresa</th>
-                  <th className="px-4 py-3">Cidade</th>
+                  <th className="px-4 py-3">Cidade / Situação</th>
                   <th className="px-4 py-3">CNAE</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Score</th>
-                  <th className="px-4 py-3">Potencial</th>
+                  <th className="px-4 py-3">Status Comercial</th>
+                  <th className="px-4 py-3">Score / Oportunidade</th>
+                  <th className="px-4 py-3">Confiança / Verificação</th>
                   <th className="px-4 py-3">Responsável</th>
-                  <th className="px-4 py-3">Última interação</th>
                   <th className="px-4 py-3">Ações</th>
                 </tr>
               </thead>
@@ -201,19 +292,64 @@ function LeadsB2B() {
                 {visibleLeads.map((lead) => (
                   <tr key={lead.id} className="hover:bg-[#F8FAFC]">
                     <td className="px-4 py-3">
-                      <div className="font-bold text-[#0B1F33]">{companyName(lead.company)}</div>
+                      <div className="flex items-center gap-1.5 font-bold text-[#0B1F33]">
+                        {companyName(lead.company)}
+                        {lead.company.pendenteValidacao && (
+                          <span className="text-orange-500 hover:text-orange-600 cursor-help" title="Pendente de validação manual">
+                            <AlertTriangle className="h-4 w-4 shrink-0" />
+                          </span>
+                        )}
+                      </div>
                     </td>
-                    <td className="px-4 py-3 text-[#0B1F33]">{lead.company.cidade}</td>
+                    <td className="px-4 py-3">
+                      <div className="text-[#0B1F33] font-medium">{lead.company.cidade}/{lead.company.uf}</div>
+                      <div className="mt-0.5">
+                        <SituacaoCadastralBadge situacao={lead.company.situacaoCadastral} />
+                      </div>
+                    </td>
                     <td className="px-4 py-3 text-[#475569]">{formatCnae(lead.company.cnaePrincipal)}</td>
-                    <td className="px-4 py-3"><span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusClass(lead.status)}`}>{statusLabels[lead.status]}</span></td>
-                    <td className="px-4 py-3"><span className="inline-flex h-7 min-w-9 items-center justify-center rounded-md bg-[#1061AF]/10 px-2 text-xs font-bold text-[#0F58A0] tabular-nums">{lead.score}</span></td>
-                    <td className="px-4 py-3"><span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-bold ${priorityClass(lead.potentialLevel)}`}>{potentialLabels[lead.potentialLevel]}</span></td>
+                    <td className="px-4 py-3">
+                      <div>
+                        <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusClass(lead.status)}`}>
+                          {statusLabels[lead.status]}
+                        </span>
+                      </div>
+                      {lead.lastContactAt && (
+                        <div className="mt-1 text-[10px] text-[#64748B]">
+                          Contato: {formatDateTime(lead.lastContactAt)}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex h-7 min-w-9 items-center justify-center rounded-md bg-[#1061AF]/10 px-2 text-xs font-bold text-[#0F58A0] tabular-nums">
+                          {lead.score}
+                        </span>
+                        <NivelOportunidadeBadge nivel={lead.company.nivelOportunidade} />
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs text-[#64748B]">Confiança:</span>
+                          <ConfiancaBadge confianca={lead.company.confiancaVerificacao} />
+                        </div>
+                        <div>
+                          <StatusVerificacaoBadge status={lead.company.statusVerificacaoEndereco} />
+                        </div>
+                      </div>
+                    </td>
                     <td className="px-4 py-3 text-[#475569]">{lead.assignedTo?.name ?? "Sem responsável"}</td>
-                    <td className="px-4 py-3 text-[#475569]">{formatDateTime(lead.lastContactAt)}</td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-2">
-                        <Link to="/leads-b2b/$leadId" params={{ leadId: lead.id }} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[#DDE5EF] bg-white px-2.5 text-xs font-bold text-[#0B1F33] hover:border-[#1061AF]"><Eye className="h-3.5 w-3.5" />Ver</Link>
-                        <button onClick={() => handleContact(lead)} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#0B1F33] px-2.5 text-xs font-bold text-white hover:bg-[#1061AF]"><PhoneCall className="h-3.5 w-3.5 text-[#FFF200]" />Contato</button>
+                        <Link to="/leads-b2b/$leadId" params={{ leadId: lead.id }} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[#DDE5EF] bg-white px-2.5 text-xs font-bold text-[#0B1F33] hover:border-[#1061AF]">
+                          <Eye className="h-3.5 w-3.5" />
+                          Ver
+                        </Link>
+                        <button onClick={() => handleContact(lead)} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#0B1F33] px-2.5 text-xs font-bold text-white hover:bg-[#1061AF]">
+                          <PhoneCall className="h-3.5 w-3.5 text-[#FFF200]" />
+                          Contato
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -223,7 +359,7 @@ function LeadsB2B() {
           </div>
           <div className="flex flex-col gap-3 border-t border-[#DDE5EF] px-4 py-3 text-xs font-medium text-[#64748B] sm:flex-row sm:items-center sm:justify-between">
             <span>
-              Mostrando {visibleLeads.length} de {leads.length} leads
+              Mostrando {visibleLeads.length} de {filteredLeads.length} leads {filteredLeads.length !== leads.length && `(filtrados de ${leads.length})`}
             </span>
             <div className="flex items-center gap-2">
               <button disabled={page === 1} onClick={() => setPage((current) => Math.max(1, current - 1))} className="h-8 rounded-md border border-[#DDE5EF] bg-white px-3 font-bold text-[#0B1F33] disabled:cursor-not-allowed disabled:opacity-40">

@@ -2,10 +2,18 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/app/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "@/components/app/InterfaceStates";
+import {
+  AvisoLocalizacaoAproximada,
+  ConfiancaBadge,
+  NivelOportunidadeBadge,
+  PendenteBadge,
+  SituacaoCadastralBadge,
+  StatusVerificacaoBadge,
+} from "@/components/app/QualityBadges";
 import { companyName, formatCnae, formatCnpj, formatDateTime, potentialLabels, statusLabels } from "@/lib/commercial-formatters";
 import { leadsService } from "@/services/leadsService";
 import type { Lead, LeadInteraction } from "@/types/lead";
-import { ArrowLeft, CalendarClock, CheckCircle2, PhoneCall, Trash2 } from "lucide-react";
+import { ArrowLeft, CalendarClock, CheckCircle2, MapPin, PhoneCall, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/leads-b2b/$leadId")({
@@ -189,6 +197,89 @@ function LeadDetail() {
                   {item.user && <p className="mt-2 text-xs font-semibold text-[#64748B]">{item.user.name}</p>}
                 </div>
               ))
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* Seção de Qualidade e Verificação */}
+      <section className="mt-5 rounded-xl border border-[#DDE5EF] bg-white p-5 shadow-sm">
+        <h2 className="text-lg font-bold text-[#0B1F33]">Qualidade e Verificação</h2>
+        <p className="mt-1 text-xs text-[#64748B]">
+          Avaliação da integridade dos dados cadastrais obtidos da Receita Federal.
+        </p>
+
+        {/* Aviso de localização aproximada — exibido apenas quando a coordenada for centroide/jitter */}
+        <AvisoLocalizacaoAproximada origemCoordenada={company.origemCoordenada} className="mt-4" />
+
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          {/* Coluna esquerda: dados de confiança */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between rounded-lg bg-[#F8FAFC] px-3 py-2">
+              <span className="text-xs font-bold uppercase text-[#64748B]">Confiança Cadastral</span>
+              <ConfiancaBadge confianca={company.confiancaVerificacao} />
+            </div>
+            <div className="flex items-center justify-between rounded-lg bg-[#F8FAFC] px-3 py-2">
+              <span className="text-xs font-bold uppercase text-[#64748B]">Status Verificação</span>
+              <StatusVerificacaoBadge status={company.statusVerificacaoEndereco} />
+            </div>
+            <div className="flex items-center justify-between rounded-lg bg-[#F8FAFC] px-3 py-2">
+              <span className="text-xs font-bold uppercase text-[#64748B]">Oportunidade</span>
+              <NivelOportunidadeBadge nivel={company.nivelOportunidade} />
+            </div>
+            <div className="flex items-center justify-between rounded-lg bg-[#F8FAFC] px-3 py-2">
+              <span className="text-xs font-bold uppercase text-[#64748B]">Situação</span>
+              <SituacaoCadastralBadge situacao={company.situacaoCadastral} />
+            </div>
+            {(company.origemCoordenada?.includes("centroide") || company.origemCoordenada?.includes("jitter")) && (
+              <div className="flex items-center justify-between rounded-lg bg-[#F8FAFC] px-3 py-2">
+                <span className="text-xs font-bold uppercase text-[#64748B]">Origem Coordenada</span>
+                <span className="flex items-center gap-1 text-xs font-semibold text-sky-700">
+                  <MapPin className="h-3 w-3" />
+                  Centroide municipal
+                </span>
+              </div>
+            )}
+            <div className="flex items-center justify-between rounded-lg bg-[#F8FAFC] px-3 py-2">
+              <span className="text-xs font-bold uppercase text-[#64748B]">Pendência</span>
+              <PendenteBadge pendente={company.pendenteValidacao} />
+              {!company.pendenteValidacao && (
+                <span className="text-xs text-[#64748B]">Sem pendências</span>
+              )}
+            </div>
+          </div>
+
+          {/* Coluna direita: motivos */}
+          <div className="space-y-3">
+            {(company.motivosPendencia?.length ?? 0) > 0 && (
+              <div className="rounded-lg border border-orange-200 bg-orange-50 p-3">
+                <div className="mb-2 text-xs font-bold uppercase text-orange-700">Motivos de Pendência</div>
+                <ul className="space-y-1">
+                  {company.motivosPendencia!.map((motivo, i) => (
+                    <li key={i} className="flex items-start gap-1.5 text-xs text-orange-800">
+                      <span className="mt-0.5 text-orange-500">•</span>
+                      {motivo}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {(company.motivoPontuacao?.length ?? 0) > 0 && (
+              <div className="rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] p-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase text-[#64748B]">Pontuação Oportunidade</span>
+                  <span className="text-sm font-bold text-[#0B1F33]">{company.pontuacaoOportunidade ?? 0}/100</span>
+                </div>
+                <ul className="space-y-1">
+                  {company.motivoPontuacao!.map((motivo, i) => (
+                    <li key={i} className="flex items-start gap-1.5 text-xs text-[#475569]">
+                      <span className="mt-0.5 text-[#94A3B8]">•</span>
+                      {motivo}
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
           </div>
         </div>

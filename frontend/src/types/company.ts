@@ -22,6 +22,9 @@ export type Company = {
   logradouro: string | null;
   numero: string | null;
   complemento: string | null;
+  // Contato (mapeado do CSV da Receita Federal)
+  telefone?: string | null;
+  email?: string | null;
   latitude: number | null;
   longitude: number | null;
   source: string;
@@ -29,6 +32,20 @@ export type Company = {
   createdAt: string;
   updatedAt: string;
   cnaes?: CompanyCnae[];
+  // ─── Rastreabilidade de Coordenadas ───────────────────────────────
+  // "municipio_centroide_jitter" = ponto visual apenas, NÃO é endereço real
+  origemCoordenada?: string | null;
+  // "aproximado" | "nao_verificado" | "confiavel_cadastralmente" | "verificado" | ...
+  statusVerificacaoEndereco?: string | null;
+  confiancaVerificacao?: number | null;
+  // ─── Qualidade Cadastral ───────────────────────────────────────────────
+  enderecoCompleto?: boolean;
+  pendenteValidacao?: boolean;
+  motivosPendencia?: string[] | null;
+  // ─── Pontuação Comercial ─────────────────────────────────────────────────
+  pontuacaoOportunidade?: number;
+  nivelOportunidade?: string | null; // "alta" | "media" | "baixa"
+  motivoPontuacao?: string[] | null;
 };
 
 export type CompanyQuery = {
