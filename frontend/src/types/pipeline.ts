@@ -1,18 +1,26 @@
-import type { PotentialLevel } from "./lead";
+import type { LeadStatus, PotentialLevel } from "./lead";
 
 export type PipelineCard = {
   id: string;
   companyName: string;
   city: string;
+  status: LeadStatus;
   score: number;
   potentialLevel: PotentialLevel;
   assignedTo: string | null;
 };
 
+export type PipelineStage = {
+  status: LeadStatus;
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  conversionRate: number;
+  items: PipelineCard[];
+};
+
 export type Pipeline = {
-  NEW: PipelineCard[];
-  CONTACTED: PipelineCard[];
-  INTERESTED: PipelineCard[];
-  NEGOTIATION: PipelineCard[];
-  CONVERTED: PipelineCard[];
+  total: number;
+  stages: Partial<Record<LeadStatus, PipelineStage>>;
 };

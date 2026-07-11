@@ -1,5 +1,6 @@
-import { Body, Controller, Get, Param, Patch, Post } from "@nestjs/common";
+import { Body, Controller, Get, Param, Patch, Post, Query } from "@nestjs/common";
 import { CnaesService } from "./cnaes.service";
+import { CnaeQueryDto } from "./dto/cnae-query.dto";
 import { CreateCnaeDto } from "./dto/create-cnae.dto";
 import { UpdateCnaeDto } from "./dto/update-cnae.dto";
 
@@ -8,8 +9,8 @@ export class CnaesController {
   constructor(private readonly cnaesService: CnaesService) {}
 
   @Get()
-  findAll() {
-    return this.cnaesService.findAll();
+  findAll(@Query() query: CnaeQueryDto) {
+    return this.cnaesService.findAll(query);
   }
 
   @Post()

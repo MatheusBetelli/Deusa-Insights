@@ -1,4 +1,3 @@
-
 import { AuthService } from "@/lib/auth";
 
 export class ApiError extends Error {
@@ -56,6 +55,43 @@ export async function apiRequest<T>(
 
     if (response.status === 204) return undefined as T;
     return (await response.json()) as T;
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError("API indisponível. Verifique se o backend está rodando e tente novamente.");
+  }
+}
+
+export async function apiTextRequest(
+  path: string,
+  options: RequestInit = {},
+  query?: Record<string, string | number | undefined | null>,
+): Promise<string> {
+  try {
+    const token = AuthService.getToken();
+    const authHeader = token ? { Authorization: `Bearer ${token}` } : {};
+
+    const response = await fetch(buildUrl(path, query), {
+      ...options,
+      headers: {
+        ...authHeader,
+        ...(options.headers ?? {}),
+      },
+    });
+
+    if (!response.ok) {
+      let message = "Não foi possível carregar os dados da API.";
+      try {
+        const payload = await response.json();
+        message = Array.isArray(payload.message)
+          ? payload.message.join(", ")
+          : payload.message || message;
+      } catch {
+        // Keep default friendly message.
+      }
+      throw new ApiError(message, response.status);
+    }
+
+    return await response.text();
   } catch (error) {
     if (error instanceof ApiError) throw error;
     throw new ApiError("API indisponível. Verifique se o backend está rodando e tente novamente.");

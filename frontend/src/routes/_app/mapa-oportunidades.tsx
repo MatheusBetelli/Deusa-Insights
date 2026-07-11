@@ -10,9 +10,12 @@ import { formatCnpj } from "@/lib/commercial-formatters";
 import { mapService } from "@/services/mapService";
 import type { LeadStatus } from "@/types/lead";
 import type { MapOpportunity } from "@/types/mapOpportunity";
-import { AlertTriangle, FileUp, Filter, Layers, RotateCcw } from "lucide-react";
+import { AlertTriangle, FileUp, Filter, Layers, RotateCcw, MapPin, Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/_app/mapa-oportunidades")({
+  validateSearch: (search) => ({
+    city: typeof search.city === "string" ? search.city : "Todas",
+  }),
   component: OpportunityMap,
 });
 
@@ -34,12 +37,9 @@ function getClientCategory(status: LeadStatus): ClientCategory {
 }
 
 // Visual config per category — colors only, no complex SVGs
-const CATEGORY_CONFIG: Record<
-  ClientCategory,
-  { bg: string; border: string; shadow: string }
-> = {
-  CLIENTE:     { bg: "#16A34A", border: "#86efac", shadow: "rgba(22,163,74,0.30)" },
-  POTENCIAL:   { bg: "#D97706", border: "#fcd34d", shadow: "rgba(217,119,6,0.30)" },
+const CATEGORY_CONFIG: Record<ClientCategory, { bg: string; border: string; shadow: string }> = {
+  CLIENTE: { bg: "#16A34A", border: "#86efac", shadow: "rgba(22,163,74,0.30)" },
+  POTENCIAL: { bg: "#D97706", border: "#fcd34d", shadow: "rgba(217,119,6,0.30)" },
   NAO_CLIENTE: { bg: "#DC2626", border: "#fca5a5", shadow: "rgba(220,38,38,0.30)" },
 };
 
@@ -62,6 +62,7 @@ function makePinHtml(category: ClientCategory, isAprox: boolean): string {
 }
 
 function OpportunityMap() {
+  const routeSearch = Route.useSearch();
   const mapRef = useRef<L.Map | null>(null);
   const mapElRef = useRef<HTMLDivElement | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -72,9 +73,43 @@ function OpportunityMap() {
   const [dataLoading, setDataLoading] = useState(true);
   const [dataError, setDataError] = useState<string | null>(null);
   const [opportunities, setOpportunities] = useState<MapOpportunity[]>([]);
-  const [selectedCity, setSelectedCity] = useState("Todas");
+  const [selectedCity, setSelectedCity] = useState(routeSearch.city);
   const [selectedCategory, setSelectedCategory] = useState("Todas");
   const [clustersOn, setClustersOn] = useState(true);
+  const [isOptimizing, setIsOptimizing] = useState(false);
+  const [optimizeMessage, setOptimizeMessage] = useState<{
+    text: string;
+    type: "success" | "error" | "info";
+  } | null>(null);
+
+  async function handleOptimizeLocations() {
+    setIsOptimizing(true);
+    setOptimizeMessage(null);
+    try {
+      const response = await mapService.optimizeLocations({
+        limit: 50,
+        dryRun: false,
+      });
+      if (response.error) throw new Error(response.message || "Erro desconhecido");
+
+      setOptimizeMessage({
+        text: response.message || "Otimização concluída.",
+        type: "success",
+      });
+
+      // Reload map data
+      await loadData();
+    } catch (err) {
+      setOptimizeMessage({
+        text:
+          (err instanceof Error ? err.message : null) ||
+          "Falha ao otimizar localizações. Verifique se a API Key do Google Maps está configurada no backend.",
+        type: "error",
+      });
+    } finally {
+      setIsOptimizing(false);
+    }
+  }
 
   async function loadData() {
     setDataLoading(true);
@@ -92,11 +127,16 @@ function OpportunityMap() {
     loadData();
   }, []);
 
+  useEffect(() => {
+    setSelectedCity(routeSearch.city);
+  }, [routeSearch.city]);
+
   const filtered = useMemo(
     () =>
       opportunities.filter((p) => {
         const cityOk = selectedCity === "Todas" || p.city === selectedCity;
-        const catOk = selectedCategory === "Todas" || getClientCategory(p.status) === selectedCategory;
+        const catOk =
+          selectedCategory === "Todas" || getClientCategory(p.status) === selectedCategory;
         return cityOk && catOk;
       }),
     [opportunities, selectedCity, selectedCategory],
@@ -112,7 +152,10 @@ function OpportunityMap() {
     [filtered],
   );
 
-  const topLeads = useMemo(() => [...filtered].sort((a, b) => b.score - a.score).slice(0, 5), [filtered]);
+  const topLeads = useMemo(
+    () => [...filtered].sort((a, b) => b.score - a.score).slice(0, 5),
+    [filtered],
+  );
 
   // Initialize map once
   useEffect(() => {
@@ -150,7 +193,6 @@ function OpportunityMap() {
     return () => {
       cancelled = true;
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dataLoading]);
 
   // Cleanup on unmount
@@ -270,13 +312,14 @@ function OpportunityMap() {
         else mapRef.current.fitBounds(bounds.pad(0.22), { maxZoom: 11 });
       }
     })();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [withCoords, mapStatus, clustersOn]);
 
   // --- counts ---
   const clienteCount = filtered.filter((p) => getClientCategory(p.status) === "CLIENTE").length;
   const potencialCount = filtered.filter((p) => getClientCategory(p.status) === "POTENCIAL").length;
-  const naoClienteCount = filtered.filter((p) => getClientCategory(p.status) === "NAO_CLIENTE").length;
+  const naoClienteCount = filtered.filter(
+    (p) => getClientCategory(p.status) === "NAO_CLIENTE",
+  ).length;
   const aproxCount = withCoords.filter(
     (p) => p.origemCoordenada?.includes("centroide") || p.origemCoordenada?.includes("jitter"),
   ).length;
@@ -287,13 +330,27 @@ function OpportunityMap() {
         title="Mapa"
         subtitle="Veja onde estão as oportunidades comerciais com coordenadas válidas."
         actions={
-          <Link
-            to="/importar-cnpjs"
-            className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#0B1F33] px-4 text-sm font-bold text-white transition hover:bg-[#1061AF]"
-          >
-            <FileUp className="h-4 w-4 text-[#FFF200]" />
-            Importar CNPJs
-          </Link>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleOptimizeLocations}
+              disabled={isOptimizing}
+              className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#DDE5EF] bg-white px-4 text-sm font-bold text-[#0B1F33] transition hover:bg-[#F8FAFC] disabled:opacity-50"
+            >
+              {isOptimizing ? (
+                <Loader2 className="h-4 w-4 animate-spin text-[#1061AF]" />
+              ) : (
+                <MapPin className="h-4 w-4 text-[#1061AF]" />
+              )}
+              {isOptimizing ? "Otimizando..." : "Otimizar Localizações"}
+            </button>
+            <Link
+              to="/importar-cnpjs"
+              className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#0B1F33] px-4 text-sm font-bold text-white transition hover:bg-[#1061AF]"
+            >
+              <FileUp className="h-4 w-4 text-[#FFF200]" />
+              Importar CNPJs
+            </Link>
+          </div>
         }
       />
 
@@ -303,11 +360,44 @@ function OpportunityMap() {
           <ErrorState
             description={dataError}
             action={
-              <button onClick={loadData} className="h-9 rounded-lg bg-[#0B1F33] px-3 text-xs font-bold text-white">
+              <button
+                onClick={loadData}
+                className="h-9 rounded-lg bg-[#0B1F33] px-3 text-xs font-bold text-white"
+              >
                 Tentar novamente
               </button>
             }
           />
+        </div>
+      )}
+
+      {/* Optimize message */}
+      {optimizeMessage && (
+        <div
+          className={`mb-4 flex items-center justify-between rounded-lg border px-4 py-3 text-sm shadow-sm ${
+            optimizeMessage.type === "success"
+              ? "border-green-200 bg-green-50 text-green-800"
+              : optimizeMessage.type === "error"
+                ? "border-red-200 bg-red-50 text-red-800"
+                : "border-sky-200 bg-sky-50 text-sky-800"
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {optimizeMessage.type === "error" ? (
+              <AlertTriangle className="h-4 w-4 shrink-0 text-red-600" />
+            ) : (
+              <MapPin
+                className={`h-4 w-4 shrink-0 ${optimizeMessage.type === "success" ? "text-green-600" : "text-sky-600"}`}
+              />
+            )}
+            <span>{optimizeMessage.text}</span>
+          </div>
+          <button
+            onClick={() => setOptimizeMessage(null)}
+            className="text-xs font-bold underline opacity-70 hover:opacity-100"
+          >
+            Fechar
+          </button>
         </div>
       )}
 
@@ -334,7 +424,9 @@ function OpportunityMap() {
           </label>
 
           <label className="block min-w-[180px]">
-            <span className="mb-1 block text-[11px] font-bold uppercase text-[#64748B]">Categoria</span>
+            <span className="mb-1 block text-[11px] font-bold uppercase text-[#64748B]">
+              Categoria
+            </span>
             <select
               value={selectedCategory}
               onChange={(e) => setSelectedCategory(e.target.value)}
@@ -385,8 +477,20 @@ function OpportunityMap() {
           {/* Cliente */}
           <div className="flex items-center gap-2 rounded-lg border border-[#DDE5EF] bg-white px-4 py-2 text-sm shadow-sm">
             <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#16A34A]">
-              <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="11"
+                height="11"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="#fff"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
+                <line x1="3" y1="6" x2="21" y2="6" />
+                <path d="M16 10a4 4 0 0 1-8 0" />
               </svg>
             </span>
             <span className="font-semibold text-[#0B1F33]">Clientes:</span>
@@ -395,8 +499,20 @@ function OpportunityMap() {
           {/* Potencial */}
           <div className="flex items-center gap-2 rounded-lg border border-[#DDE5EF] bg-white px-4 py-2 text-sm shadow-sm">
             <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#D97706]">
-              <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="11"
+                height="11"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="#fff"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="12" cy="12" r="10" />
+                <circle cx="12" cy="12" r="6" />
+                <circle cx="12" cy="12" r="2" />
               </svg>
             </span>
             <span className="font-semibold text-[#0B1F33]">Potenciais:</span>
@@ -405,8 +521,19 @@ function OpportunityMap() {
           {/* Não cliente */}
           <div className="flex items-center gap-2 rounded-lg border border-[#DDE5EF] bg-white px-4 py-2 text-sm shadow-sm">
             <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#DC2626]">
-              <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="11"
+                height="11"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="#fff"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
               </svg>
             </span>
             <span className="font-semibold text-[#0B1F33]">Não clientes:</span>
@@ -443,20 +570,55 @@ function OpportunityMap() {
               <h2 className="text-lg font-bold text-[#0B1F33]">Oportunidades no mapa</h2>
               <div className="flex flex-wrap gap-2">
                 <span className="flex items-center gap-1.5 rounded-full bg-[#DCFCE7] px-3 py-1 text-xs font-bold text-[#16A34A]">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="11"
+                    height="11"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
+                    <line x1="3" y1="6" x2="21" y2="6" />
+                    <path d="M16 10a4 4 0 0 1-8 0" />
                   </svg>
                   Cliente
                 </span>
                 <span className="flex items-center gap-1.5 rounded-full bg-[#FEF3C7] px-3 py-1 text-xs font-bold text-[#D97706]">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="11"
+                    height="11"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <circle cx="12" cy="12" r="10" />
+                    <circle cx="12" cy="12" r="6" />
+                    <circle cx="12" cy="12" r="2" />
                   </svg>
                   Potencial
                 </span>
                 <span className="flex items-center gap-1.5 rounded-full bg-[#FEE2E2] px-3 py-1 text-xs font-bold text-[#DC2626]">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="11"
+                    height="11"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
                   </svg>
                   Não cliente
                 </span>
@@ -467,7 +629,10 @@ function OpportunityMap() {
             {clustersOn && withCoords.length > 0 && (
               <div className="flex items-center gap-2 border-b border-[#DDE5EF] bg-[#F8FAFC] px-5 py-2.5 text-xs text-[#64748B]">
                 <Layers className="h-3.5 w-3.5 shrink-0" />
-                <span>Agrupamento ativo — clique nos círculos ou dê zoom para ver os marcadores individualmente.</span>
+                <span>
+                  Agrupamento ativo — clique nos círculos ou dê zoom para ver os marcadores
+                  individualmente.
+                </span>
               </div>
             )}
 
@@ -529,8 +694,12 @@ function OpportunityMap() {
                             style={{ background: c.bg }}
                           />
                           <div>
-                            <div className="font-bold leading-snug text-[#0B1F33]">{point.companyName}</div>
-                            <div className="mt-0.5 text-xs text-[#64748B]">{point.city}/{point.uf}</div>
+                            <div className="font-bold leading-snug text-[#0B1F33]">
+                              {point.companyName}
+                            </div>
+                            <div className="mt-0.5 text-xs text-[#64748B]">
+                              {point.city}/{point.uf}
+                            </div>
                           </div>
                         </div>
                         <span className="shrink-0 rounded-md bg-[#1061AF]/10 px-2 py-1 text-xs font-bold text-[#0F58A0]">
@@ -553,7 +722,9 @@ function OpportunityMap() {
       {withoutCoords.length > 0 && (
         <div className="mt-4 flex items-center gap-2 rounded-lg border border-[#FDE68A] bg-[#FFFBEB] px-4 py-3 text-sm text-[#713F12]">
           <AlertTriangle className="h-4 w-4 shrink-0 text-[#CA8A04]" />
-          <span>{withoutCoords.length} oportunidade(s) sem latitude/longitude não aparecem no mapa.</span>
+          <span>
+            {withoutCoords.length} oportunidade(s) sem latitude/longitude não aparecem no mapa.
+          </span>
         </div>
       )}
 
@@ -562,8 +733,9 @@ function OpportunityMap() {
         <div className="mt-4 flex items-start gap-2 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-sky-600" />
           <span>
-            <strong>Localizações aproximadas:</strong> {aproxCount} de {withCoords.length} pontos representam
-            aproximações baseadas no centroide do município. Pontos aproximados têm borda tracejada.
+            <strong>Localizações aproximadas:</strong> {aproxCount} de {withCoords.length} pontos
+            representam aproximações baseadas no centroide do município. Pontos aproximados têm
+            borda tracejada.
           </span>
         </div>
       )}

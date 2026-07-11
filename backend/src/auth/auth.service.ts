@@ -1,7 +1,8 @@
-import { Injectable, UnauthorizedException } from "@nestjs/common";
+import { BadRequestException, Injectable, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcryptjs";
 import { PrismaService } from "../prisma/prisma.service";
+import { ChangePasswordDto } from "./dto/change-password.dto";
 import { LoginDto } from "./dto/login.dto";
 
 @Injectable()
@@ -39,5 +40,25 @@ export class AuthService {
     });
     if (!user) throw new UnauthorizedException("Usuário não encontrado");
     return user;
+  }
+
+  async changePassword(userId: string, dto: ChangePasswordDto) {
+    if (dto.newPassword !== dto.confirmPassword) {
+      throw new BadRequestException("A confirmação da nova senha não confere");
+    }
+
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new UnauthorizedException("Usuário não encontrado");
+
+    const passwordMatches = await bcrypt.compare(dto.currentPassword, user.passwordHash);
+    if (!passwordMatches) throw new UnauthorizedException("Senha atual inválida");
+
+    const passwordHash = await bcrypt.hash(dto.newPassword, 10);
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash },
+    });
+
+    return { message: "Senha alterada com sucesso" };
   }
 }

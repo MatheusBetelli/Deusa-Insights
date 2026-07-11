@@ -1,5 +1,6 @@
-import { Body, Controller, Get, Param, Patch, Post } from "@nestjs/common";
+import { Body, Controller, Get, Param, Patch, Post, Query } from "@nestjs/common";
 import { CitiesService } from "./cities.service";
+import { CityQueryDto } from "./dto/city-query.dto";
 import { CreateCityDto } from "./dto/create-city.dto";
 import { UpdateCityDto } from "./dto/update-city.dto";
 
@@ -8,8 +9,8 @@ export class CitiesController {
   constructor(private readonly citiesService: CitiesService) {}
 
   @Get()
-  findAll() {
-    return this.citiesService.findAll();
+  findAll(@Query() query: CityQueryDto) {
+    return this.citiesService.findAll(query);
   }
 
   @Post()

@@ -49,6 +49,10 @@ export type Company = {
 };
 
 export type CompanyQuery = {
+  page?: number;
+  pageSize?: number;
+  sortBy?: "company" | "city" | "cnae" | "createdAt";
+  sortOrder?: "asc" | "desc";
   city?: string;
   uf?: string;
   cnae?: string;

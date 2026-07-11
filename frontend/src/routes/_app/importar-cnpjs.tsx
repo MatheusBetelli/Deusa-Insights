@@ -84,8 +84,17 @@ function ImportCnpjs() {
   const ignored = lastJob ? Math.max(0, lastJob.totalFound - lastJob.totalSaved) : 0;
 
   return (
-    <div>
-      <PageHeader title="Importar CNPJs" subtitle="Busque empresas ativas e gere leads comerciais." />
+    <div className="space-y-5">
+      {/* ── Page Header ── */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-widest text-[#1061AF]">Comercial</p>
+          <h1 className="mt-0.5 text-2xl font-bold tracking-tight text-[#0B1F33]">Importar CNPJs</h1>
+          <p className="mt-0.5 text-sm text-[#64748B]">
+            Busque empresas ativas e gere leads comerciais.
+          </p>
+        </div>
+      </div>
 
       {error && state !== "error" && (
         <div className="mb-4">
@@ -93,53 +102,54 @@ function ImportCnpjs() {
         </div>
       )}
 
-      <section className="rounded-xl border border-[#DDE5EF] bg-white p-5 shadow-sm">
-        <div className="grid gap-4 lg:grid-cols-[110px_minmax(160px,1fr)_minmax(220px,1.4fr)_120px_auto] lg:items-end">
+      {/* ── Search Form ── */}
+      <section className="rounded-xl border border-[#DDE5EF] bg-white p-4 shadow-sm">
+        <div className="grid gap-3 lg:grid-cols-[110px_minmax(160px,1.2fr)_minmax(220px,1.4fr)_100px_auto] lg:items-end">
           <label className="block">
-            <span className="mb-1 block text-[11px] font-bold uppercase text-[#64748B]">UF</span>
-            <select value={form.estado} onChange={(event) => updateForm("estado", event.target.value)} className="h-10 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-sm outline-none focus:border-[#1061AF]">
+            <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-[#64748B]">UF</span>
+            <select value={form.estado} onChange={(event) => updateForm("estado", event.target.value)} className="h-9 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-xs text-[#0B1F33] outline-none focus:border-[#1061AF]">
               {Array.from(new Set(cities.map((city) => city.uf))).map((uf) => <option key={uf}>{uf}</option>)}
               {cities.length === 0 && <option>SP</option>}
             </select>
           </label>
           <label className="block">
-            <span className="mb-1 block text-[11px] font-bold uppercase text-[#64748B]">Cidade</span>
-            <select value={form.cidade} onChange={(event) => updateForm("cidade", event.target.value)} className="h-10 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-sm outline-none focus:border-[#1061AF]">
+            <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-[#64748B]">Cidade</span>
+            <select value={form.cidade} onChange={(event) => updateForm("cidade", event.target.value)} className="h-9 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-xs text-[#0B1F33] outline-none focus:border-[#1061AF]">
               {cities.map((city) => <option key={city.id}>{city.name}</option>)}
               {cities.length === 0 && <option>Tupã</option>}
             </select>
           </label>
           <label className="block">
-            <span className="mb-1 block text-[11px] font-bold uppercase text-[#64748B]">CNAE</span>
-            <select value={form.cnae} onChange={(event) => updateForm("cnae", event.target.value)} className="h-10 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-sm outline-none focus:border-[#1061AF]">
+            <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-[#64748B]">CNAE</span>
+            <select value={form.cnae} onChange={(event) => updateForm("cnae", event.target.value)} className="h-9 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-xs text-[#0B1F33] outline-none focus:border-[#1061AF]">
               {cnaes.map((cnae) => <option key={cnae.id} value={cnae.code}>{formatCnae(cnae.code)} - {cnae.description}</option>)}
               {cnaes.length === 0 && <option value="4712100">4712-1/00 - Minimercados</option>}
             </select>
           </label>
           <label className="block">
-            <span className="mb-1 block text-[11px] font-bold uppercase text-[#64748B]">Limite</span>
-            <input value={form.limite} onChange={(event) => updateForm("limite", event.target.value)} type="number" min="1" max="5000" className="h-10 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-sm outline-none focus:border-[#1061AF]" />
+            <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-[#64748B]">Limite</span>
+            <input value={form.limite} onChange={(event) => updateForm("limite", event.target.value)} type="number" min="1" max="5000" className="h-9 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-xs text-[#0B1F33] outline-none focus:border-[#1061AF]" />
           </label>
-          <button onClick={handleSearch} disabled={state === "loading"} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#0B1F33] px-4 text-sm font-bold text-white transition hover:bg-[#1061AF] disabled:cursor-not-allowed disabled:opacity-70">
+          <button onClick={handleSearch} disabled={state === "loading"} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-[#0B1F33] px-4 text-xs font-bold text-white transition hover:bg-[#1061AF] disabled:cursor-not-allowed disabled:opacity-70">
             {state === "loading" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4 text-[#FFF200]" />}
             Buscar empresas ativas
           </button>
         </div>
       </section>
 
-      <section className="mt-5">
+      <section className="space-y-4">
         {state === "idle" && <EmptyState title="Nenhuma busca realizada" description="Defina cidade, CNAE e limite para iniciar uma importação." />}
         {state === "loading" && <LoadingState message={`Importando empresas ativas para ${form.cidade}...`} />}
         {state === "error" && <ErrorState title="Não foi possível buscar empresas" description={error ?? "Tente novamente em alguns instantes."} action={<button onClick={handleSearch} className="h-9 rounded-lg bg-[#0B1F33] px-3 text-xs font-bold text-white">Tentar novamente</button>} />}
 
         {state === "success" && lastJob && (
           <div className="overflow-hidden rounded-xl border border-[#DDE5EF] bg-white shadow-sm">
-            <div className="flex flex-col gap-3 border-b border-[#DDE5EF] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-3 border-b border-[#DDE5EF] px-5 py-3 sm:flex-row sm:items-center sm:justify-between bg-[#F8FAFC]">
               <div>
-                <h2 className="text-lg font-bold text-[#0B1F33]">Resultado da importação</h2>
-                <p className="text-sm text-[#64748B]">{form.cidade}/{form.estado} · {formatCnae(form.cnae)}</p>
+                <h2 className="text-sm font-bold text-[#0B1F33]">Resultado da importação</h2>
+                <p className="text-[11px] text-[#64748B]">{form.cidade}/{form.estado} · {formatCnae(form.cnae)}</p>
               </div>
-              <Link to="/leads-b2b" className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#0B1F33] px-4 text-sm font-bold text-white transition hover:bg-[#1061AF]">
+              <Link to="/leads-b2b" className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-[#0B1F33] px-3.5 text-xs font-bold text-white transition hover:bg-[#1061AF]">
                 <CheckCircle2 className="h-4 w-4 text-[#FFF200]" />
                 Ver leads
               </Link>
@@ -147,13 +157,19 @@ function ImportCnpjs() {
 
             <div className="grid gap-3 border-b border-[#DDE5EF] p-4 sm:grid-cols-3">
               {[
-                { label: "Encontrados", value: lastJob.totalFound },
-                { label: "Salvos", value: lastJob.totalSaved },
-                { label: "Ignorados", value: ignored },
+                { label: "Encontrados", value: lastJob.totalFound, accent: "#1061AF" },
+                { label: "Salvos", value: lastJob.totalSaved, accent: "#16A34A" },
+                { label: "Ignorados", value: ignored, accent: "#64748B" },
               ].map((item) => (
-                <div key={item.label} className="rounded-lg bg-[#F8FAFC] p-4">
-                  <div className="text-2xl font-bold text-[#0B1F33] tabular-nums">{item.value}</div>
-                  <div className="mt-1 text-xs font-semibold text-[#64748B]">{item.label}</div>
+                <div key={item.label} className="relative overflow-hidden rounded-xl border border-[#DDE5EF] bg-[#F8FAFC] p-4 shadow-sm">
+                  <span
+                    className="absolute inset-y-0 left-0 w-[3px]"
+                    style={{ background: item.accent }}
+                  />
+                  <div className="pl-1">
+                    <div className="text-2xl font-bold text-[#0B1F33] tabular-nums">{item.value.toLocaleString("pt-BR")}</div>
+                    <div className="mt-1 text-[11px] font-semibold text-[#64748B]">{item.label}</div>
+                  </div>
                 </div>
               ))}
             </div>

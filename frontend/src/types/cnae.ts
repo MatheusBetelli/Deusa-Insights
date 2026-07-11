@@ -4,6 +4,7 @@ export type Cnae = {
   description: string;
   category: string | null;
   isTarget: boolean;
+  companyCount?: number;
   createdAt: string;
   updatedAt: string;
 };
