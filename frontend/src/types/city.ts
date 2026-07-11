@@ -4,6 +4,7 @@ export type City = {
   uf: string;
   ibgeCode: string | null;
   isActive: boolean;
+  companyCount?: number;
   createdAt: string;
   updatedAt: string;
 };

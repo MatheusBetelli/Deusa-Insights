@@ -1,7 +1,11 @@
 import { Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { normalizeCnpj } from "../common/cnpj";
-import { CNPJ_PROVIDER, CnpjProvider, ExternalCompany } from "../imports/providers/cnpj-provider.interface";
+import {
+  CNPJ_PROVIDER,
+  CnpjProvider,
+  ExternalCompany,
+} from "../imports/providers/cnpj-provider.interface";
 import { PrismaService } from "../prisma/prisma.service";
 import { CompanyQueryDto } from "./dto/company-query.dto";
 import { CreateCompanyDto } from "./dto/create-company.dto";
@@ -28,12 +32,50 @@ export class CompaniesService {
   ) {}
 
   findAll(query: CompanyQueryDto) {
+    if (query.page !== undefined || query.pageSize !== undefined) {
+      return this.findPage(query);
+    }
+
+    return this.prisma.company.findMany({
+      where: this.buildWhere(query),
+      include: { cnaes: true, lead: true },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+    });
+  }
+
+  async findPage(query: CompanyQueryDto) {
+    const page = Math.max(1, query.page ?? 1);
+    const pageSize = Math.min(Math.max(1, query.pageSize ?? 25), 100);
+    const where = this.buildWhere(query);
+    const [total, items] = await this.prisma.$transaction([
+      this.prisma.company.count({ where }),
+      this.prisma.company.findMany({
+        where,
+        include: { cnaes: true, lead: true },
+        orderBy: this.buildOrderBy(query),
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+    ]);
+
+    return {
+      items,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.max(1, Math.ceil(total / pageSize)),
+    };
+  }
+
+  private buildWhere(query: CompanyQueryDto) {
     const where: Prisma.CompanyWhereInput = {};
     const and: Prisma.CompanyWhereInput[] = [];
 
     if (query.city) where.cidade = { equals: query.city, mode: "insensitive" };
     if (query.uf) where.uf = query.uf.toUpperCase();
-    if (query.situacaoCadastral) where.situacaoCadastral = { equals: query.situacaoCadastral, mode: "insensitive" };
+    if (query.situacaoCadastral)
+      where.situacaoCadastral = { equals: query.situacaoCadastral, mode: "insensitive" };
     if (query.cnae) {
       const cnae = normalizeCnae(query.cnae);
       and.push({
@@ -51,12 +93,16 @@ export class CompaniesService {
     }
     if (and.length > 0) where.AND = and;
 
-    return this.prisma.company.findMany({
-      where,
-      include: { cnaes: true, lead: true },
-      orderBy: { createdAt: "desc" },
-      take: 200,
-    });
+    return where;
+  }
+
+  private buildOrderBy(query: CompanyQueryDto): Prisma.CompanyOrderByWithRelationInput[] {
+    const direction = query.sortOrder === "desc" ? "desc" : "asc";
+
+    if (query.sortBy === "city") return [{ cidade: direction }, { razaoSocial: "asc" }];
+    if (query.sortBy === "cnae") return [{ cnaePrincipal: direction }, { razaoSocial: "asc" }];
+    if (query.sortBy === "createdAt") return [{ createdAt: direction }, { razaoSocial: "asc" }];
+    return [{ razaoSocial: direction }, { createdAt: "desc" }];
   }
 
   async findById(id: string) {
@@ -93,7 +139,9 @@ export class CompaniesService {
   }
 
   async update(id: string, dto: UpdateCompanyDto) {
-    const cnaes = dto.cnaes?.map((cnae) => normalizeCnae(cnae)).filter(Boolean) as string[] | undefined;
+    const cnaes = dto.cnaes?.map((cnae) => normalizeCnae(cnae)).filter(Boolean) as
+      | string[]
+      | undefined;
     const company = await this.prisma.company.update({
       where: { id },
       data: {
@@ -103,7 +151,10 @@ export class CompaniesService {
         cnaes: cnaes
           ? {
               deleteMany: {},
-              create: cnaes.map((cnae) => ({ cnaeCode: cnae, isPrimary: cnae === normalizeCnae(dto.cnaePrincipal) })),
+              create: cnaes.map((cnae) => ({
+                cnaeCode: cnae,
+                isPrimary: cnae === normalizeCnae(dto.cnaePrincipal),
+              })),
             }
           : undefined,
       },
@@ -121,7 +172,13 @@ export class CompaniesService {
   async upsertCompany(input: ExternalCompany) {
     const cnpj = normalizeCnpj(input.cnpj);
     const primaryCnae = normalizeCnae(input.cnaePrincipal);
-    const cnaes = Array.from(new Set((input.cnaes?.length ? input.cnaes : [primaryCnae]).filter(Boolean).map((cnae) => normalizeCnae(cnae)!)));
+    const cnaes = Array.from(
+      new Set(
+        (input.cnaes?.length ? input.cnaes : [primaryCnae])
+          .filter(Boolean)
+          .map((cnae) => normalizeCnae(cnae)!),
+      ),
+    );
 
     return this.prisma.company.upsert({
       where: { cnpj },
@@ -205,7 +262,8 @@ export class CompaniesService {
   }) {
     const limit = Math.min(query.limit ? Number(query.limit) : 50, 100);
     const minScore = query.minScore !== undefined ? Number(query.minScore) : 70;
-    const dryRun = query.dryRun !== undefined ? (query.dryRun === true || String(query.dryRun) === "true") : true;
+    const dryRun =
+      query.dryRun !== undefined ? query.dryRun === true || String(query.dryRun) === "true" : true;
     const city = query.city;
 
     // 1. Obter cidades monitoradas (ativas no banco)
@@ -268,7 +326,8 @@ export class CompaniesService {
     if (!this.geocodingService.isAvailable()) {
       return {
         dryRun: false,
-        message: "A validação do Google Maps está desativada (chave GOOGLE_MAPS_API_KEY não configurada).",
+        message:
+          "A validação do Google Maps está desativada (chave GOOGLE_MAPS_API_KEY não configurada).",
         totalSelected: companies.length,
         totalProcessed: 0,
         report: null,

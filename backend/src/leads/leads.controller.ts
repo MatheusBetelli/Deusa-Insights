@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from "@nestjs/common";
+import { Body, Controller, Get, Header, Param, Patch, Post, Query } from "@nestjs/common";
 import { CreateLeadDto } from "./dto/create-lead.dto";
 import { LeadQueryDto } from "./dto/lead-query.dto";
 import { UpdateLeadDto } from "./dto/update-lead.dto";
@@ -11,6 +11,13 @@ export class LeadsController {
   @Get()
   findAll(@Query() query: LeadQueryDto) {
     return this.leadsService.findAll(query);
+  }
+
+  @Get("export.csv")
+  @Header("Content-Type", "text/csv; charset=utf-8")
+  @Header("Content-Disposition", 'attachment; filename="leads-b2b.csv"')
+  exportCsv(@Query() query: LeadQueryDto) {
+    return this.leadsService.exportCsv(query);
   }
 
   @Get(":id")
