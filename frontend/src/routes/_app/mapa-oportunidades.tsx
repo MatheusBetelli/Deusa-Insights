@@ -7,6 +7,7 @@ import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import { PageHeader } from "@/components/app/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "@/components/app/InterfaceStates";
 import { formatCnpj } from "@/lib/commercial-formatters";
+import { ESTADOS_UF } from "@/lib/constants";
 import { mapService } from "@/services/mapService";
 import type { LeadStatus } from "@/types/lead";
 import type { MapOpportunity } from "@/types/mapOpportunity";
@@ -429,10 +430,7 @@ function OpportunityMap() {
               className="h-10 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-sm text-[#0B1F33] outline-none focus:border-[#1061AF]"
             >
               <option>Todos</option>
-              {Array.from(new Set(opportunities.map((p) => p.uf)))
-                .filter(Boolean)
-                .sort()
-                .map((uf) => (
+              {ESTADOS_UF.map((uf) => (
                   <option key={uf}>{uf}</option>
                 ))}
             </select>

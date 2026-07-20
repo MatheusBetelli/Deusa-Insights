@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { companyName, formatCnae, formatCnpj } from "@/lib/commercial-formatters";
+import { ESTADOS_UF } from "@/lib/constants";
 import { citiesService } from "@/services/citiesService";
 import { cnaesService } from "@/services/cnaesService";
 import { companiesService } from "@/services/companiesService";
@@ -49,6 +50,7 @@ function BaseDeDados() {
   const [cnaeSortBy, setCnaeSortBy] = useState<
     "code" | "description" | "category" | "companyCount"
   >("code");
+  const [uf, setUf] = useState("Todos");
   const [companyCity, setCompanyCity] = useState<string | undefined>();
   const [companyCnae, setCompanyCnae] = useState<string | undefined>();
   const [companies, setCompanies] = useState<PaginatedResponse<Company>>(emptyPage);
@@ -90,6 +92,7 @@ function BaseDeDados() {
             page,
             pageSize: PAGE_SIZE,
             search,
+            uf: uf !== "Todos" ? uf : undefined,
             city: companyCity,
             cnae: companyCnae,
             sortBy: companySortBy,
@@ -103,6 +106,7 @@ function BaseDeDados() {
             page,
             pageSize: PAGE_SIZE,
             search,
+            uf: uf !== "Todos" ? uf : undefined,
             sortBy: citySortBy,
             sortOrder,
           }),
@@ -114,6 +118,7 @@ function BaseDeDados() {
             page,
             pageSize: PAGE_SIZE,
             search,
+            uf: uf !== "Todos" ? uf : undefined,
             sortBy: cnaeSortBy,
             sortOrder,
           }),
@@ -134,6 +139,7 @@ function BaseDeDados() {
     page,
     search,
     sortOrder,
+    uf,
   ]);
 
   useEffect(() => {
@@ -147,6 +153,7 @@ function BaseDeDados() {
     setActiveTab(tab);
     setPage(1);
     setSearch("");
+    setUf("Todos");
     setCompanyCity(undefined);
     setCompanyCnae(undefined);
   }
@@ -208,6 +215,21 @@ function BaseDeDados() {
           </div>
 
           <div className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto">
+            <select
+              value={uf}
+              onChange={(e) => {
+                setUf(e.target.value);
+                setPage(1);
+              }}
+              className="h-9 rounded-lg border border-[#DDE5EF] bg-white px-3 text-xs font-bold text-[#0B1F33] outline-none focus:border-[#1061AF]"
+            >
+              <option value="Todos">Todos (UF)</option>
+              {ESTADOS_UF.map((estado) => (
+                <option key={estado} value={estado}>
+                  {estado}
+                </option>
+              ))}
+            </select>
             <label className="relative block w-full sm:w-80">
               <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#94A3B8]" />
               <input

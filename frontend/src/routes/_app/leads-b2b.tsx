@@ -11,6 +11,7 @@ import {
   potentialLabels,
   statusLabels,
 } from "@/lib/commercial-formatters";
+import { ESTADOS_UF } from "@/lib/constants";
 import { citiesService } from "@/services/citiesService";
 import { cnaesService } from "@/services/cnaesService";
 import { leadsService } from "@/services/leadsService";
@@ -407,7 +408,7 @@ function LeadsB2B() {
             }}
           >
             <option value="Todos">Todos</option>
-            {Array.from(new Set(cities.map(c => c.uf))).sort().map((ufOption) => (
+            {ESTADOS_UF.map((ufOption) => (
               <option key={ufOption} value={ufOption}>
                 {ufOption}
               </option>

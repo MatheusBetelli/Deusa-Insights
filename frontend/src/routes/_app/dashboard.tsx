@@ -3,6 +3,7 @@ import { SkeletonMetricCards } from "@/components/app/InterfaceStates";
 import { dashboardService } from "@/services/dashboardService";
 import type { DashboardSummary } from "@/types/dashboard";
 import { useEffect, useState } from "react";
+import { ESTADOS_UF } from "@/lib/constants";
 import {
   AlertTriangle,
   ArrowRight,
@@ -20,6 +21,7 @@ export const Route = createFileRoute("/_app/dashboard")({
 });
 
 function Dashboard() {
+  const [uf, setUf] = useState("Todos");
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -28,7 +30,7 @@ function Dashboard() {
     setLoading(true);
     setError(null);
     try {
-      setSummary(await dashboardService.getSummary());
+      setSummary(await dashboardService.getSummary(uf));
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Não foi possível carregar a Central Comercial.",
@@ -40,7 +42,7 @@ function Dashboard() {
 
   useEffect(() => {
     loadSummary();
-  }, []);
+  }, [uf]);
 
   const summaryCards = [
     {
@@ -125,6 +127,18 @@ function Dashboard() {
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          <select
+            value={uf}
+            onChange={(e) => setUf(e.target.value)}
+            className="h-9 rounded-lg border border-[#DDE5EF] bg-white px-3 text-xs font-bold text-[#0B1F33] outline-none focus:border-[#1061AF]"
+          >
+            <option value="Todos">Todos (UF)</option>
+            {ESTADOS_UF.map((estado) => (
+              <option key={estado} value={estado}>
+                {estado}
+              </option>
+            ))}
+          </select>
           <Link
             to="/leads-b2b"
             search={{ potentialLevel: "CRITICAL" }}

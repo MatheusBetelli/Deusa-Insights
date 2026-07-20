@@ -81,17 +81,21 @@ export const AuthService = {
   },
 
   isAuthenticated: () => {
-    if (!hasBrowserStorage()) return false;
-    return !!localStorage.getItem(AUTH_TOKEN_KEY);
+    return true; // TEMPORARILY DISABLED AUTH
+    // if (!hasBrowserStorage()) return false;
+    // return !!localStorage.getItem(AUTH_TOKEN_KEY);
   },
 
   getUser: (): User | null => {
-    if (!hasBrowserStorage()) return null;
-    const data = localStorage.getItem(USER_DATA_KEY);
-    return data ? JSON.parse(data) : null;
+    return { id: "dev-mock-id", name: "Dev User", email: "dev@example.com", role: "admin", location: "SP" }; // TEMPORARILY DISABLED AUTH
+    // if (!hasBrowserStorage()) return null;
+    // const data = localStorage.getItem(USER_DATA_KEY);
+    // return data ? JSON.parse(data) : null;
   },
 
   getProfile: async (): Promise<User> => {
+    return { id: "dev-mock-id", name: "Dev User", email: "dev@example.com", role: "admin", location: "SP" }; // TEMPORARILY DISABLED AUTH
+    /*
     const token = AuthService.getToken();
     const response = await fetch(`${API_URL}/auth/me`, {
       headers: {
@@ -110,6 +114,7 @@ export const AuthService = {
       localStorage.setItem(USER_DATA_KEY, JSON.stringify(user));
     }
     return user;
+    */
   },
 
   changePassword: async (payload: ChangePasswordPayload) => {
