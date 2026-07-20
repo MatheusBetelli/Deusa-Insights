@@ -6,12 +6,11 @@ import { useEffect } from "react";
 
 export const Route = createFileRoute("/_app")({
   beforeLoad: () => {
-    // TEMPORARILY DISABLED AUTH
-    // if (typeof window !== "undefined" && !AuthService.isAuthenticated()) {
-    //   throw redirect({
-    //     to: "/login",
-    //   });
-    // }
+    if (typeof window !== "undefined" && !AuthService.isAuthenticated()) {
+      throw redirect({
+        to: "/login",
+      });
+    }
   },
   component: AppLayout,
 });
@@ -20,10 +19,9 @@ function AppLayout() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    // TEMPORARILY DISABLED AUTH
-    // if (!AuthService.isAuthenticated()) {
-    //   navigate({ to: "/login" });
-    // }
+    if (!AuthService.isAuthenticated()) {
+      navigate({ to: "/login" });
+    }
   }, [navigate]);
 
   return (
