@@ -14,6 +14,7 @@ import { AlertTriangle, FileUp, Filter, Layers, RotateCcw, MapPin, Loader2 } fro
 
 export const Route = createFileRoute("/_app/mapa-oportunidades")({
   validateSearch: (search) => ({
+    uf: typeof search.uf === "string" ? search.uf : "Todos",
     city: typeof search.city === "string" ? search.city : "Todas",
   }),
   component: OpportunityMap,
@@ -73,6 +74,7 @@ function OpportunityMap() {
   const [dataLoading, setDataLoading] = useState(true);
   const [dataError, setDataError] = useState<string | null>(null);
   const [opportunities, setOpportunities] = useState<MapOpportunity[]>([]);
+  const [selectedUf, setSelectedUf] = useState(routeSearch.uf);
   const [selectedCity, setSelectedCity] = useState(routeSearch.city);
   const [selectedCategory, setSelectedCategory] = useState("Todas");
   const [clustersOn, setClustersOn] = useState(true);
@@ -128,18 +130,21 @@ function OpportunityMap() {
   }, []);
 
   useEffect(() => {
+    setSelectedUf(routeSearch.uf);
     setSelectedCity(routeSearch.city);
-  }, [routeSearch.city]);
+  }, [routeSearch.uf, routeSearch.city]);
 
   const filtered = useMemo(
     () =>
       opportunities.filter((p) => {
-        const cityOk = selectedCity === "Todas" || p.city === selectedCity;
+        const isClient = getClientCategory(p.status) === "CLIENTE";
+        const ufOk = selectedUf === "Todos" || p.uf === selectedUf || isClient;
+        const cityOk = selectedCity === "Todas" || p.city === selectedCity || isClient;
         const catOk =
           selectedCategory === "Todas" || getClientCategory(p.status) === selectedCategory;
-        return cityOk && catOk;
+        return ufOk && cityOk && catOk;
       }),
-    [opportunities, selectedCity, selectedCategory],
+    [opportunities, selectedUf, selectedCity, selectedCategory],
   );
 
   const withCoords = useMemo(
@@ -175,12 +180,18 @@ function OpportunityMap() {
           zoom: DEFAULT_ZOOM,
           zoomControl: true,
           scrollWheelZoom: true,
+          maxBounds: [
+            [-90, -180],
+            [90, 180],
+          ],
+          maxBoundsViscosity: 1.0,
         });
 
         Leaflet.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
           attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
           maxZoom: 19,
           minZoom: 3,
+          noWrap: true,
         }).addTo(map);
 
         mapRef.current = map;
@@ -407,6 +418,28 @@ function OpportunityMap() {
           <label className="block min-w-[180px]">
             <span className="mb-1 flex items-center gap-1.5 text-[11px] font-bold uppercase text-[#64748B]">
               <Filter className="h-3.5 w-3.5" />
+              Estado (UF)
+            </span>
+            <select
+              value={selectedUf}
+              onChange={(e) => {
+                setSelectedUf(e.target.value);
+                setSelectedCity("Todas");
+              }}
+              className="h-10 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-sm text-[#0B1F33] outline-none focus:border-[#1061AF]"
+            >
+              <option>Todos</option>
+              {Array.from(new Set(opportunities.map((p) => p.uf)))
+                .filter(Boolean)
+                .sort()
+                .map((uf) => (
+                  <option key={uf}>{uf}</option>
+                ))}
+            </select>
+          </label>
+
+          <label className="block min-w-[180px]">
+            <span className="mb-1 block text-[11px] font-bold uppercase text-[#64748B]">
               Cidade
             </span>
             <select
@@ -415,7 +448,8 @@ function OpportunityMap() {
               className="h-10 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-sm text-[#0B1F33] outline-none focus:border-[#1061AF]"
             >
               <option>Todas</option>
-              {Array.from(new Set(opportunities.map((p) => p.city)))
+              {Array.from(new Set(opportunities.filter(p => selectedUf === "Todos" || p.uf === selectedUf).map((p) => p.city)))
+                .filter(Boolean)
                 .sort()
                 .map((city) => (
                   <option key={city}>{city}</option>
@@ -460,6 +494,7 @@ function OpportunityMap() {
 
           <button
             onClick={() => {
+              setSelectedUf("Todos");
               setSelectedCity("Todas");
               setSelectedCategory("Todas");
             }}

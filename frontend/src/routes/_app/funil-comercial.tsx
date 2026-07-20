@@ -17,6 +17,7 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/_app/funil-comercial")({
   validateSearch: (search) => ({
     search: typeof search.search === "string" ? search.search : "",
+    uf: typeof search.uf === "string" ? search.uf : "Todos",
     city: typeof search.city === "string" ? search.city : "Todas",
     cnae: typeof search.cnae === "string" ? search.cnae : "Todos",
   }),
@@ -32,6 +33,7 @@ function CommercialFunnel() {
   const [cities, setCities] = useState<City[]>([]);
   const [cnaes, setCnaes] = useState<Cnae[]>([]);
   const [search, setSearch] = useState(routeSearch.search);
+  const [uf, setUf] = useState(routeSearch.uf);
   const [city, setCity] = useState(routeSearch.city);
   const [cnae, setCnae] = useState(routeSearch.cnae);
   const [loading, setLoading] = useState(true);
@@ -41,9 +43,10 @@ function CommercialFunnel() {
 
   useEffect(() => {
     setSearch(routeSearch.search);
+    setUf(routeSearch.uf);
     setCity(routeSearch.city);
     setCnae(routeSearch.cnae);
-  }, [routeSearch.search, routeSearch.city, routeSearch.cnae]);
+  }, [routeSearch.search, routeSearch.uf, routeSearch.city, routeSearch.cnae]);
 
   useEffect(() => {
     async function loadOptions() {
@@ -65,10 +68,11 @@ function CommercialFunnel() {
   const filters = useMemo(
     () => ({
       search: search.trim() || undefined,
+      uf: uf !== "Todos" ? uf : undefined,
       city: city !== "Todas" ? city : undefined,
       cnae: cnae !== "Todos" ? cnae : undefined,
     }),
-    [search, city, cnae],
+    [search, uf, city, cnae],
   );
 
   const loadPipeline = useCallback(async () => {
@@ -141,7 +145,7 @@ function CommercialFunnel() {
       </div>
 
       <section className="rounded-xl border border-[#DDE5EF] bg-white p-4 shadow-sm">
-        <div className="grid gap-3 md:grid-cols-[minmax(240px,1.5fr)_1fr_1fr]">
+        <div className="grid gap-3 md:grid-cols-4">
           <label className="block">
             <span className="mb-1 block text-[11px] font-bold uppercase text-[#64748B]">
               Pesquisa
@@ -156,9 +160,26 @@ function CommercialFunnel() {
               />
             </div>
           </label>
+          <FilterSelect 
+            label="Estado (UF)" 
+            value={uf} 
+            onChange={(newUf) => {
+              setUf(newUf);
+              setCity("Todas");
+            }}
+          >
+            <option value="Todos">Todos</option>
+            {Array.from(new Set(cities.map(c => c.uf))).sort().map((ufOption) => (
+              <option key={ufOption} value={ufOption}>
+                {ufOption}
+              </option>
+            ))}
+          </FilterSelect>
           <FilterSelect label="Cidade" value={city} onChange={setCity}>
             <option value="Todas">Todas</option>
-            {cities.map((item) => (
+            {cities
+              .filter(c => uf === "Todos" || c.uf === uf)
+              .map((item) => (
               <option key={item.id} value={item.name}>
                 {item.name}
               </option>
@@ -290,7 +311,7 @@ function CommercialFunnel() {
                   <div className="border-t border-[#DDE5EF] p-2.5">
                     <Link
                       to="/leads-b2b"
-                      search={{ status: column, city, cnae, search }}
+                      search={{ status: column, uf, city, cnae, search }}
                       className="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-[#DDE5EF] bg-white text-xs font-bold text-[#0B1F33] transition hover:border-[#1061AF]"
                     >
                       Ver todos
