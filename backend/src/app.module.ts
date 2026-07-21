@@ -12,6 +12,7 @@ import { MapOpportunitiesModule } from "./map-opportunities/map-opportunities.mo
 import { PipelineModule } from "./pipeline/pipeline.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { UsersModule } from "./users/users.module";
+import { ClassificationModule } from "./classification/classification.module";
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { UsersModule } from "./users/users.module";
     DashboardModule,
     MapOpportunitiesModule,
     PipelineModule,
+    ClassificationModule,
   ],
 })
 export class AppModule {}

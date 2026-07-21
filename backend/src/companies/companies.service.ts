@@ -10,7 +10,9 @@ import { PrismaService } from "../prisma/prisma.service";
 import { CompanyQueryDto } from "./dto/company-query.dto";
 import { CreateCompanyDto } from "./dto/create-company.dto";
 import { UpdateCompanyDto } from "./dto/update-company.dto";
+import { CompanyDetailsDto } from "./dto/company-details.dto";
 import { GeocodingService } from "../common/geocoding.service";
+import { ClassificationService } from "../classification/classification.service";
 
 function normalizeCnae(code?: string | null) {
   return code?.replace(/\D/g, "") || undefined;
@@ -29,6 +31,7 @@ export class CompaniesService {
     private readonly prisma: PrismaService,
     @Inject(CNPJ_PROVIDER) private readonly cnpjProvider: CnpjProvider,
     private readonly geocodingService: GeocodingService,
+    private readonly classificationService: ClassificationService,
   ) {}
 
   findAll(query: CompanyQueryDto) {
@@ -468,5 +471,43 @@ export class CompaniesService {
       message: `Processamento em lote concluído. ${report.totalProcessed} de ${report.totalSelected} empresas processadas.`,
       ...report,
     };
+  }
+
+  async getDetails(id: string) {
+    const company = await this.prisma.company.findUnique({
+      where: { id },
+      include: { details: true, cnaes: true },
+    });
+    if (!company) throw new NotFoundException("Empresa não encontrada");
+
+    const classification = this.classificationService.classifyCompany(company);
+    return {
+      details: company.details,
+      classification,
+    };
+  }
+
+  async upsertDetails(id: string, dto: CompanyDetailsDto) {
+    const company = await this.prisma.company.findUnique({ where: { id } });
+    if (!company) throw new NotFoundException("Empresa não encontrada");
+
+    await this.prisma.companyDetails.upsert({
+      where: { companyId: id },
+      create: {
+        companyId: id,
+        naturezaJuridica: dto.naturezaJuridica,
+        telefone: dto.telefone,
+        email: dto.email,
+        descricaoCnae: dto.descricaoCnae,
+      },
+      update: {
+        naturezaJuridica: dto.naturezaJuridica !== undefined ? dto.naturezaJuridica : undefined,
+        telefone: dto.telefone !== undefined ? dto.telefone : undefined,
+        email: dto.email !== undefined ? dto.email : undefined,
+        descricaoCnae: dto.descricaoCnae !== undefined ? dto.descricaoCnae : undefined,
+      },
+    });
+
+    return this.getDetails(id);
   }
 }

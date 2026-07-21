@@ -139,6 +139,7 @@ model Company {
 
   cnaes             CompanyCnae[]
   lead              Lead?
+  details           CompanyDetails?
 
   @@index([cidade, uf])
   @@index([cnaePrincipal])
@@ -213,4 +214,19 @@ model ImportJob {
   @@index([status])
   @@index([cityName, uf])
   @@map("import_jobs")
+}
+
+model CompanyDetails {
+  id               String   @id @default(cuid())
+  companyId        String   @unique
+  naturezaJuridica String?
+  telefone         String?
+  email            String?
+  descricaoCnae    String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  company          Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@map("company_details")
 }

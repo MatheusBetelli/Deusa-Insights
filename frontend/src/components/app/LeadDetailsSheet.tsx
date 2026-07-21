@@ -18,7 +18,9 @@ import {
 } from "@/lib/commercial-formatters";
 import { leadsService } from "@/services/leadsService";
 import { usersService } from "@/services/usersService";
+import { companiesService } from "@/services/companiesService";
 import type { Lead, LeadStatus, UserSummary } from "@/types/lead";
+import type { CompanyDetailsResponse } from "@/types/company-details";
 import { Building2, Loader2, MessageSquare, Save } from "lucide-react";
 
 type LeadDetailsSheetProps = {
@@ -38,6 +40,12 @@ export function LeadDetailsSheet({ leadId, open, onOpenChange, onUpdated }: Lead
   const [assignedToId, setAssignedToId] = useState("");
   const [contactDescription, setContactDescription] = useState("");
 
+  const [detailsResponse, setDetailsResponse] = useState<CompanyDetailsResponse | null>(null);
+  const [telefone, setTelefone] = useState("");
+  const [email, setEmail] = useState("");
+  const [naturezaJuridica, setNaturezaJuridica] = useState("");
+  const [savingDetails, setSavingDetails] = useState(false);
+
   const loadLead = useCallback(async () => {
     if (!leadId) return;
     setLoading(true);
@@ -47,10 +55,24 @@ export function LeadDetailsSheet({ leadId, open, onOpenChange, onUpdated }: Lead
         leadsService.getLead(leadId),
         usersService.getUsers(),
       ]);
+      const detailsData = await companiesService.getCompanyDetails(leadData.companyId).catch(() => null);
+
       setLead(leadData);
       setUsers(userData);
       setStatus(leadData.status);
       setAssignedToId(leadData.assignedToId ?? "");
+      
+      if (detailsData) {
+        setDetailsResponse(detailsData);
+        setTelefone(detailsData.details?.telefone ?? "");
+        setEmail(detailsData.details?.email ?? "");
+        setNaturezaJuridica(detailsData.details?.naturezaJuridica ?? "");
+      } else {
+        setDetailsResponse(null);
+        setTelefone("");
+        setEmail("");
+        setNaturezaJuridica("");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Não foi possível carregar o lead.");
     } finally {
@@ -89,6 +111,24 @@ export function LeadDetailsSheet({ leadId, open, onOpenChange, onUpdated }: Lead
       toast.error(err instanceof Error ? err.message : "Não foi possível atualizar o lead.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleSaveDetails() {
+    if (!lead) return;
+    setSavingDetails(true);
+    try {
+      const response = await companiesService.upsertCompanyDetails(lead.companyId, {
+        telefone,
+        email,
+        naturezaJuridica,
+      });
+      setDetailsResponse(response);
+      toast.success("Dados cadastrais salvos.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Não foi possível salvar os dados.");
+    } finally {
+      setSavingDetails(false);
     }
   }
 
@@ -179,6 +219,68 @@ export function LeadDetailsSheet({ leadId, open, onOpenChange, onUpdated }: Lead
                   {[company.logradouro, company.numero, company.bairro, company.cep]
                     .filter(Boolean)
                     .join(", ") || "Endereço não informado"}
+                </div>
+              </section>
+
+              {detailsResponse && (
+                <section className="rounded-lg border border-[#DDE5EF] bg-white p-4">
+                  <h3 className="text-sm font-bold uppercase text-[#64748B]">Classificação Inteligente</h3>
+                  <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+                    <Info label="Tipo" value={detailsResponse.classification.type} />
+                    <Info label="Porte" value={detailsResponse.classification.size} />
+                    <Info label="Região" value={detailsResponse.classification.region} />
+                    <Info label="Score" value={`${detailsResponse.classification.score} · ${potentialLabels[detailsResponse.classification.potentialLevel]}`} />
+                  </div>
+                </section>
+              )}
+
+              <section className="rounded-lg border border-[#DDE5EF] bg-white p-4">
+                <h3 className="text-sm font-bold uppercase text-[#64748B]">Dados Complementares</h3>
+                <div className="mt-3 space-y-3">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="block">
+                      <span className="mb-1 block text-xs font-bold text-[#64748B]">Telefone</span>
+                      <input
+                        type="text"
+                        value={telefone}
+                        onChange={(e) => setTelefone(e.target.value)}
+                        className="h-10 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-sm text-[#0B1F33] outline-none focus:border-[#1061AF]"
+                        placeholder="(11) 99999-9999"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="mb-1 block text-xs font-bold text-[#64748B]">E-mail</span>
+                      <input
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className="h-10 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-sm text-[#0B1F33] outline-none focus:border-[#1061AF]"
+                        placeholder="contato@empresa.com.br"
+                      />
+                    </label>
+                  </div>
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-bold text-[#64748B]">Natureza Jurídica</span>
+                    <input
+                      type="text"
+                      value={naturezaJuridica}
+                      onChange={(e) => setNaturezaJuridica(e.target.value)}
+                      className="h-10 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-sm text-[#0B1F33] outline-none focus:border-[#1061AF]"
+                      placeholder="Ex: Sociedade Empresária Limitada"
+                    />
+                  </label>
+                  <button
+                    onClick={() => void handleSaveDetails()}
+                    disabled={savingDetails}
+                    className="mt-1 inline-flex h-9 items-center gap-2 rounded-lg border border-[#DDE5EF] bg-white px-3 text-xs font-bold text-[#0B1F33] transition hover:border-[#1061AF] disabled:opacity-60"
+                  >
+                    {savingDetails ? (
+                      <Loader2 className="h-4 w-4 animate-spin text-[#1061AF]" />
+                    ) : (
+                      <Save className="h-4 w-4 text-[#1061AF]" />
+                    )}
+                    Salvar Dados
+                  </button>
                 </div>
               </section>
 
