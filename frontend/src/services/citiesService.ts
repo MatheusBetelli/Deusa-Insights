@@ -6,6 +6,7 @@ export type CityQuery = {
   page?: number;
   pageSize?: number;
   search?: string;
+  uf?: string;
   sortBy?: "name" | "uf" | "companyCount";
   sortOrder?: "asc" | "desc";
 };

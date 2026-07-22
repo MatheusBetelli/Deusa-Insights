@@ -4,8 +4,10 @@ import { ReceitaFederalProvider } from "../imports/providers/receita-federal.pro
 import { CompaniesController } from "./companies.controller";
 import { CompaniesService } from "./companies.service";
 import { GeocodingService } from "../common/geocoding.service";
+import { ClassificationModule } from "../classification/classification.module";
 
 @Module({
+  imports: [ClassificationModule],
   controllers: [CompaniesController],
   providers: [
     CompaniesService,

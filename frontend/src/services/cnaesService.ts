@@ -6,6 +6,7 @@ export type CnaeQuery = {
   page?: number;
   pageSize?: number;
   search?: string;
+  uf?: string;
   sortBy?: "code" | "description" | "category" | "companyCount";
   sortOrder?: "asc" | "desc";
 };

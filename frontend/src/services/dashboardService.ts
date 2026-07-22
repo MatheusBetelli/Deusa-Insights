@@ -2,5 +2,5 @@ import { apiRequest } from "./api";
 import type { DashboardSummary } from "@/types/dashboard";
 
 export const dashboardService = {
-  getSummary: () => apiRequest<DashboardSummary>("/dashboard/summary"),
+  getSummary: (uf?: string) => apiRequest<DashboardSummary>("/dashboard/summary", {}, uf && uf !== "Todos" ? { uf } : undefined),
 };
