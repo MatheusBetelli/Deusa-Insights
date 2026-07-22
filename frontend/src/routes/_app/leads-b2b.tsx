@@ -43,6 +43,7 @@ import {
 export const Route = createFileRoute("/_app/leads-b2b")({
   validateSearch: (search) => ({
     search: typeof search.search === "string" ? search.search : "",
+    uf: typeof search.uf === "string" ? search.uf : "Todos",
     city: typeof search.city === "string" ? search.city : "Todas",
     cnae: typeof search.cnae === "string" ? search.cnae : "Todos",
     status: typeof search.status === "string" ? search.status : "Todos",
@@ -92,6 +93,7 @@ function LeadsB2B() {
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState(routeSearch.search);
+  const [uf, setUf] = useState(routeSearch.uf);
   const [city, setCity] = useState(routeSearch.city);
   const [cnae, setCnae] = useState(routeSearch.cnae);
   const [status, setStatus] = useState(routeSearch.status);
@@ -110,6 +112,7 @@ function LeadsB2B() {
 
   useEffect(() => {
     setQuery(routeSearch.search);
+    setUf(routeSearch.uf);
     setCity(routeSearch.city);
     setCnae(routeSearch.cnae);
     setStatus(routeSearch.status);
@@ -117,6 +120,7 @@ function LeadsB2B() {
     setPage(1);
   }, [
     routeSearch.search,
+    routeSearch.uf,
     routeSearch.city,
     routeSearch.cnae,
     routeSearch.status,
@@ -146,6 +150,7 @@ function LeadsB2B() {
   const baseFilters = useMemo<LeadQuery>(() => {
     const filters: LeadQuery = {};
     if (query.trim()) filters.search = query.trim();
+    if (uf !== "Todos") filters.uf = uf;
     if (city !== "Todas") filters.city = city;
     if (cnae !== "Todos") filters.cnae = cnae;
     if (status !== "Todos") filters.status = status as LeadStatus;
@@ -157,6 +162,7 @@ function LeadsB2B() {
     return filters;
   }, [
     query,
+    uf,
     city,
     cnae,
     status,
@@ -233,6 +239,7 @@ function LeadsB2B() {
 
   function clearFilters() {
     setQuery("");
+    setUf("Todos");
     setCity("Todas");
     setCnae("Todos");
     setStatus("Todos");
@@ -297,6 +304,7 @@ function LeadsB2B() {
 
   const activeFilters = [
     query.trim() ? { label: "Busca", value: query.trim(), clear: () => setQuery("") } : null,
+    uf !== "Todos" ? { label: "Estado", value: uf, clear: () => setUf("Todos") } : null,
     city !== "Todas" ? { label: "Cidade", value: city, clear: () => setCity("Todas") } : null,
     cnae !== "Todos"
       ? { label: "CNAE", value: formatCnae(cnae), clear: () => setCnae("Todos") }
@@ -376,7 +384,7 @@ function LeadsB2B() {
       </section>
 
       <section className="rounded-xl border border-[#DDE5EF] bg-white p-4 shadow-sm">
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-[minmax(240px,1.4fr)_1fr_1fr_1fr_1fr]">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
           <label className="block">
             <span className="mb-1 block text-[11px] font-bold uppercase text-[#64748B]">Busca</span>
             <div className="relative">
@@ -390,9 +398,27 @@ function LeadsB2B() {
             </div>
           </label>
 
+          <FilterSelect 
+            label="Estado (UF)" 
+            value={uf} 
+            onChange={(newUf) => {
+              setUf(newUf);
+              setCity("Todas");
+            }}
+          >
+            <option value="Todos">Todos</option>
+            {Array.from(new Set(cities.map(c => c.uf))).sort().map((ufOption) => (
+              <option key={ufOption} value={ufOption}>
+                {ufOption}
+              </option>
+            ))}
+          </FilterSelect>
+
           <FilterSelect label="Cidade" value={city} onChange={setCity}>
             <option value="Todas">Todas</option>
-            {cities.map((option) => (
+            {cities
+              .filter(c => uf === "Todos" || c.uf === uf)
+              .map((option) => (
               <option key={option.id} value={option.name}>
                 {option.name}
               </option>
