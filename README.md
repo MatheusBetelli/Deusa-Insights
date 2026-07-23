@@ -1,99 +1,149 @@
-# Deusa Analytics
+# 🥑 Deusa Analytics — Plataforma de Inteligência Comercial B2B
 
-Plataforma interna de inteligência comercial B2B para a Deusa Alimentos.
+Plataforma de inteligência de mercado e visualização geográfica exclusiva para a Deusa Alimentos.
 
 ---
 
-## 🚀 Como Inicializar o Projeto
+## 📋 Requisitos de Sistema
 
-Para rodar a plataforma localmente, siga o passo a passo abaixo.
+- **Node.js:** Versão LTS `>= 20.0.0` (Recomendado: Node v20 ou v22).
+- **npm:** Versão `>= 9.0.0`.
+- **Docker:**
+  - **Windows:** Docker Desktop com backend WSL2 ou Hyper-V ativo.
+  - **Linux:** Docker Engine v20.10+ e Docker Compose v2.
+- **PostgreSQL:** PostgreSQL 16 (fornecido via container Docker na porta `5435`).
 
-### 1. Banco de Dados (PostgreSQL via Docker)
+---
 
-O backend depende de um banco de dados PostgreSQL rodando. Há um arquivo `docker-compose.yml` na raiz do projeto configurado para subir este banco na porta **`5435`** (configurado assim para evitar conflitos com outros bancos que você possua na máquina).
+## ⚡ Instalação Rápida e Idempotente (Primeira Execução)
 
-Na raiz do projeto, execute o comando abaixo para iniciar o banco em segundo plano:
+Após clonar o repositório, você pode preparar todo o ambiente (instalação de dependências do monorepo, arquivos de configuração `.env`, banco de dados Docker, Prisma Client e migrations) executando apenas dois comandos na raiz do projeto:
 
 ```bash
-docker compose up -d
+npm install
+npm run setup
 ```
 
-> **Nota:** Certifique-se de que o Docker esteja em execução em sua máquina.
+O script `npm run setup` é **idempotente** (pode ser executado várias vezes sem destruir dados ou sobrescrever arquivos `.env` existentes).
 
-### 2. Configurando e Inicializando o Backend
+---
 
-1. Entre no diretório do backend:
-   ```bash
-   cd backend
+## 🩺 Diagnóstico do Ambiente (`npm run doctor`)
+
+Caso enfrente qualquer erro ou queira validar seu ambiente antes de iniciar:
+
+```bash
+npm run doctor
+```
+
+Esse comando analisa sem alterar o sistema:
+- Versões do Node.js, npm e Docker;
+- Existência dos arquivos `.env`;
+- Conexão com o PostgreSQL na porta `5435`;
+- Disponibilidade das portas da aplicação (`3001` e `8080`);
+- Geração do Prisma Client.
+
+---
+
+## 🚀 Executando o Projeto no Dia a Dia
+
+Para iniciar o banco de dados e ambos os servidores (Frontend e Backend simultaneamente com logs formatados):
+
+```bash
+# 1. Iniciar o container do PostgreSQL em segundo plano
+npm run db:start
+
+# 2. Iniciar os servidores de desenvolvimento (Frontend + Backend)
+npm run dev
+```
+
+Você verá a saída dos dois servidores no mesmo terminal com prefixos coloridos:
+- **`[BACKEND]`** rodando em `http://localhost:3001` (Healthcheck: `http://localhost:3001/health`)
+- **`[FRONTEND]`** rodando em `http://localhost:8080` (ou `http://localhost:5173`)
+
+Para encerrar os servidores, pressione **`Ctrl + C`** no terminal.
+
+Para desligar o banco de dados:
+```bash
+npm run db:stop
+```
+
+---
+
+## 💻 Instruções Específicas por Sistema Operacional
+
+### 🪟 Executando no Windows (PowerShell)
+
+1. Certifique-se de que o **Docker Desktop** está em execução (ícone da baleia ativo no menu iniciar/bandeja).
+2. Abra o **PowerShell** como usuário normal na raiz do projeto.
+3. Se o PowerShell bloquear a execução de scripts locais por política de execução, execute:
+   ```powershell
+   Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
    ```
-2. Instale as dependências:
-   ```bash
+4. Execute o setup e inicie a aplicação:
+   ```powershell
    npm install
-   ```
-3. Garanta que o arquivo `.env` existe e está configurado (há um `.env.example` para referência). O arquivo `.env` padrão possui:
-   ```env
-   DATABASE_URL="postgresql://deusa:deusa@localhost:5435/deusa_analytics?schema=public"
-   PORT=3001
-   JWT_SECRET="dev-secret-change-me"
-   ```
-4. Aplique as migrações do banco de dados (Prisma):
-   ```bash
-   npx prisma migrate dev
-   ```
-5. Popule o banco com dados iniciais (se necessário):
-   ```bash
-   npm run seed
-   ```
-6. Inicialize o servidor em modo de desenvolvimento:
-   ```bash
-   npm run start:dev
-   ```
-
-O backend estará ativo em `http://localhost:3001`.
-
-### 3. Configurando e Inicializando o Frontend
-
-1. Abra um novo terminal e entre no diretório do frontend:
-   ```bash
-   cd frontend
-   ```
-2. Instale as dependências:
-   ```bash
-   npm install
-   ```
-3. Verifique o arquivo `.env` (ou copie do exemplo: `cp .env.example .env`). O arquivo deve apontar para o backend:
-   ```env
-   VITE_API_URL=http://127.0.0.1:3001
-   ```
-4. Inicialize o servidor de desenvolvimento:
-   ```bash
+   npm run setup
    npm run dev
    ```
 
-O frontend estará disponível em `http://localhost:5173`.
+### 🐧 Executando no Linux (Bash / Zsh)
+
+1. Certifique-se de que o serviço do Docker esteja rodando (`sudo systemctl start docker`).
+2. Caso seu usuário necessite de permissão para rodar Docker sem `sudo`, adicione-o ao grupo `docker`:
+   ```bash
+   sudo usermod -aG docker $USER
+   ```
+   *(Pode ser necessário encerrar e reabrir a sessão do Linux após esse comando).*
+3. Na raiz do projeto, execute:
+   ```bash
+   npm install
+   npm run setup
+   npm run dev
+   ```
 
 ---
 
-## 🔑 Credenciais para Acesso (Seed Users)
+## 🛠️ Lista Completa de Comandos da Raiz (`package.json`)
 
-Para entrar no sistema, utilize um dos seguintes usuários de teste (senha padrão indicada):
+| Comando | Descrição |
+| :--- | :--- |
+| `npm run setup` | Prepara todo o ambiente (.env, Docker, Prisma, Migrations, Seed). |
+| `npm run doctor` | Diagnóstico automático de saúde do ambiente e portas. |
+| `npm run dev` | Inicia o Frontend e Backend simultaneamente. |
+| `npm run dev:backend` | Inicia somente o servidor de Backend (NestJS). |
+| `npm run dev:frontend` | Inicia somente o servidor de Frontend (Vite/TanStack). |
+| `npm run db:start` | Sobe o container PostgreSQL via Docker Compose (`docker compose up -d`). |
+| `npm run db:stop` | Para o container PostgreSQL (`docker compose down`). |
+| `npm run db:logs` | Exibe os logs em tempo real do banco de dados. |
+| `npm run db:migrate` | Executa migrações do Prisma (`prisma migrate dev`). |
+| `npm run db:generate` | Gera os tipos do Prisma Client (`prisma generate`). |
+| `npm run db:seed` | Popula o banco com os dados e usuários iniciais. |
+| `npm run db:reset` | **(Destrutivo)** Solicita confirmação e reseta o esquema do banco. |
+| `npm run build` | Compila o Backend e o Frontend para produção. |
+
+---
+
+## 🔑 Credenciais de Desenvolvimento (Seed Users)
+
+Para acessar a aplicação no navegador em `http://localhost:8080`:
 
 * **Administrador:** `admin@deusa.com.br` / `admin123`
 * **Comercial:** `rafael.mendes@deusa.com.br` / `deusa123`
-* **Comercial:** `mariana.alves@deusa.com.br` / `deusa123`
+* **Gerente:** `mariana.alves@deusa.com.br` / `deusa123`
 
 ---
 
-## 🛠️ Resolução de Problemas (Troubleshooting)
+## ❓ Resolução de Problemas Comuns
 
-### Erro: `PrismaClientInitializationError: Can't reach database server at localhost:5435`
+### 1. `Porta 3001 ou 5435 em uso`
+* **Causa:** Outra instância do backend ou um serviço local do PostgreSQL está usando a porta.
+* **Solução:** Libere a porta com `npx kill-port 3001` (ou `fuser -k 5435/tcp` no Linux) ou altere a porta nos arquivos `.env`.
 
-Se ao rodar `npm start` ou `npm run start:dev` no backend você se deparar com este erro, significa que o Prisma não conseguiu se conectar ao PostgreSQL.
+### 2. `PrismaClientInitializationError: Can't reach database server at localhost:5435`
+* **Causa:** O container do PostgreSQL não está rodando.
+* **Solução:** Execute `npm run db:start` ou verifique se o Docker Desktop está ativo.
 
-**Como resolver:**
-1. Verifique se o container do banco está de fato ativo rodando `docker compose ps` na raiz do projeto.
-2. Caso o container não esteja ativo, inicie-o executando:
-   ```bash
-   docker compose up -d
-   ```
-3. Se o erro persistir, certifique-se de que o serviço do Docker (Docker Desktop ou daemon do Docker) está rodando no seu sistema operacional.
+### 3. `node_modules` de outro sistema operacional
+* **Causa:** Copiar a pasta `node_modules` gerada no Windows para o Linux (ou vice-versa).
+* **Solução:** Apague a pasta `node_modules` e execute `npm run setup` no novo sistema.

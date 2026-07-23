@@ -14,10 +14,13 @@ import { PrismaModule } from "./prisma/prisma.module";
 import { UsersModule } from "./users/users.module";
 import { ClassificationModule } from "./classification/classification.module";
 
+import { HealthModule } from "./health/health.module";
+
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule,
+    HealthModule,
     AuthModule,
     UsersModule,
     CitiesModule,

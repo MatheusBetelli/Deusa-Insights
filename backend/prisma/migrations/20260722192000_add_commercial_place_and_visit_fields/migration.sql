@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE "companies" ADD COLUMN IF NOT EXISTS "placeId" TEXT,
+ADD COLUMN IF NOT EXISTS "nomeResponsavelVisita" TEXT,
+ADD COLUMN IF NOT EXISTS "dataVisita" TIMESTAMP(3),
+ADD COLUMN IF NOT EXISTS "evidenciaVisita" TEXT;

@@ -117,7 +117,9 @@ export class LeadsService {
 
   private buildWhere(query: LeadQueryDto) {
     const where: Prisma.LeadWhereInput = {};
-    const and: Prisma.LeadWhereInput[] = [];
+    const and: Prisma.LeadWhereInput[] = [
+      { company: { situacaoCadastral: "ATIVA" } },
+    ];
 
     if (query.status) where.status = query.status;
     if (query.potentialLevel) where.potentialLevel = query.potentialLevel;

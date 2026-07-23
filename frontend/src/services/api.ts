@@ -29,15 +29,18 @@ export async function apiRequest<T>(
 ): Promise<T> {
   try {
     const token = AuthService.getToken();
-    const authHeader = token ? { Authorization: `Bearer ${token}` } : {};
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      ...(options.headers as Record<string, string> ?? {}),
+    };
+
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
 
     const response = await fetch(buildUrl(path, query), {
       ...options,
-      headers: {
-        "Content-Type": "application/json",
-        ...authHeader,
-        ...(options.headers ?? {}),
-      },
+      headers,
     });
 
     if (!response.ok) {
@@ -68,14 +71,17 @@ export async function apiTextRequest(
 ): Promise<string> {
   try {
     const token = AuthService.getToken();
-    const authHeader = token ? { Authorization: `Bearer ${token}` } : {};
+    const headers: Record<string, string> = {
+      ...(options.headers as Record<string, string> ?? {}),
+    };
+
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
 
     const response = await fetch(buildUrl(path, query), {
       ...options,
-      headers: {
-        ...authHeader,
-        ...(options.headers ?? {}),
-      },
+      headers,
     });
 
     if (!response.ok) {

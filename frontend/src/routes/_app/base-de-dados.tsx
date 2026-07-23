@@ -400,7 +400,7 @@ function BaseDeDados() {
                             </button>
                             <button
                               onClick={() =>
-                                navigate({ to: "/mapa-oportunidades", search: { city: city.name } })
+                                navigate({ to: "/mapa-oportunidades", search: { uf: "Todos", city: city.name } })
                               }
                               className="inline-flex h-8 items-center gap-1 rounded-md border border-[#DDE5EF] bg-white px-2.5 text-xs font-bold text-[#0B1F33] hover:border-[#1061AF]"
                             >

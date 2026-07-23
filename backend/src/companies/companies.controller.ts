@@ -5,6 +5,7 @@ import { CreateCompanyDto } from "./dto/create-company.dto";
 import { UpdateCompanyDto } from "./dto/update-company.dto";
 import { VerifyGoogleBatchQueryDto } from "./dto/verify-google-batch-query.dto";
 import { CompanyDetailsDto } from "./dto/company-details.dto";
+import { ValidateLocationDto } from "./dto/validate-location.dto";
 
 @Controller("companies")
 export class CompaniesController {
@@ -54,4 +55,15 @@ export class CompaniesController {
   updateDetails(@Param("id") id: string, @Body() dto: CompanyDetailsDto) {
     return this.companiesService.upsertDetails(id, dto);
   }
+
+  @Post(":id/validate-location")
+  validateLocation(@Param("id") id: string, @Body() dto: ValidateLocationDto) {
+    return this.companiesService.validateLocation(id, dto);
+  }
+
+  @Post(":id/location-candidates")
+  getLocationCandidates(@Param("id") id: string) {
+    return this.companiesService.getLocationCandidates(id);
+  }
 }
+

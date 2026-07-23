@@ -262,7 +262,7 @@ function Dashboard() {
             </Link>
             <Link
               to="/mapa-oportunidades"
-              search={{ city: priorityCity }}
+              search={{ uf: "Todos", city: priorityCity }}
               className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#DDE5EF] bg-white px-3.5 text-xs font-bold text-[#0B1F33] transition hover:border-[#1061AF] hover:text-[#1061AF]"
             >
               <ArrowRight className="h-3.5 w-3.5" />

@@ -21,7 +21,7 @@ export class DashboardService {
       monitoredCities,
       monitoredCnaes,
       topLead,
-      topCnae,
+      activeCompanyCnaes,
     ] = await Promise.all([
       this.prisma.lead.count({
         where: {
@@ -29,8 +29,18 @@ export class DashboardService {
           company: { situacaoCadastral: "ATIVA" },
         },
       }),
-      this.prisma.lead.count({ where: { status: LeadStatus.CONVERTED } }),
-      this.prisma.lead.count({ where: { status: LeadStatus.INACTIVE } }),
+      this.prisma.lead.count({
+        where: {
+          status: LeadStatus.CONVERTED,
+          company: { situacaoCadastral: "ATIVA" },
+        },
+      }),
+      this.prisma.lead.count({
+        where: {
+          status: LeadStatus.INACTIVE,
+          company: { situacaoCadastral: "ATIVA" },
+        },
+      }),
       this.prisma.lead.count({
         where: {
           potentialLevel: PotentialLevel.CRITICAL,
@@ -40,11 +50,20 @@ export class DashboardService {
       this.prisma.city.count({ where: { isActive: true } }),
       this.prisma.cnae.count({ where: { isTarget: true } }),
       this.prisma.lead.findFirst({
+        where: { company: { situacaoCadastral: "ATIVA" } },
         include: { company: { select: { cidade: true } } },
         orderBy: { score: "desc" },
       }),
-      this.prisma.cnae.findFirst({ where: { isTarget: true }, orderBy: { code: "asc" } }),
+      this.prisma.company.groupBy({
+        by: ["cnaePrincipal"],
+        where: { situacaoCadastral: "ATIVA" },
+        _count: { id: true },
+        orderBy: { _count: { id: "desc" } },
+        take: 1,
+      }),
     ]);
+
+    const priorityCnaeCode = activeCompanyCnaes[0]?.cnaePrincipal || "4712100";
 
     return {
       potentialClients,
@@ -53,8 +72,8 @@ export class DashboardService {
       criticalOpportunities,
       monitoredCities,
       monitoredCnaes,
-      priorityCity: topLead?.company.cidade ?? null,
-      priorityCnae: formatCnae(topCnae?.code),
+      priorityCity: topLead?.company.cidade ?? "Tupã",
+      priorityCnae: formatCnae(priorityCnaeCode),
     };
   }
 }

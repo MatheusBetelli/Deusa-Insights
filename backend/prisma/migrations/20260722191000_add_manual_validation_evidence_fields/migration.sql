@@ -1,0 +1,15 @@
+-- AlterTable
+ALTER TABLE "companies" ADD COLUMN IF NOT EXISTS "validadoManualmente" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN IF NOT EXISTS "dataUltimaValidacao" TIMESTAMP(3),
+ADD COLUMN IF NOT EXISTS "usuarioValidacaoId" TEXT,
+ADD COLUMN IF NOT EXISTS "observacaoValidacao" TEXT,
+ADD COLUMN IF NOT EXISTS "statusValidacao" TEXT DEFAULT 'aguardando_validacao',
+ADD COLUMN IF NOT EXISTS "fonteConsultada" TEXT,
+ADD COLUMN IF NOT EXISTS "urlEvidencia" TEXT,
+ADD COLUMN IF NOT EXISTS "nomeEncontrado" TEXT,
+ADD COLUMN IF NOT EXISTS "enderecoEncontrado" TEXT,
+ADD COLUMN IF NOT EXISTS "telefoneEncontrado" TEXT,
+ADD COLUMN IF NOT EXISTS "categoriaEncontrada" TEXT,
+ADD COLUMN IF NOT EXISTS "situacaoAparente" TEXT,
+ADD COLUMN IF NOT EXISTS "distanciaAproximadaMeters" DOUBLE PRECISION,
+ADD COLUMN IF NOT EXISTS "justificativaDecisao" TEXT;

@@ -25,6 +25,7 @@ function RotasFuturas() {
         </p>
         <Link
           to="/mapa-oportunidades"
+          search={{ uf: "Todos", city: "Todas" }}
           className="mt-6 inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-[#0B1F33] px-4 text-sm font-bold text-white transition hover:bg-[#1061AF]"
         >
           Ir para o mapa de oportunidades

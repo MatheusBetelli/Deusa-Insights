@@ -137,6 +137,30 @@ model Company {
   fonteGeocodificacao   String?
   dataVerificacaoGeo    DateTime?
 
+  // ─── Validação Manual de Localização & Evidências ─────────────────────────
+  validadoManualmente       Boolean   @default(false)
+  dataUltimaValidacao       DateTime?
+  usuarioValidacaoId        String?
+  observacaoValidacao       String?
+  // statusValidacao: "aguardando_validacao" | "confirmado" | "provavel" |
+  //                  "nao_encontrado" | "endereco_invalido" |
+  //                  "resultado_incompativel" | "fechado" | "rejeitado" | "revisao_manual"
+  statusValidacao           String?   @default("aguardando_validacao")
+
+  fonteConsultada           String?
+  urlEvidencia              String?
+  placeId                   String?
+  nomeEncontrado            String?
+  enderecoEncontrado        String?
+  telefoneEncontrado        String?
+  categoriaEncontrada       String?
+  situacaoAparente          String?
+  distanciaAproximadaMeters Float?
+  justificativaDecisao      String?
+  nomeResponsavelVisita     String?
+  dataVisita                DateTime?
+  evidenciaVisita           String?
+
   cnaes             CompanyCnae[]
   lead              Lead?
   details           CompanyDetails?
