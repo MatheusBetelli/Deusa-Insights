@@ -21,6 +21,11 @@ class HeatmapQueryDto {
 export class MapOpportunitiesController {
   constructor(private readonly mapOpportunitiesService: MapOpportunitiesService) {}
 
+  @Get("opportunities")
+  findAll() {
+    return this.mapOpportunitiesService.findAll();
+  }
+
   /**
    * GET /map/heatmap
    *

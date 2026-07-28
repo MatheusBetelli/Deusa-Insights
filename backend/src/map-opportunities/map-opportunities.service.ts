@@ -50,6 +50,37 @@ export type HeatmapResponse = HeatmapPoint[];
 export class MapOpportunitiesService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async findAll() {
+    const leads = await this.prisma.lead.findMany({
+      where: {
+        company: {
+          latitude: { not: null },
+          longitude: { not: null },
+          situacaoCadastral: "ATIVA",
+        },
+      },
+      include: { company: true },
+      orderBy: { score: "desc" },
+    });
+
+    return leads.map((lead) => ({
+      id: lead.id,
+      companyName: lead.company.nomeFantasia || lead.company.razaoSocial,
+      cnpj: lead.company.cnpj,
+      city: lead.company.cidade,
+      uf: lead.company.uf,
+      bairro: lead.company.bairro,
+      latitude: lead.company.latitude,
+      longitude: lead.company.longitude,
+      score: lead.score,
+      status: lead.status,
+      potentialLevel: lead.potentialLevel,
+      origemCoordenada: lead.company.origemCoordenada,
+      statusVerificacaoEndereco: lead.company.statusVerificacaoEndereco,
+      confiancaVerificacao: lead.company.confiancaVerificacao,
+    }));
+  }
+
   // ─────────────────────────────────────────────────────────────────────────────
   // MAPA DE CALOR REGIONAL
   //
