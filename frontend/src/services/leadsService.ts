@@ -24,5 +24,7 @@ export const leadsService = {
     }),
   createLead: (payload: { companyId: string }) =>
     apiRequest<Lead>("/leads", { method: "POST", body: JSON.stringify(payload) }),
+  autoAssignTerritory: () =>
+    apiRequest<{ success: boolean; message: string; assignedCount: number }>("/leads/auto-assign", { method: "POST" }),
   exportCsv: (query?: LeadQuery) => apiTextRequest("/leads/export.csv", {}, query),
 };

@@ -16,6 +16,24 @@ export class CompaniesController {
     return this.companiesService.findAll(query);
   }
 
+  @Get("google-maps-readiness")
+  getGoogleMapsReadiness() {
+    return this.companiesService.getGoogleMapsReadiness();
+  }
+
+  @Post("geocode-batch-process")
+  geocodeBatchProcess(
+    @Query("cnaeCode") cnaeCode?: string,
+    @Query("limit") limit?: string,
+    @Query("force") force?: string,
+  ) {
+    return this.companiesService.geocodeBatchCompanies(
+      cnaeCode || "4712100",
+      limit ? parseInt(limit, 10) : 50,
+      force === "true",
+    );
+  }
+
   @Get(":id")
   findById(@Param("id") id: string) {
     return this.companiesService.findById(id);

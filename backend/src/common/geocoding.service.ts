@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
 
 export type GeocodeResult = {
   lat: number;
@@ -39,17 +39,31 @@ function extractDigits(str: string): string {
 }
 
 @Injectable()
-export class GeocodingService {
+export class GeocodingService implements OnModuleInit {
   private readonly logger = new Logger(GeocodingService.name);
-  private readonly apiKey: string | undefined;
+  private apiKey: string | undefined;
 
-  constructor() {
-    this.apiKey = process.env.GOOGLE_MAPS_API_KEY;
+  onModuleInit() {
+    this.apiKey = process.env.GOOGLE_MAPS_API_KEY?.trim();
+    if (this.isAvailable()) {
+      const masked = this.getMaskedKey();
+      this.logger.log(`[Google Maps API] 🚀 Chave detectada e ativa! Key: ${masked}. Geocodificação de precisão HABILITADA.`);
+    } else {
+      this.logger.warn(`[Google Maps API] ℹ️ Chave GOOGLE_MAPS_API_KEY não configurada no backend/.env. O sistema operará no modo estático/centroide.`);
+    }
   }
 
   isAvailable(): boolean {
-    return !!this.apiKey;
+    this.apiKey = process.env.GOOGLE_MAPS_API_KEY?.trim();
+    return Boolean(this.apiKey && this.apiKey.length > 0);
   }
+
+  getMaskedKey(): string {
+    if (!this.apiKey) return "Não configurada";
+    if (this.apiKey.length <= 8) return "********";
+    return `${this.apiKey.slice(0, 4)}...${this.apiKey.slice(-4)}`;
+  }
+
 
   /**
    * Valida e geocodifica um endereço com Google Geocoding API.

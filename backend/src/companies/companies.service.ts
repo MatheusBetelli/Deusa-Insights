@@ -16,6 +16,7 @@ import { GeocodingService } from "../common/geocoding.service";
 import { ClassificationService } from "../classification/classification.service";
 
 import { ConfigService } from "@nestjs/config";
+import { maskCpfInRazaoSocial } from "../common/lgpd.utils";
 
 function normalizeCnae(code?: string | null) {
   return code?.replace(/\D/g, "") || undefined;
@@ -94,8 +95,13 @@ export class CompaniesService {
       }),
     ]);
 
+    const sanitizedItems = items.map((item) => ({
+      ...item,
+      razaoSocial: maskCpfInRazaoSocial(item.razaoSocial),
+    }));
+
     return {
-      items,
+      items: sanitizedItems,
       total,
       page,
       pageSize,
@@ -809,5 +815,146 @@ export class CompaniesService {
       candidates,
     };
   }
+
+  async getGoogleMapsReadiness() {
+    const isAvailable = this.geocodingService.isAvailable();
+    const maskedKey = this.geocodingService.getMaskedKey();
+
+    const totalCompanies = await this.prisma.company.count();
+    
+    const cnae4712100Count = await this.prisma.company.count({
+      where: {
+        OR: [
+          { cnaePrincipal: "4711302" },
+          { cnaePrincipal: "4712100" },
+          { cnaes: { some: { cnaeCode: { in: ["4711302", "4712100"] } } } },
+        ],
+      },
+    });
+
+    const cnae4712100Geocoded = await this.prisma.company.count({
+      where: {
+        OR: [
+          { cnaePrincipal: "4711302" },
+          { cnaePrincipal: "4712100" },
+          { cnaes: { some: { cnaeCode: { in: ["4711302", "4712100"] } } } },
+        ],
+        latitudeVerificada: { not: null },
+      },
+    });
+
+    const totalVerified = await this.prisma.company.count({
+      where: { latitudeVerificada: { not: null } },
+    });
+
+    const pendingTargetCount = cnae4712100Count - cnae4712100Geocoded;
+
+    return {
+      status: isAvailable ? "PRONTO" : "AGUARDANDO_CHAVE",
+      apiKeyConfigured: isAvailable,
+      maskedKey,
+      message: isAvailable
+        ? "Chave GOOGLE_MAPS_API_KEY ativa. O sistema está pronto para realizar geocodificação de precisão e busca no Google Places."
+        : "GOOGLE_MAPS_API_KEY não configurada no arquivo backend/.env. Insira a chave quando disponível para liberar geocodificação em tempo real.",
+      targetCnae: "4712100 (Minimercados, mercearias e armazéns)",
+      metrics: {
+        totalCompanies,
+        totalVerified,
+        totalPending: totalCompanies - totalVerified,
+        cnae4712100Count,
+        cnae4712100Geocoded,
+        cnae4712100Pending: pendingTargetCount,
+      },
+      freeTierQuota: {
+        monthlyLimit: "$200.00 USD (~28.500 requisições grátis por mês)",
+        estimatedCallsForPendingTarget: pendingTargetCount,
+        estimatedCost: "$0.00 USD (Dentro do limite gratuito mensal do Google Cloud)",
+      },
+    };
+  }
+
+  async geocodeBatchCompanies(cnaeCode = "4712100", limit = 50, forceReverify = false) {
+    if (!this.geocodingService.isAvailable()) {
+      return {
+        success: false,
+        message: "GOOGLE_MAPS_API_KEY não configurada em backend/.env. Adicione a chave para liberar a geocodificação em lote.",
+        processed: 0,
+      };
+    }
+
+    const whereCondition: Prisma.CompanyWhereInput = {
+      ...(cnaeCode
+        ? {
+            OR: [
+              { cnaePrincipal: cnaeCode },
+              { cnaes: { some: { cnaeCode } } },
+            ],
+          }
+        : {}),
+      ...(forceReverify ? {} : { latitudeVerificada: null }),
+    };
+
+    const companies = await this.prisma.company.findMany({
+      where: whereCondition,
+      take: limit,
+      include: { details: true },
+    });
+
+    const results: any[] = [];
+    let successCount = 0;
+    let failedCount = 0;
+
+    for (const company of companies) {
+      const result = await this.geocodingService.geocodeAndVerify({
+        razaoSocial: company.razaoSocial,
+        nomeFantasia: company.nomeFantasia,
+        logradouro: company.logradouro,
+        numero: company.numero,
+        bairro: company.bairro,
+        cep: company.cep,
+        cidade: company.cidade,
+        uf: company.uf,
+        telefone: company.details?.telefone,
+      });
+
+      if (result) {
+        successCount++;
+        await this.prisma.company.update({
+          where: { id: company.id },
+          data: {
+            latitude: result.lat,
+            longitude: result.lng,
+            latitudeVerificada: result.lat,
+            longitudeVerificada: result.lng,
+            enderecoVerificado: result.enderecoRetornado,
+            fonteGeocodificacao: result.fonte,
+            confiancaVerificacao: result.confianca,
+            statusVerificacaoEndereco: result.confianca >= 60 ? "verificado" : "provavel",
+            dataVerificacaoGeo: result.dataVerificacao,
+            origemCoordenada: "geocodificado",
+          },
+        });
+        results.push({
+          cnpj: company.cnpj,
+          razaoSocial: company.razaoSocial,
+          lat: result.lat,
+          lng: result.lng,
+          confianca: result.confianca,
+          endereco: result.enderecoRetornado,
+        });
+      } else {
+        failedCount++;
+      }
+    }
+
+    return {
+      success: true,
+      processed: companies.length,
+      successCount,
+      failedCount,
+      results,
+    };
+  }
 }
+
 

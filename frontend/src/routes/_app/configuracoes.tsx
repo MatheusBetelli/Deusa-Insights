@@ -15,7 +15,17 @@ import type { UserSummary } from "@/types/lead";
 import { ArrowRight, Bell, Database, Loader2, ShieldCheck, Users } from "lucide-react";
 import { toast } from "sonner";
 
+import { redirect } from "@tanstack/react-router";
+
 export const Route = createFileRoute("/_app/configuracoes")({
+  beforeLoad: () => {
+    if (typeof window !== "undefined") {
+      const user = AuthService.getUser();
+      if (user && user.role?.toUpperCase() === "SALES") {
+        throw redirect({ to: "/dashboard" });
+      }
+    }
+  },
   component: Settings,
 });
 

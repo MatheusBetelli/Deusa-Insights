@@ -9,20 +9,38 @@ import {
   Settings,
 } from "lucide-react";
 import { DeusaLogo } from "./Logo";
+import { AuthService } from "@/lib/auth";
+import { useEffect, useState } from "react";
 
-// TODO: Recomendações dinâmicas ficam para uma versão futura (rota /recomendacoes preservada no código)
-const items = [
-  { to: "/dashboard", label: "Central Comercial", icon: LayoutDashboard },
-  { to: "/leads-b2b", label: "Leads B2B", icon: Building2 },
-  { to: "/mapa-oportunidades", label: "Mapa", icon: MapPinned },
-  { to: "/importar-cnpjs", label: "Importar CNPJs", icon: FileUp },
-  { to: "/funil-comercial", label: "Funil Comercial", icon: Funnel },
-  { to: "/base-de-dados", label: "Base de Dados", icon: Database },
-  { to: "/configuracoes", label: "Configurações", icon: Settings },
+const allItems = [
+  { to: "/dashboard", label: "Central Comercial", icon: LayoutDashboard, roles: ["ADMIN", "MANAGER", "SALES"] },
+  { to: "/leads-b2b", label: "Leads B2B", icon: Building2, roles: ["ADMIN", "MANAGER", "SALES"] },
+  { to: "/mapa-oportunidades", label: "Mapa", icon: MapPinned, roles: ["ADMIN", "MANAGER", "SALES"] },
+  { to: "/importar-cnpjs", label: "Importar CNPJs", icon: FileUp, roles: ["ADMIN"] },
+  { to: "/funil-comercial", label: "Funil Comercial", icon: Funnel, roles: ["ADMIN", "MANAGER", "SALES"] },
+  { to: "/base-de-dados", label: "Base de Dados", icon: Database, roles: ["ADMIN", "MANAGER"] },
+  { to: "/configuracoes", label: "Configurações", icon: Settings, roles: ["ADMIN", "MANAGER"] },
 ];
 
 export function Sidebar() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const [userRole, setUserRole] = useState<string>("ADMIN");
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    const user = AuthService.getUser();
+    if (user?.role) {
+      setUserRole(user.role);
+    }
+  }, []);
+
+  const visibleItems = allItems.filter((item) => {
+    if (!mounted) return true;
+    const roleUpper = userRole?.toUpperCase() || "ADMIN";
+    if (roleUpper === "ADMIN") return true; // Administrador tem acesso irrestrito a TODAS as abas
+    return item.roles.map((r) => r.toUpperCase()).includes(roleUpper);
+  });
 
   return (
     <aside className="hidden lg:flex h-screen w-[280px] shrink-0 flex-col bg-[#0B1B2B] text-white shadow-xl shadow-[#0B1F33]/10">
@@ -37,7 +55,7 @@ export function Sidebar() {
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-5">
-        {items.map((it) => {
+        {visibleItems.map((it) => {
           const active = pathname === it.to || pathname.startsWith(it.to + "/");
           const Icon = it.icon;
           return (

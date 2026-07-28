@@ -20,6 +20,11 @@ export class LeadsController {
     return this.leadsService.exportCsv(query);
   }
 
+  @Post("auto-assign")
+  autoAssign() {
+    return this.leadsService.autoAssignTerritory();
+  }
+
   @Get(":id")
   findById(@Param("id") id: string) {
     return this.leadsService.findById(id);

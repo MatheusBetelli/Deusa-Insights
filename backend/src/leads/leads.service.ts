@@ -46,7 +46,7 @@ export class LeadsService {
 
   async findPage(query: LeadQueryDto) {
     const page = Math.max(1, query.page ?? 1);
-    const pageSize = Math.min(Math.max(1, query.pageSize ?? 25), 100);
+    const pageSize = Math.min(Math.max(1, query.pageSize ?? query.limit ?? query.perPage ?? 25), 100);
     const where = this.buildWhere(query);
     const [total, items] = await this.prisma.$transaction([
       this.prisma.lead.count({ where }),
@@ -112,7 +112,12 @@ export class LeadsService {
   }
 
   private shouldPaginate(query: LeadQueryDto) {
-    return query.page !== undefined || query.pageSize !== undefined;
+    return (
+      query.page !== undefined ||
+      query.pageSize !== undefined ||
+      query.limit !== undefined ||
+      query.perPage !== undefined
+    );
   }
 
   private buildWhere(query: LeadQueryDto) {
@@ -271,6 +276,61 @@ export class LeadsService {
       },
       include: { company: true, assignedTo: { select: safeAssignedToSelect } },
     });
+  }
+
+  async autoAssignTerritory() {
+    const unassignedLeads = await this.prisma.lead.findMany({
+      where: { assignedToId: null },
+      include: { company: true },
+    });
+
+    const salesUsers = await this.prisma.user.findMany({
+      where: { role: { in: ["SALES", "MANAGER"] } },
+      select: { id: true, name: true, email: true },
+    });
+
+    if (salesUsers.length === 0) {
+      return { success: false, message: "Nenhum vendedor ou gerente cadastrado no sistema." };
+    }
+
+    let assignedCount = 0;
+    const cityMap: Record<string, string> = {};
+
+    // Mapeamento territorial de vendedores da Deusa Alimentos por região
+    for (const user of salesUsers) {
+      const nameLower = user.name.toLowerCase();
+      if (nameLower.includes("rafael")) {
+        cityMap["tupã"] = user.id;
+        cityMap["marília"] = user.id;
+        cityMap["pompeia"] = user.id;
+      } else if (nameLower.includes("camila")) {
+        cityMap["araçatuba"] = user.id;
+        cityMap["bauru"] = user.id;
+        cityMap["lins"] = user.id;
+      } else if (nameLower.includes("felipe")) {
+        cityMap["ourinhos"] = user.id;
+        cityMap["assis"] = user.id;
+        cityMap["bastos"] = user.id;
+      }
+    }
+
+    for (let i = 0; i < unassignedLeads.length; i++) {
+      const lead = unassignedLeads[i];
+      const cityClean = lead.company.cidade?.toLowerCase().trim() || "";
+      const assignedId = cityMap[cityClean] || salesUsers[i % salesUsers.length].id;
+
+      await this.prisma.lead.update({
+        where: { id: lead.id },
+        data: { assignedToId: assignedId },
+      });
+      assignedCount++;
+    }
+
+    return {
+      success: true,
+      assignedCount,
+      message: `${assignedCount} leads foram atribuídos automaticamente aos vendedores por região de atuação.`,
+    };
   }
 
   private async getTargetCnaes() {

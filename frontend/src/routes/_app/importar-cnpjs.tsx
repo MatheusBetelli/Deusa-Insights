@@ -13,7 +13,18 @@ import type { ImportJob } from "@/types/importJob";
 import { CheckCircle2, FileUp, Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
 
+import { AuthService } from "@/lib/auth";
+import { redirect } from "@tanstack/react-router";
+
 export const Route = createFileRoute("/_app/importar-cnpjs")({
+  beforeLoad: () => {
+    if (typeof window !== "undefined") {
+      const user = AuthService.getUser();
+      if (user && user.role?.toUpperCase() !== "ADMIN") {
+        throw redirect({ to: "/dashboard" });
+      }
+    }
+  },
   component: ImportCnpjs,
 });
 

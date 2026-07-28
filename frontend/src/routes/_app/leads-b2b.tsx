@@ -12,6 +12,7 @@ import {
   statusLabels,
 } from "@/lib/commercial-formatters";
 import { ESTADOS_UF } from "@/lib/constants";
+import { AuthService } from "@/lib/auth";
 import { citiesService } from "@/services/citiesService";
 import { cnaesService } from "@/services/cnaesService";
 import { leadsService } from "@/services/leadsService";
@@ -41,14 +42,23 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
+export type LeadsB2BSearch = {
+  search?: string;
+  uf?: string;
+  city?: string;
+  cnae?: string;
+  status?: string;
+  potentialLevel?: string;
+};
+
 export const Route = createFileRoute("/_app/leads-b2b")({
-  validateSearch: (search) => ({
-    search: typeof search.search === "string" ? search.search : "",
-    uf: typeof search.uf === "string" ? search.uf : "Todos",
-    city: typeof search.city === "string" ? search.city : "Todas",
-    cnae: typeof search.cnae === "string" ? search.cnae : "Todos",
-    status: typeof search.status === "string" ? search.status : "Todos",
-    potentialLevel: typeof search.potentialLevel === "string" ? search.potentialLevel : "Todos",
+  validateSearch: (search: Record<string, unknown>): LeadsB2BSearch => ({
+    search: typeof search.search === "string" ? search.search : undefined,
+    uf: typeof search.uf === "string" ? search.uf : undefined,
+    city: typeof search.city === "string" ? search.city : undefined,
+    cnae: typeof search.cnae === "string" ? search.cnae : undefined,
+    status: typeof search.status === "string" ? search.status : undefined,
+    potentialLevel: typeof search.potentialLevel === "string" ? search.potentialLevel : undefined,
   }),
   component: LeadsB2B,
 });
@@ -86,6 +96,21 @@ function statusClass() {
 
 function LeadsB2B() {
   const routeSearch = Route.useSearch();
+  const [autoAssigning, setAutoAssigning] = useState(false);
+  const currentUser = AuthService.getUser();
+
+  async function handleAutoAssignTerritory() {
+    setAutoAssigning(true);
+    try {
+      const res = await leadsService.autoAssignTerritory();
+      toast.success(res.message);
+      await loadLeads();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Falha ao distribuir leads.");
+    } finally {
+      setAutoAssigning(false);
+    }
+  }
   const [leads, setLeads] = useState<Lead[]>([]);
   const [cities, setCities] = useState<City[]>([]);
   const [cnaes, setCnaes] = useState<Cnae[]>([]);
@@ -93,12 +118,12 @@ function LeadsB2B() {
   const [optionsLoading, setOptionsLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [query, setQuery] = useState(routeSearch.search);
-  const [uf, setUf] = useState(routeSearch.uf);
-  const [city, setCity] = useState(routeSearch.city);
-  const [cnae, setCnae] = useState(routeSearch.cnae);
-  const [status, setStatus] = useState(routeSearch.status);
-  const [potentialLevel, setPotentialLevel] = useState(routeSearch.potentialLevel);
+  const [query, setQuery] = useState(routeSearch.search || "");
+  const [uf, setUf] = useState(routeSearch.uf || "Todos");
+  const [city, setCity] = useState(routeSearch.city || "Todas");
+  const [cnae, setCnae] = useState(routeSearch.cnae || "Todos");
+  const [status, setStatus] = useState(routeSearch.status || "Todos");
+  const [potentialLevel, setPotentialLevel] = useState(routeSearch.potentialLevel || "Todos");
   const [statusVerificacaoEndereco, setStatusVerificacaoEndereco] = useState("Todos");
   const [pendenteValidacao, setPendenteValidacao] = useState("Todos");
   const [situacaoCadastral, setSituacaoCadastral] = useState("ATIVA");
@@ -355,18 +380,32 @@ function LeadsB2B() {
             Área operacional para priorizar, atribuir e acionar leads.
           </p>
         </div>
-        <button
-          onClick={() => void handleExportCsv()}
-          disabled={exporting}
-          className="inline-flex h-9 w-fit items-center gap-1.5 rounded-lg border border-[#DDE5EF] bg-white px-3.5 text-sm font-bold text-[#0B1F33] transition hover:border-[#1061AF] disabled:opacity-60"
-        >
-          {exporting ? (
-            <Loader2 className="h-4 w-4 animate-spin text-[#1061AF]" />
-          ) : (
-            <Download className="h-4 w-4 text-[#1061AF]" />
-          )}
-          Exportar CSV
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => void handleAutoAssignTerritory()}
+            disabled={autoAssigning}
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#0B1F33] px-3.5 text-xs font-bold text-white shadow-sm transition hover:bg-[#1061AF] active:scale-[0.99] disabled:opacity-60"
+          >
+            {autoAssigning ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-[#FFF200]" />
+            ) : (
+              <UserPlus className="h-3.5 w-3.5 text-[#FFF200]" />
+            )}
+            Distribuir por Região
+          </button>
+          <button
+            onClick={() => void handleExportCsv()}
+            disabled={exporting}
+            className="inline-flex h-9 w-fit items-center gap-1.5 rounded-lg border border-[#DDE5EF] bg-white px-3.5 text-sm font-bold text-[#0B1F33] transition hover:border-[#1061AF] disabled:opacity-60"
+          >
+            {exporting ? (
+              <Loader2 className="h-4 w-4 animate-spin text-[#1061AF]" />
+            ) : (
+              <Download className="h-4 w-4 text-[#1061AF]" />
+            )}
+            Exportar CSV
+          </button>
+        </div>
       </div>
 
       <section className="grid gap-3 sm:grid-cols-2">
@@ -680,16 +719,23 @@ function LeadsB2B() {
                       </td>
                       <td className="px-4 py-2.5">
                         {lead.assignedTo ? (
-                          <span className="text-sm font-medium text-[#475569]">
+                          <span className="text-xs font-semibold text-[#0B1F33]">
                             {lead.assignedTo.name}
                           </span>
                         ) : (
                           <button
-                            onClick={() => setSelectedLeadId(lead.id)}
-                            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-dashed border-[#CBD5E1] bg-white px-2 text-xs font-semibold text-[#64748B] transition hover:border-[#1061AF] hover:text-[#0B1F33]"
+                            onClick={() => {
+                              if (currentUser?.id) {
+                                void quickUpdate(lead, { assignedToId: currentUser.id });
+                              } else {
+                                setSelectedLeadId(lead.id);
+                              }
+                            }}
+                            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50/80 px-2 text-xs font-bold text-[#1061AF] transition hover:bg-[#1061AF] hover:text-white"
+                            title="Atribuir este lead a você com 1 clique"
                           >
                             <UserPlus className="h-3.5 w-3.5" />
-                            Sem responsável
+                            Atribuir a mim
                           </button>
                         )}
                       </td>

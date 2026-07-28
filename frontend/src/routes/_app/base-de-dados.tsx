@@ -20,7 +20,18 @@ import type { Company, CompanyQuery } from "@/types/company";
 import type { PaginatedResponse } from "@/types/pagination";
 import { ArrowRight, FileUp, Search } from "lucide-react";
 
+import { AuthService } from "@/lib/auth";
+import { redirect } from "@tanstack/react-router";
+
 export const Route = createFileRoute("/_app/base-de-dados")({
+  beforeLoad: () => {
+    if (typeof window !== "undefined") {
+      const user = AuthService.getUser();
+      if (user && user.role?.toUpperCase() === "SALES") {
+        throw redirect({ to: "/dashboard" });
+      }
+    }
+  },
   component: BaseDeDados,
 });
 

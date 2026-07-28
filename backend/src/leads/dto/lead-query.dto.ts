@@ -17,6 +17,20 @@ export class LeadQueryDto {
   pageSize?: number;
 
   @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  perPage?: number;
+
+  @IsOptional()
   @IsIn(["score", "company", "city", "potential", "createdAt"])
   sortBy?: "score" | "company" | "city" | "potential" | "createdAt";
 

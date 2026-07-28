@@ -9,9 +9,11 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as LoginResetPasswordRouteImport } from './routes/login.reset-password'
 import { Route as AppRotasInteligentesRouteImport } from './routes/_app/rotas-inteligentes'
 import { Route as AppRegioesPrioritariasRouteImport } from './routes/_app/regioes-prioritarias'
 import { Route as AppRecomendacoesRouteImport } from './routes/_app/recomendacoes'
@@ -20,13 +22,16 @@ import { Route as AppMapaDeCalorRouteImport } from './routes/_app/mapa-de-calor'
 import { Route as AppLeadsB2bRouteImport } from './routes/_app/leads-b2b'
 import { Route as AppImportarCnpjsRouteImport } from './routes/_app/importar-cnpjs'
 import { Route as AppFunilComercialRouteImport } from './routes/_app/funil-comercial'
-import { Route as AppEstabelecimentosRouteImport } from './routes/_app/estabelecimentos'
 import { Route as AppDashboardRouteImport } from './routes/_app/dashboard'
-import { Route as AppConsultaCnpjRouteImport } from './routes/_app/consulta-cnpj'
 import { Route as AppConfiguracoesRouteImport } from './routes/_app/configuracoes'
 import { Route as AppBaseDeDadosRouteImport } from './routes/_app/base-de-dados'
 import { Route as AppLeadsB2bLeadIdRouteImport } from './routes/_app/leads-b2b/$leadId'
 
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
@@ -40,6 +45,11 @@ const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const LoginResetPasswordRoute = LoginResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
+  getParentRoute: () => LoginRoute,
 } as any)
 const AppRotasInteligentesRoute = AppRotasInteligentesRouteImport.update({
   id: '/rotas-inteligentes',
@@ -81,19 +91,9 @@ const AppFunilComercialRoute = AppFunilComercialRouteImport.update({
   path: '/funil-comercial',
   getParentRoute: () => AppRoute,
 } as any)
-const AppEstabelecimentosRoute = AppEstabelecimentosRouteImport.update({
-  id: '/estabelecimentos',
-  path: '/estabelecimentos',
-  getParentRoute: () => AppRoute,
-} as any)
 const AppDashboardRoute = AppDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppConsultaCnpjRoute = AppConsultaCnpjRouteImport.update({
-  id: '/consulta-cnpj',
-  path: '/consulta-cnpj',
   getParentRoute: () => AppRoute,
 } as any)
 const AppConfiguracoesRoute = AppConfiguracoesRouteImport.update({
@@ -114,12 +114,11 @@ const AppLeadsB2bLeadIdRoute = AppLeadsB2bLeadIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/login': typeof LoginRoute
+  '/login': typeof LoginRouteWithChildren
+  '/reset-password': typeof ResetPasswordRoute
   '/base-de-dados': typeof AppBaseDeDadosRoute
   '/configuracoes': typeof AppConfiguracoesRoute
-  '/consulta-cnpj': typeof AppConsultaCnpjRoute
   '/dashboard': typeof AppDashboardRoute
-  '/estabelecimentos': typeof AppEstabelecimentosRoute
   '/funil-comercial': typeof AppFunilComercialRoute
   '/importar-cnpjs': typeof AppImportarCnpjsRoute
   '/leads-b2b': typeof AppLeadsB2bRouteWithChildren
@@ -128,16 +127,16 @@ export interface FileRoutesByFullPath {
   '/recomendacoes': typeof AppRecomendacoesRoute
   '/regioes-prioritarias': typeof AppRegioesPrioritariasRoute
   '/rotas-inteligentes': typeof AppRotasInteligentesRoute
+  '/login/reset-password': typeof LoginResetPasswordRoute
   '/leads-b2b/$leadId': typeof AppLeadsB2bLeadIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/login': typeof LoginRoute
+  '/login': typeof LoginRouteWithChildren
+  '/reset-password': typeof ResetPasswordRoute
   '/base-de-dados': typeof AppBaseDeDadosRoute
   '/configuracoes': typeof AppConfiguracoesRoute
-  '/consulta-cnpj': typeof AppConsultaCnpjRoute
   '/dashboard': typeof AppDashboardRoute
-  '/estabelecimentos': typeof AppEstabelecimentosRoute
   '/funil-comercial': typeof AppFunilComercialRoute
   '/importar-cnpjs': typeof AppImportarCnpjsRoute
   '/leads-b2b': typeof AppLeadsB2bRouteWithChildren
@@ -146,18 +145,18 @@ export interface FileRoutesByTo {
   '/recomendacoes': typeof AppRecomendacoesRoute
   '/regioes-prioritarias': typeof AppRegioesPrioritariasRoute
   '/rotas-inteligentes': typeof AppRotasInteligentesRoute
+  '/login/reset-password': typeof LoginResetPasswordRoute
   '/leads-b2b/$leadId': typeof AppLeadsB2bLeadIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_app': typeof AppRouteWithChildren
-  '/login': typeof LoginRoute
+  '/login': typeof LoginRouteWithChildren
+  '/reset-password': typeof ResetPasswordRoute
   '/_app/base-de-dados': typeof AppBaseDeDadosRoute
   '/_app/configuracoes': typeof AppConfiguracoesRoute
-  '/_app/consulta-cnpj': typeof AppConsultaCnpjRoute
   '/_app/dashboard': typeof AppDashboardRoute
-  '/_app/estabelecimentos': typeof AppEstabelecimentosRoute
   '/_app/funil-comercial': typeof AppFunilComercialRoute
   '/_app/importar-cnpjs': typeof AppImportarCnpjsRoute
   '/_app/leads-b2b': typeof AppLeadsB2bRouteWithChildren
@@ -166,6 +165,7 @@ export interface FileRoutesById {
   '/_app/recomendacoes': typeof AppRecomendacoesRoute
   '/_app/regioes-prioritarias': typeof AppRegioesPrioritariasRoute
   '/_app/rotas-inteligentes': typeof AppRotasInteligentesRoute
+  '/login/reset-password': typeof LoginResetPasswordRoute
   '/_app/leads-b2b/$leadId': typeof AppLeadsB2bLeadIdRoute
 }
 export interface FileRouteTypes {
@@ -173,11 +173,10 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/login'
+    | '/reset-password'
     | '/base-de-dados'
     | '/configuracoes'
-    | '/consulta-cnpj'
     | '/dashboard'
-    | '/estabelecimentos'
     | '/funil-comercial'
     | '/importar-cnpjs'
     | '/leads-b2b'
@@ -186,16 +185,16 @@ export interface FileRouteTypes {
     | '/recomendacoes'
     | '/regioes-prioritarias'
     | '/rotas-inteligentes'
+    | '/login/reset-password'
     | '/leads-b2b/$leadId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/login'
+    | '/reset-password'
     | '/base-de-dados'
     | '/configuracoes'
-    | '/consulta-cnpj'
     | '/dashboard'
-    | '/estabelecimentos'
     | '/funil-comercial'
     | '/importar-cnpjs'
     | '/leads-b2b'
@@ -204,17 +203,17 @@ export interface FileRouteTypes {
     | '/recomendacoes'
     | '/regioes-prioritarias'
     | '/rotas-inteligentes'
+    | '/login/reset-password'
     | '/leads-b2b/$leadId'
   id:
     | '__root__'
     | '/'
     | '/_app'
     | '/login'
+    | '/reset-password'
     | '/_app/base-de-dados'
     | '/_app/configuracoes'
-    | '/_app/consulta-cnpj'
     | '/_app/dashboard'
-    | '/_app/estabelecimentos'
     | '/_app/funil-comercial'
     | '/_app/importar-cnpjs'
     | '/_app/leads-b2b'
@@ -223,17 +222,26 @@ export interface FileRouteTypes {
     | '/_app/recomendacoes'
     | '/_app/regioes-prioritarias'
     | '/_app/rotas-inteligentes'
+    | '/login/reset-password'
     | '/_app/leads-b2b/$leadId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
-  LoginRoute: typeof LoginRoute
+  LoginRoute: typeof LoginRouteWithChildren
+  ResetPasswordRoute: typeof ResetPasswordRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login': {
       id: '/login'
       path: '/login'
@@ -254,6 +262,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/login/reset-password': {
+      id: '/login/reset-password'
+      path: '/reset-password'
+      fullPath: '/login/reset-password'
+      preLoaderRoute: typeof LoginResetPasswordRouteImport
+      parentRoute: typeof LoginRoute
     }
     '/_app/rotas-inteligentes': {
       id: '/_app/rotas-inteligentes'
@@ -311,25 +326,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppFunilComercialRouteImport
       parentRoute: typeof AppRoute
     }
-    '/_app/estabelecimentos': {
-      id: '/_app/estabelecimentos'
-      path: '/estabelecimentos'
-      fullPath: '/estabelecimentos'
-      preLoaderRoute: typeof AppEstabelecimentosRouteImport
-      parentRoute: typeof AppRoute
-    }
     '/_app/dashboard': {
       id: '/_app/dashboard'
       path: '/dashboard'
       fullPath: '/dashboard'
       preLoaderRoute: typeof AppDashboardRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/consulta-cnpj': {
-      id: '/_app/consulta-cnpj'
-      path: '/consulta-cnpj'
-      fullPath: '/consulta-cnpj'
-      preLoaderRoute: typeof AppConsultaCnpjRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/configuracoes': {
@@ -371,9 +372,7 @@ const AppLeadsB2bRouteWithChildren = AppLeadsB2bRoute._addFileChildren(
 interface AppRouteChildren {
   AppBaseDeDadosRoute: typeof AppBaseDeDadosRoute
   AppConfiguracoesRoute: typeof AppConfiguracoesRoute
-  AppConsultaCnpjRoute: typeof AppConsultaCnpjRoute
   AppDashboardRoute: typeof AppDashboardRoute
-  AppEstabelecimentosRoute: typeof AppEstabelecimentosRoute
   AppFunilComercialRoute: typeof AppFunilComercialRoute
   AppImportarCnpjsRoute: typeof AppImportarCnpjsRoute
   AppLeadsB2bRoute: typeof AppLeadsB2bRouteWithChildren
@@ -387,9 +386,7 @@ interface AppRouteChildren {
 const AppRouteChildren: AppRouteChildren = {
   AppBaseDeDadosRoute: AppBaseDeDadosRoute,
   AppConfiguracoesRoute: AppConfiguracoesRoute,
-  AppConsultaCnpjRoute: AppConsultaCnpjRoute,
   AppDashboardRoute: AppDashboardRoute,
-  AppEstabelecimentosRoute: AppEstabelecimentosRoute,
   AppFunilComercialRoute: AppFunilComercialRoute,
   AppImportarCnpjsRoute: AppImportarCnpjsRoute,
   AppLeadsB2bRoute: AppLeadsB2bRouteWithChildren,
@@ -402,10 +399,21 @@ const AppRouteChildren: AppRouteChildren = {
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 
+interface LoginRouteChildren {
+  LoginResetPasswordRoute: typeof LoginResetPasswordRoute
+}
+
+const LoginRouteChildren: LoginRouteChildren = {
+  LoginResetPasswordRoute: LoginResetPasswordRoute,
+}
+
+const LoginRouteWithChildren = LoginRoute._addFileChildren(LoginRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
-  LoginRoute: LoginRoute,
+  LoginRoute: LoginRouteWithChildren,
+  ResetPasswordRoute: ResetPasswordRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
