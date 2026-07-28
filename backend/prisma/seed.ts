@@ -19,6 +19,17 @@ async function main() {
     },
   });
 
+  const deusaGmail = await prisma.user.upsert({
+    where: { email: "deusaalimentos01@gmail.com" },
+    update: {},
+    create: {
+      name: "Deusa Alimentos",
+      email: "deusaalimentos01@gmail.com",
+      passwordHash: adminPassword,
+      role: UserRole.ADMIN,
+    },
+  });
+
   const rafael = await prisma.user.upsert({
     where: { email: "rafael.mendes@deusa.com.br" },
     update: {},

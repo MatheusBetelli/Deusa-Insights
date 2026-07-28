@@ -1,7 +1,11 @@
-* text=auto
-*.sh text eol=lf
-*.ps1 text eol=crlf
+# Forçar LF (Unix line endings) para todos os arquivos de código e scripts
+# Garante compatibilidade total entre desenvolvedores Windows, Linux e macOS
+* text=auto eol=lf
 *.js text eol=lf
 *.ts text eol=lf
+*.tsx text eol=lf
 *.json text eol=lf
+*.prisma text eol=lf
+*.sh text eol=lf
+*.env* text eol=lf
 *.md text eol=lf

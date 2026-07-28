@@ -2,7 +2,9 @@ import { Body, Controller, Get, Patch, Post, Req, UseGuards } from "@nestjs/comm
 import { AuthGuard } from "./auth.guard";
 import { AuthService } from "./auth.service";
 import { ChangePasswordDto } from "./dto/change-password.dto";
+import { ForgotPasswordDto } from "./dto/forgot-password.dto";
 import { LoginDto } from "./dto/login.dto";
+import { ResetPasswordDto } from "./dto/reset-password.dto";
 
 @Controller("auth")
 export class AuthController {
@@ -11,6 +13,16 @@ export class AuthController {
   @Post("login")
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
+  }
+
+  @Post("forgot-password")
+  forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(dto.email);
+  }
+
+  @Post("reset-password")
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto);
   }
 
   @Get("me")
@@ -25,3 +37,5 @@ export class AuthController {
     return this.authService.changePassword(request.user.sub, dto);
   }
 }
+
+

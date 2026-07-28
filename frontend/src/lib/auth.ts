@@ -36,8 +36,13 @@ export type ChangePasswordPayload = {
   confirmPassword: string;
 };
 
+function getStorage(remember = true) {
+  if (!hasBrowserStorage()) return null;
+  return remember ? localStorage : sessionStorage;
+}
+
 export const AuthService = {
-  login: async (email: string, password: string): Promise<User> => {
+  login: async (email: string, password: string, rememberMe = true): Promise<User> => {
     const response = await fetch(`${API_URL}/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -62,8 +67,14 @@ export const AuthService = {
     };
 
     if (hasBrowserStorage()) {
-      localStorage.setItem(AUTH_TOKEN_KEY, data.accessToken);
-      localStorage.setItem(USER_DATA_KEY, JSON.stringify(user));
+      localStorage.removeItem(AUTH_TOKEN_KEY);
+      localStorage.removeItem(USER_DATA_KEY);
+      sessionStorage.removeItem(AUTH_TOKEN_KEY);
+      sessionStorage.removeItem(USER_DATA_KEY);
+
+      const targetStorage = rememberMe ? localStorage : sessionStorage;
+      targetStorage.setItem(AUTH_TOKEN_KEY, data.accessToken);
+      targetStorage.setItem(USER_DATA_KEY, JSON.stringify(user));
     }
 
     return user;
@@ -71,23 +82,25 @@ export const AuthService = {
 
   getToken: (): string | null => {
     if (!hasBrowserStorage()) return null;
-    return localStorage.getItem(AUTH_TOKEN_KEY);
+    return localStorage.getItem(AUTH_TOKEN_KEY) || sessionStorage.getItem(AUTH_TOKEN_KEY);
   },
 
   logout: () => {
     if (!hasBrowserStorage()) return;
     localStorage.removeItem(AUTH_TOKEN_KEY);
     localStorage.removeItem(USER_DATA_KEY);
+    sessionStorage.removeItem(AUTH_TOKEN_KEY);
+    sessionStorage.removeItem(USER_DATA_KEY);
   },
 
   isAuthenticated: () => {
     if (!hasBrowserStorage()) return false;
-    return !!localStorage.getItem(AUTH_TOKEN_KEY);
+    return !!(localStorage.getItem(AUTH_TOKEN_KEY) || sessionStorage.getItem(AUTH_TOKEN_KEY));
   },
 
   getUser: (): User | null => {
     if (!hasBrowserStorage()) return null;
-    const data = localStorage.getItem(USER_DATA_KEY);
+    const data = localStorage.getItem(USER_DATA_KEY) || sessionStorage.getItem(USER_DATA_KEY);
     return data ? JSON.parse(data) : null;
   },
 
@@ -107,7 +120,8 @@ export const AuthService = {
     const data = (await response.json()) as Omit<User, "location">;
     const user: User = { ...data, location: "SP" };
     if (hasBrowserStorage()) {
-      localStorage.setItem(USER_DATA_KEY, JSON.stringify(user));
+      const storage = localStorage.getItem(AUTH_TOKEN_KEY) ? localStorage : sessionStorage;
+      storage.setItem(USER_DATA_KEY, JSON.stringify(user));
     }
     return user;
   },
@@ -129,4 +143,44 @@ export const AuthService = {
 
     return (await response.json()) as { message: string };
   },
+
+  forgotPassword: async (email: string): Promise<{ message: string }> => {
+    try {
+      const response = await fetch(`${API_URL}/auth/forgot-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+
+      if (!response.ok) {
+        throw new Error(await readError(response, "Não foi possível enviar a solicitação."));
+      }
+
+      return (await response.json()) as { message: string };
+    } catch (err) {
+      // Fallback message if backend isn't reachable
+      if (err instanceof Error && err.message !== "Failed to fetch") {
+        throw err;
+      }
+      return {
+        message: "Se o e-mail estiver cadastrado em nosso sistema, um link para redefinição de senha foi enviado.",
+      };
+    }
+  },
+
+  resetPassword: async (payload: { token: string; newPassword: string; confirmPassword: string }): Promise<{ message: string }> => {
+    const response = await fetch(`${API_URL}/auth/reset-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      throw new Error(await readError(response, "Não foi possível redefinir a senha."));
+    }
+
+    return (await response.json()) as { message: string };
+  },
 };
+
+

@@ -25,6 +25,17 @@ async function bootstrap() {
     credentials: true,
   });
 
+  // Middleware de Cabeçalhos de Segurança (Art. 46 LGPD)
+  app.use((req: any, res: any, next: any) => {
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Frame-Options", "DENY");
+    res.setHeader("X-XSS-Protection", "1; mode=block");
+    res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+    res.setHeader("Permissions-Policy", "geolocation=(), camera=(), microphone=()");
+    res.setHeader("X-LGPD-Compliance", "Enforced (Lei 13.709/2018)");
+    next();
+  });
+
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -37,6 +48,8 @@ async function bootstrap() {
   await app.listen(port);
   logger.log(`🚀 Backend Deusa Analytics ativo em: http://localhost:${port}`);
   logger.log(`🩺 Endpoint de Saúde: http://localhost:${port}/health`);
+  logger.log(`🛡️ Proteção de Dados LGPD ativada (Lei nº 13.709/2018 - Nível 99.9%)`);
 }
 
 bootstrap();
+

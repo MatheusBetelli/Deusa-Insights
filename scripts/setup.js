@@ -87,7 +87,7 @@ async function runSetup() {
 
   if (!fs.existsSync(backendModules) || !fs.existsSync(frontendModules)) {
     console.log("Instalando dependências dos pacotes...");
-    execSync("npm run install:all", { stdio: "inherit", cwd: rootDir });
+    execSync("npm run install:all", { stdio: "inherit", cwd: rootDir, shell: true });
     logSuccess("Dependências instaladas com sucesso.");
   } else {
     logSuccess("Dependências já estão instaladas.");
@@ -99,10 +99,10 @@ async function runSetup() {
   if (!pgIsUp) {
     console.log("Subindo container do PostgreSQL na porta 5435...");
     try {
-      execSync("docker compose up -d", { stdio: "inherit", cwd: rootDir });
+      execSync("docker compose up -d", { stdio: "inherit", cwd: rootDir, shell: true });
     } catch (err) {
       try {
-        execSync("docker-compose up -d", { stdio: "inherit", cwd: rootDir });
+        execSync("docker-compose up -d", { stdio: "inherit", cwd: rootDir, shell: true });
       } catch (e) {
         logWarn("Não foi possível subir o container Docker automaticamente. Certifique-se de que o Docker esteja em execução.");
       }
@@ -124,10 +124,10 @@ async function runSetup() {
   logStep("Gerando Prisma Client e aplicando migrations...");
   const backendDir = path.join(rootDir, "backend");
   try {
-    execSync("npx prisma generate", { stdio: "inherit", cwd: backendDir });
+    execSync("npx prisma generate", { stdio: "inherit", cwd: backendDir, shell: true });
     logSuccess("Prisma Client gerado com sucesso.");
 
-    execSync("npx prisma migrate deploy", { stdio: "inherit", cwd: backendDir });
+    execSync("npx prisma migrate deploy", { stdio: "inherit", cwd: backendDir, shell: true });
     logSuccess("Migrations Prisma aplicadas com sucesso no banco.");
   } catch (err) {
     logError("Erro ao aplicar migrations Prisma.");
@@ -137,7 +137,7 @@ async function runSetup() {
   // 6. Executar Seed se necessário
   logStep("Verificando seed inicial do banco de dados...");
   try {
-    execSync("npm run seed", { stdio: "inherit", cwd: backendDir });
+    execSync("npm run seed", { stdio: "inherit", cwd: backendDir, shell: true });
     logSuccess("Seed de dados iniciais verificado com sucesso.");
   } catch (err) {
     logWarn("Falha ao executar o seed do banco de dados. (O banco pode já conter dados cadastrados).");
