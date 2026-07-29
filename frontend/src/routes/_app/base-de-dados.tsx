@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { EmptyState, ErrorState, LoadingState } from "@/components/app/InterfaceStates";
-import { PaginationBar } from "@/components/app/PaginationBar";
+import { EmptyState, ErrorState, LoadingState } from "@/components/common/InterfaceStates";
+import { PaginationBar } from "@/components/common/PaginationBar";
 import {
   Dialog,
   DialogContent,

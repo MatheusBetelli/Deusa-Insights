@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { EmptyState, ErrorState, LoadingState } from "@/components/app/InterfaceStates";
+import { EmptyState, ErrorState, LoadingState } from "@/components/common/InterfaceStates";
 import {
   Sheet,
   SheetContent,

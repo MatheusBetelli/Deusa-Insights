@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { PageHeader } from "@/components/app/PageHeader";
-import { PriorityBadge } from "@/components/app/PriorityBadge";
-import { EmptyState, ErrorState, LoadingState } from "@/components/app/InterfaceStates";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { PriorityBadge } from "@/components/common/PriorityBadge";
+import { EmptyState, ErrorState, LoadingState } from "@/components/common/InterfaceStates";
 import { leadsService } from "@/services/leadsService";
 import type { Lead } from "@/types/lead";
 import { ArrowUpRight, Users, Sparkles, Activity } from "lucide-react";

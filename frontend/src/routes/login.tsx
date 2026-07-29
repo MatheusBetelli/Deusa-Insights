@@ -12,7 +12,7 @@ import {
   ShieldCheck,
   AlertCircle,
 } from "lucide-react";
-import { DeusaLogo } from "@/components/app/Logo";
+import { DeusaLogo } from "@/components/layout/Logo";
 
 import { AuthService } from "@/lib/auth";
 

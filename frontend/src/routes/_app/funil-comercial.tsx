@@ -1,8 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { EmptyState, ErrorState, LoadingState } from "@/components/app/InterfaceStates";
-import { LeadDetailsSheet } from "@/components/app/LeadDetailsSheet";
+import { EmptyState, ErrorState, LoadingState } from "@/components/common/InterfaceStates";
+import { LeadDetailsSheet } from "@/features/leads/components/LeadDetailsSheet";
 import { formatCnae, potentialLabels, statusLabels } from "@/lib/commercial-formatters";
 import { ESTADOS_UF } from "@/lib/constants";
 import { citiesService } from "@/services/citiesService";

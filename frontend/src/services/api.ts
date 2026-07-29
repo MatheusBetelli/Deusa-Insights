@@ -43,6 +43,15 @@ export async function apiRequest<T>(
       headers,
     });
 
+    // ── Sessão Expirada: Limpa storage e redireciona para /login ─────────────
+    if (response.status === 401) {
+      AuthService.logout();
+      if (typeof window !== "undefined") {
+        window.location.href = "/login";
+      }
+      throw new ApiError("Sessão expirada. Faça login novamente.", 401);
+    }
+
     if (!response.ok) {
       let message = "Não foi possível carregar os dados da API.";
       try {

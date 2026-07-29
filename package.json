@@ -24,7 +24,10 @@
     "build": "concurrently \"cd backend && npm run build\" \"cd frontend && npm run build\"",
     "typecheck": "concurrently \"cd backend && npm run lint\" \"cd frontend && npm run typecheck\"",
     "lint": "concurrently \"cd backend && npm run lint\" \"cd frontend && npm run lint\"",
-    "format": "cd frontend && npm run format"
+    "format": "cd frontend && npm run format",
+    "test": "concurrently \"npm run test:backend\" \"npm run test:frontend\"",
+    "test:backend": "cd backend && npm run test",
+    "test:frontend": "cd frontend && npm run test"
   },
   "devDependencies": {
     "concurrently": "^9.1.2",

@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { PageHeader } from "@/components/app/PageHeader";
-import { EmptyState, ErrorState, LoadingState } from "@/components/app/InterfaceStates";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { EmptyState, ErrorState, LoadingState } from "@/components/common/InterfaceStates";
 import {
   AvisoLocalizacaoAproximada,
   ConfiancaBadge,
@@ -9,7 +9,7 @@ import {
   PendenteBadge,
   SituacaoCadastralBadge,
   StatusVerificacaoBadge,
-} from "@/components/app/QualityBadges";
+} from "@/components/common/QualityBadges";
 import { companyName, formatCnae, formatCnpj, formatDateTime, potentialLabels, statusLabels } from "@/lib/commercial-formatters";
 import { leadsService } from "@/services/leadsService";
 import type { Lead, LeadInteraction } from "@/types/lead";

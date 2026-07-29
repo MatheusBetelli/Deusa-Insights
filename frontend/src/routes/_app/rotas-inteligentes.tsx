@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { PageHeader } from "@/components/app/PageHeader";
+import { PageHeader } from "@/components/layout/PageHeader";
 import { ArrowRight, Route as RouteIcon } from "lucide-react";
 
 export const Route = createFileRoute("/_app/rotas-inteligentes")({

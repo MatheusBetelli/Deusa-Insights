@@ -1,6 +1,6 @@
 import { createFileRoute, Outlet, redirect, useNavigate } from "@tanstack/react-router";
-import { Sidebar } from "@/components/app/Sidebar";
-import { Topbar } from "@/components/app/Topbar";
+import { Sidebar } from "@/components/layout/Sidebar";
+import { Topbar } from "@/components/layout/Topbar";
 import { AuthService } from "@/lib/auth";
 import { useEffect } from "react";
 

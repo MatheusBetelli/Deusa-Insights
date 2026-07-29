@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { SkeletonMetricCards } from "@/components/app/InterfaceStates";
+import { SkeletonMetricCards } from "@/components/common/InterfaceStates";
 import { dashboardService } from "@/services/dashboardService";
 import type { DashboardSummary } from "@/types/dashboard";
 import { useEffect, useState } from "react";

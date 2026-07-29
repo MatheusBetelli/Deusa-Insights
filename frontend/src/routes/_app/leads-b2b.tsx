@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { EmptyState, ErrorState, LoadingState } from "@/components/app/InterfaceStates";
-import { LeadDetailsSheet } from "@/components/app/LeadDetailsSheet";
-import { PaginationBar } from "@/components/app/PaginationBar";
+import { EmptyState, ErrorState, LoadingState } from "@/components/common/InterfaceStates";
+import { LeadDetailsSheet } from "@/features/leads/components/LeadDetailsSheet";
+import { PaginationBar } from "@/components/common/PaginationBar";
 import {
   companyName,
   formatCnae,
@@ -137,12 +137,12 @@ function LeadsB2B() {
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
 
   useEffect(() => {
-    setQuery(routeSearch.search);
-    setUf(routeSearch.uf);
-    setCity(routeSearch.city);
-    setCnae(routeSearch.cnae);
-    setStatus(routeSearch.status);
-    setPotentialLevel(routeSearch.potentialLevel);
+    setQuery(routeSearch.search ?? "");
+    setUf(routeSearch.uf ?? "");
+    setCity(routeSearch.city ?? "");
+    setCnae(routeSearch.cnae ?? "");
+    setStatus(routeSearch.status ?? "");
+    setPotentialLevel(routeSearch.potentialLevel ?? "");
     setPage(1);
   }, [
     routeSearch.search,
