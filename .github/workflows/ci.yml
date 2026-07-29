@@ -1,0 +1,37 @@
+name: CI - Integracao Continua (Deusa Analytics)
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build-and-test:
+    name: Build, Typecheck & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js (v20)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Instalar dependências do Monorepo
+        run: |
+          npm install
+          cd backend && npm install
+          cd ../frontend && npm install
+
+      - name: Executar Typecheck do Frontend
+        run: npm run typecheck
+
+      - name: Compilar Backend (NestJS Build)
+        run: cd backend && npm run build
+
+      - name: Executar Suíte Completa de Testes Unitários
+        run: npm run test
