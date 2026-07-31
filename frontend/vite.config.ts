@@ -12,6 +12,16 @@ export default defineConfig({
   tanstackStart: {
     server: { entry: "server" },
   },
+  vite: {
+    server: {
+      proxy: {
+        "^/(auth|cities|cnaes|companies|dashboard|health|imports|leads|lead-interactions|map|pipeline|users)(.*)": {
+          target: "http://127.0.0.1:3001",
+          changeOrigin: true,
+        },
+      },
+    },
+  },
 });
 
 

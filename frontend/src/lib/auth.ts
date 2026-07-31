@@ -1,7 +1,7 @@
+import { buildUrl } from "@/lib/api-url";
+
 const AUTH_TOKEN_KEY = "deusa_auth_token";
 const USER_DATA_KEY = "deusa_user_data";
-
-const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:3001";
 
 function hasBrowserStorage() {
   return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
@@ -37,8 +37,13 @@ export type ChangePasswordPayload = {
 };
 
 export const AuthService = {
+<<<<<<< Updated upstream
   login: async (email: string, password: string): Promise<User> => {
     const response = await fetch(`${API_URL}/auth/login`, {
+=======
+  login: async (email: string, password: string, rememberMe = true): Promise<User> => {
+    const response = await fetch(buildUrl("/auth/login"), {
+>>>>>>> Stashed changes
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
@@ -93,7 +98,7 @@ export const AuthService = {
 
   getProfile: async (): Promise<User> => {
     const token = AuthService.getToken();
-    const response = await fetch(`${API_URL}/auth/me`, {
+    const response = await fetch(buildUrl("/auth/me"), {
       headers: {
         "Content-Type": "application/json",
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -114,7 +119,7 @@ export const AuthService = {
 
   changePassword: async (payload: ChangePasswordPayload) => {
     const token = AuthService.getToken();
-    const response = await fetch(`${API_URL}/auth/password`, {
+    const response = await fetch(buildUrl("/auth/password"), {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
@@ -129,4 +134,45 @@ export const AuthService = {
 
     return (await response.json()) as { message: string };
   },
+<<<<<<< Updated upstream
+=======
+
+  forgotPassword: async (email: string): Promise<{ message: string }> => {
+    try {
+      const response = await fetch(buildUrl("/auth/forgot-password"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+
+      if (!response.ok) {
+        throw new Error(await readError(response, "Não foi possível enviar a solicitação."));
+      }
+
+      return (await response.json()) as { message: string };
+    } catch (err) {
+      // Fallback message if backend isn't reachable
+      if (err instanceof Error && err.message !== "Failed to fetch") {
+        throw err;
+      }
+      return {
+        message: "Se o e-mail estiver cadastrado em nosso sistema, um link para redefinição de senha foi enviado.",
+      };
+    }
+  },
+
+  resetPassword: async (payload: { token: string; newPassword: string; confirmPassword: string }): Promise<{ message: string }> => {
+    const response = await fetch(buildUrl("/auth/reset-password"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      throw new Error(await readError(response, "Não foi possível redefinir a senha."));
+    }
+
+    return (await response.json()) as { message: string };
+  },
+>>>>>>> Stashed changes
 };

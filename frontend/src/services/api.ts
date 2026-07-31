@@ -1,4 +1,5 @@
 import { AuthService } from "@/lib/auth";
+import { buildUrl } from "@/lib/api-url";
 
 export class ApiError extends Error {
   status?: number;
@@ -10,17 +11,6 @@ export class ApiError extends Error {
   }
 }
 
-const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:3001";
-
-function buildUrl(path: string, query?: Record<string, string | number | undefined | null>) {
-  const url = new URL(path.startsWith("http") ? path : `${API_URL}${path}`);
-  Object.entries(query ?? {}).forEach(([key, value]) => {
-    if (value !== undefined && value !== null && value !== "") {
-      url.searchParams.set(key, String(value));
-    }
-  });
-  return url.toString();
-}
 
 export async function apiRequest<T>(
   path: string,
