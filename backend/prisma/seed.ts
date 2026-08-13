@@ -79,6 +79,15 @@ async function main() {
     ["Marília", "SP", "3529005"],
     ["Pompeia", "SP", "3540002"],
     ["Garça", "SP", "3516705"],
+    ["Quintana", "SP", "3541604"],
+    ["Vera Cruz", "SP", "3556602"],
+    ["Oriente", "SP", "3534005"],
+    ["Echaporã", "SP", "3514304"],
+    ["Herculândia", "SP", "3519105"],
+    ["Iacri", "SP", "3519402"],
+    ["Parapuã", "SP", "3535606"],
+    ["Rinópolis", "SP", "3543709"],
+    ["Gália", "SP", "3516606"],
     ["Bastos", "SP", "3505807"],
     ["Assis", "SP", "3504008"],
     ["Ourinhos", "SP", "3534708"],
@@ -86,6 +95,12 @@ async function main() {
     ["Bauru", "SP", "3506003"],
     ["Presidente Prudente", "SP", "3541406"],
     ["Araçatuba", "SP", "3502804"],
+    ["Adamantina", "SP", "3500105"],
+    ["Lucélia", "SP", "3527504"],
+    ["Osvaldo Cruz", "SP", "3534609"],
+    ["Dracena", "SP", "3514403"],
+    ["Ribeirão Preto", "SP", "3543402"],
+    ["Franca", "SP", "3516200"],
   ] as const;
 
   for (const [name, uf, ibgeCode] of citySeed) {
@@ -98,9 +113,12 @@ async function main() {
 
   const cnaes = [
     { code: "4711302", description: "Supermercados", category: "Varejo alimentar", isTarget: true },
-    { code: "4712100", description: "Minimercados, mercearias e armazéns", category: "Varejo alimentar", isTarget: true },
-    { code: "4721102", description: "Padarias e confeitarias com predominância de revenda", category: "Varejo alimentar", isTarget: true },
-    { code: "4729699", description: "Comércio varejista de produtos alimentícios em geral", category: "Varejo alimentar", isTarget: true },
+    { code: "4712100", description: "Minimercados, mercearias e armazéns", category: "Varejo alimentar (Pequeno porte)", isTarget: true },
+    { code: "4722901", description: "Comércio varejista de carnes - Açougues", category: "Varejo alimentar (Pequeno porte)", isTarget: true },
+    { code: "4724500", description: "Comércio varejista de hortifrutigranjeiros", category: "Varejo alimentar (Pequeno porte)", isTarget: true },
+    { code: "4721102", description: "Padarias e confeitarias com predominância de revenda", category: "Varejo alimentar (Pequeno porte)", isTarget: true },
+    { code: "4729699", description: "Comércio varejista de produtos alimentícios em geral", category: "Varejo alimentar (Pequeno porte)", isTarget: true },
+    { code: "4723700", description: "Comércio varejista de peixes e frutos do mar - Peixarias", category: "Varejo alimentar (Pequeno porte)", isTarget: true },
     { code: "4639701", description: "Comércio atacadista de produtos alimentícios em geral", category: "Atacado alimentar", isTarget: true },
     { code: "5611203", description: "Lanchonetes, casas de chá, de sucos e similares", category: "Food service", isTarget: false },
   ];

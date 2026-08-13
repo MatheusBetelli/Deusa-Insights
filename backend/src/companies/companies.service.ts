@@ -221,7 +221,7 @@ export class CompaniesService {
       ),
     );
 
-    return this.prisma.company.upsert({
+    const company = await this.prisma.company.upsert({
       where: { cnpj },
       create: {
         cnpj,
@@ -293,6 +293,53 @@ export class CompaniesService {
       },
       include: { cnaes: true, lead: true },
     });
+
+    if (
+      this.geocodingService.isAvailable() &&
+      (company.latitude === null || company.longitude === null || company.latitude === 0 || company.longitude === 0)
+    ) {
+      this.geocodingService
+        .geocodeAndVerify({
+          cnpj: company.cnpj,
+          razaoSocial: company.razaoSocial,
+          nomeFantasia: company.nomeFantasia,
+          logradouro: company.logradouro,
+          numero: company.numero,
+          bairro: company.bairro,
+          cep: company.cep,
+          cidade: company.cidade,
+          uf: company.uf,
+        })
+        .then(async (result) => {
+          if (result) {
+            const confianca = result.confianca;
+            const statusVerificacaoEndereco =
+              confianca >= 90 ? "verificado" : confianca >= 60 ? "provavel" : "divergente";
+            await this.prisma.company.update({
+              where: { id: company.id },
+              data: {
+                latitude: result.lat,
+                longitude: result.lng,
+                latitudeVerificada: result.lat,
+                longitudeVerificada: result.lng,
+                enderecoVerificado: result.enderecoRetornado,
+                fonteGeocodificacao: result.fonte,
+                confiancaVerificacao: result.confianca,
+                statusVerificacaoEndereco,
+                dataVerificacaoGeo: result.dataVerificacao,
+                origemCoordenada: "geocodificado",
+                placeId: result.placeId ?? undefined,
+                nomeEncontrado: result.placeName ?? undefined,
+                telefoneEncontrado: result.placePhone ?? undefined,
+                categoriaEncontrada: result.placeCategory ?? undefined,
+              },
+            });
+          }
+        })
+        .catch(() => null);
+    }
+
+    return company;
   }
 
   async verifyGoogleBatch(query: {
@@ -461,8 +508,27 @@ export class CompaniesService {
               fonteGeocodificacao: "google_maps",
               dataVerificacaoGeo: new Date(),
               pendenteValidacao,
+              placeId: result.placeId ?? undefined,
+              nomeEncontrado: result.placeName ?? undefined,
+              telefoneEncontrado: result.placePhone ?? undefined,
+              categoriaEncontrada: result.placeCategory ?? undefined,
             },
           });
+
+          // Se veio telefone do Google Places, enriquecer companyDetails se o telefone não existia
+          if (result.placePhone) {
+            await this.prisma.companyDetails.upsert({
+              where: { companyId: company.id },
+              create: {
+                companyId: company.id,
+                telefone: result.placePhone,
+                descricaoCnae: result.placeCategory || undefined,
+              },
+              update: {
+                telefone: result.placePhone,
+              },
+            });
+          }
 
           // Atualizar o Lead
           await this.prisma.lead.updateMany({
@@ -932,8 +998,26 @@ export class CompaniesService {
             statusVerificacaoEndereco: result.confianca >= 60 ? "verificado" : "provavel",
             dataVerificacaoGeo: result.dataVerificacao,
             origemCoordenada: "geocodificado",
+            placeId: result.placeId ?? undefined,
+            nomeEncontrado: result.placeName ?? undefined,
+            telefoneEncontrado: result.placePhone ?? undefined,
+            categoriaEncontrada: result.placeCategory ?? undefined,
           },
         });
+
+        if (result.placePhone) {
+          await this.prisma.companyDetails.upsert({
+            where: { companyId: company.id },
+            create: {
+              companyId: company.id,
+              telefone: result.placePhone,
+              descricaoCnae: result.placeCategory || undefined,
+            },
+            update: {
+              telefone: result.placePhone,
+            },
+          });
+        }
         results.push({
           cnpj: company.cnpj,
           razaoSocial: company.razaoSocial,

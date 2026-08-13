@@ -31,12 +31,18 @@ export class LeadInteractionsService {
       include: { user: { select: { id: true, name: true, email: true, role: true } } },
     });
 
+    const updateData: any = {
+      lastContactAt: new Date(),
+      status: { set: dto.newStatus ?? LeadStatus.CONTACTED },
+    };
+
+    if (dto.nextActionAt) {
+      updateData.nextActionAt = dto.nextActionAt;
+    }
+
     await this.prisma.lead.update({
       where: { id: leadId },
-      data: {
-        lastContactAt: new Date(),
-        status: { set: LeadStatus.CONTACTED },
-      },
+      data: updateData,
     });
 
     return interaction;

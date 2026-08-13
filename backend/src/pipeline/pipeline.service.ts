@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from "@nestjs/common";
 import { LeadStatus, Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { PipelineQueryDto } from "./dto/pipeline-query.dto";
+import { calculateOpportunityScoreDetails } from "../common/scoring";
 
 const pipelineStatuses = [
   LeadStatus.NEW,
@@ -112,8 +113,13 @@ export class PipelineService {
   private buildWhere(query: PipelineQueryDto, status: LeadStatus) {
     const and: Prisma.LeadWhereInput[] = [{ status }];
 
-    if (query.city) and.push({ company: { cidade: { equals: query.city, mode: "insensitive" } } });
-    if (query.cnae) {
+    if (query.uf && query.uf !== "Todos") {
+      and.push({ company: { uf: query.uf.toUpperCase() } });
+    }
+    if (query.city && query.city !== "Todas") {
+      and.push({ company: { cidade: { equals: query.city, mode: "insensitive" } } });
+    }
+    if (query.cnae && query.cnae !== "Todos") {
       const cnae = normalizeCnae(query.cnae);
       and.push({
         company: {
@@ -121,16 +127,22 @@ export class PipelineService {
         },
       });
     }
-    if (query.search) {
-      and.push({
-        company: {
-          OR: [
-            { cnpj: { contains: query.search.replace(/\D/g, "") } },
-            { razaoSocial: { contains: query.search, mode: "insensitive" } },
-            { nomeFantasia: { contains: query.search, mode: "insensitive" } },
-          ],
-        },
-      });
+    if (query.search?.trim()) {
+      const searchTerm = query.search.trim();
+      const digitsOnly = searchTerm.replace(/\D/g, "");
+      const searchOr: Prisma.CompanyWhereInput[] = [
+        { razaoSocial: { contains: searchTerm, mode: "insensitive" } },
+        { nomeFantasia: { contains: searchTerm, mode: "insensitive" } },
+        { cidade: { contains: searchTerm, mode: "insensitive" } },
+        { bairro: { contains: searchTerm, mode: "insensitive" } },
+        { logradouro: { contains: searchTerm, mode: "insensitive" } },
+      ];
+
+      if (digitsOnly.length > 0) {
+        searchOr.push({ cnpj: { contains: digitsOnly } });
+      }
+
+      and.push({ company: { OR: searchOr } });
     }
 
     return { AND: and };
@@ -141,13 +153,31 @@ export class PipelineService {
       include: { company: true; assignedTo: { select: typeof safeAssignedToSelect } };
     }>,
   ) {
+    const fullScore = calculateOpportunityScoreDetails({
+      cnpj: lead.company.cnpj,
+      situacaoCadastral: lead.company.situacaoCadastral,
+      cnaePrincipal: lead.company.cnaePrincipal,
+      nomeFantasia: lead.company.nomeFantasia,
+      porte: lead.company.porte,
+      cidade: lead.company.cidade,
+      uf: lead.company.uf,
+      latitude: lead.company.latitude,
+      longitude: lead.company.longitude,
+      logradouro: lead.company.logradouro,
+      numero: lead.company.numero,
+      bairro: lead.company.bairro,
+      cep: lead.company.cep,
+      statusLead: lead.status,
+    });
+
     return {
       id: lead.id,
       companyName: lead.company.nomeFantasia || lead.company.razaoSocial,
       city: lead.company.cidade,
       status: lead.status,
-      score: lead.score,
-      potentialLevel: lead.potentialLevel,
+      score: fullScore.score,
+      potentialLevel: fullScore.level,
+      scoreBreakdown: fullScore.breakdown,
       assignedTo: lead.assignedTo?.name ?? null,
     };
   }

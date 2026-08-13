@@ -33,6 +33,14 @@ npm run start:dev
 
 O backend sobe em `http://localhost:3001`.
 
+## Testes Unitários
+
+Para executar a suíte de testes unitários do backend (validação de CNPJ, cálculo de score de leads, qualidade cadastral e regras de negócio):
+
+```bash
+npm test
+```
+
 ## Variáveis de ambiente
 
 ```env

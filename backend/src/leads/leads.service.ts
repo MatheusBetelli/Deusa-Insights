@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { LeadStatus, Prisma } from "@prisma/client";
-import { calculateLeadScore, getPotentialLevel } from "../common/scoring";
+import { calculateLeadScore, getPotentialLevel, calculateOpportunityScoreDetails } from "../common/scoring";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateLeadDto } from "./dto/create-lead.dto";
 import { LeadQueryDto } from "./dto/lead-query.dto";
@@ -31,17 +31,55 @@ function csvValue(value: unknown) {
 export class LeadsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(query: LeadQueryDto) {
-    if (this.shouldPaginate(query)) {
-      return this.findPage(query);
-    }
+  async findAll(query: LeadQueryDto = {}) {
+    const page = Math.max(1, query.page ?? 1);
+    const pageSize = Math.min(Math.max(1, query.pageSize ?? query.limit ?? query.perPage ?? 10), 100);
 
-    return this.prisma.lead.findMany({
-      where: this.buildWhere(query),
-      include: leadInclude,
-      orderBy: this.buildOrderBy(query),
-      take: 250,
+    const where = this.buildWhere(query);
+    const [total, items] = await this.prisma.$transaction([
+      this.prisma.lead.count({ where }),
+      this.prisma.lead.findMany({
+        where,
+        include: leadInclude,
+        orderBy: this.buildOrderBy(query),
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+    ]);
+
+    const enrichedItems = items.map((lead) => {
+      const fullScore = calculateOpportunityScoreDetails({
+        cnpj: lead.company.cnpj,
+        situacaoCadastral: lead.company.situacaoCadastral,
+        cnaePrincipal: lead.company.cnaePrincipal,
+        nomeFantasia: lead.company.nomeFantasia,
+        porte: lead.company.porte,
+        cidade: lead.company.cidade,
+        uf: lead.company.uf,
+        latitude: lead.company.latitude,
+        longitude: lead.company.longitude,
+        logradouro: lead.company.logradouro,
+        numero: lead.company.numero,
+        bairro: lead.company.bairro,
+        cep: lead.company.cep,
+        statusLead: lead.status,
+      });
+
+      return {
+        ...lead,
+        score: fullScore.score,
+        potentialLevel: fullScore.level,
+        scoreBreakdown: fullScore.breakdown,
+      };
     });
+
+    return {
+      items: enrichedItems,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.max(1, Math.ceil(total / pageSize)),
+    };
   }
 
   async findPage(query: LeadQueryDto) {
@@ -59,8 +97,34 @@ export class LeadsService {
       }),
     ]);
 
+    const enrichedItems = items.map((lead) => {
+      const fullScore = calculateOpportunityScoreDetails({
+        cnpj: lead.company.cnpj,
+        situacaoCadastral: lead.company.situacaoCadastral,
+        cnaePrincipal: lead.company.cnaePrincipal,
+        nomeFantasia: lead.company.nomeFantasia,
+        porte: lead.company.porte,
+        cidade: lead.company.cidade,
+        uf: lead.company.uf,
+        latitude: lead.company.latitude,
+        longitude: lead.company.longitude,
+        logradouro: lead.company.logradouro,
+        numero: lead.company.numero,
+        bairro: lead.company.bairro,
+        cep: lead.company.cep,
+        statusLead: lead.status,
+      });
+
+      return {
+        ...lead,
+        score: fullScore.score,
+        potentialLevel: fullScore.level,
+        scoreBreakdown: fullScore.breakdown,
+      };
+    });
+
     return {
-      items,
+      items: enrichedItems,
       total,
       page,
       pageSize,
@@ -142,16 +206,22 @@ export class LeadsService {
         },
       });
     }
-    if (query.search) {
-      and.push({
-        company: {
-          OR: [
-            { cnpj: { contains: query.search.replace(/\D/g, "") } },
-            { razaoSocial: { contains: query.search, mode: "insensitive" } },
-            { nomeFantasia: { contains: query.search, mode: "insensitive" } },
-          ],
-        },
-      });
+    if (query.search?.trim()) {
+      const searchTerm = query.search.trim();
+      const digitsOnly = searchTerm.replace(/\D/g, "");
+      const searchOr: Prisma.CompanyWhereInput[] = [
+        { razaoSocial: { contains: searchTerm, mode: "insensitive" } },
+        { nomeFantasia: { contains: searchTerm, mode: "insensitive" } },
+        { cidade: { contains: searchTerm, mode: "insensitive" } },
+        { bairro: { contains: searchTerm, mode: "insensitive" } },
+        { logradouro: { contains: searchTerm, mode: "insensitive" } },
+      ];
+
+      if (digitsOnly.length > 0) {
+        searchOr.push({ cnpj: { contains: digitsOnly } });
+      }
+
+      and.push({ company: { OR: searchOr } });
     }
     if (query.statusVerificacaoEndereco) {
       and.push({ company: { statusVerificacaoEndereco: query.statusVerificacaoEndereco } });
@@ -199,7 +269,30 @@ export class LeadsService {
       },
     });
     if (!lead) throw new NotFoundException("Lead não encontrado");
-    return lead;
+
+    const fullScore = calculateOpportunityScoreDetails({
+      cnpj: lead.company.cnpj,
+      situacaoCadastral: lead.company.situacaoCadastral,
+      cnaePrincipal: lead.company.cnaePrincipal,
+      nomeFantasia: lead.company.nomeFantasia,
+      porte: lead.company.porte,
+      cidade: lead.company.cidade,
+      uf: lead.company.uf,
+      latitude: lead.company.latitude,
+      longitude: lead.company.longitude,
+      logradouro: lead.company.logradouro,
+      numero: lead.company.numero,
+      bairro: lead.company.bairro,
+      cep: lead.company.cep,
+      statusLead: lead.status,
+    });
+
+    return {
+      ...lead,
+      score: fullScore.score,
+      potentialLevel: fullScore.level,
+      scoreBreakdown: fullScore.breakdown,
+    };
   }
 
   async create(dto: CreateLeadDto) {

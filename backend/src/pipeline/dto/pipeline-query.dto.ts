@@ -28,6 +28,10 @@ export class PipelineQueryDto {
 
   @IsOptional()
   @IsString()
+  uf?: string;
+
+  @IsOptional()
+  @IsString()
   city?: string;
 
   @IsOptional()

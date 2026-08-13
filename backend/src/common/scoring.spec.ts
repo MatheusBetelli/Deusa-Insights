@@ -1,33 +1,46 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { calculateLeadScore, getPotentialLevel } from "./scoring";
+import { calculateOpportunityScoreDetails, calculateLeadScore, getPotentialLevel, calculateGarcaDistance } from "./scoring";
 import { PotentialLevel } from "@prisma/client";
 
-test("calculateLeadScore calcula score correto para empresa com todos os requisitos", () => {
-  const score = calculateLeadScore({
+test("calculateOpportunityScoreDetails calcula score dos 6 pilares corretamente para minimercado em Garça", () => {
+  const result = calculateOpportunityScoreDetails({
+    cnpj: "25332029000100",
     situacaoCadastral: "ATIVA",
     cnaePrincipal: "4712100",
-    targetCnaes: ["4712100", "4711302"],
-    nomeFantasia: "Mercado Bom Preço",
-    porte: "ME",
-    cidade: "Tupã",
-    priorityCities: ["TUPÃ", "MARÍLIA"],
-    latitude: -21.93,
-    longitude: -50.51,
+    nomeFantasia: "Mercado Silva",
+    porte: "EPP",
+    cidade: "Garça",
+    logradouro: "Rua das Flores",
+    numero: "100",
+    bairro: "Centro",
+    cep: "17400000",
+    telefone: "1434710000",
+    latitude: -22.2131,
+    longitude: -49.6553,
   });
 
-  // 30 (ativa) + 25 (target cnae) + 15 (nome fantasia) + 10 (porte ME) + 10 (cidade prioritaria) + 10 (coordenadas) = 100
-  assert.equal(score, 100);
+  assert.equal(result.breakdown.perfilPts, 30);
+  assert.equal(result.breakdown.potencialPts, 25);
+  assert.equal(result.breakdown.logisticaPts, 20); // 0km de Garça
+  assert.equal(result.breakdown.dadosPts, 10);
+  assert.equal(result.breakdown.prontidaoPts, 10);
+  assert.equal(result.breakdown.territorioPts, 5);
+  assert.equal(result.score, 100);
+  assert.equal(result.level, PotentialLevel.CRITICAL);
 });
 
-test("calculateLeadScore retorna score 0 para empresa sem atributos", () => {
-  const score = calculateLeadScore({});
-  assert.equal(score, 0);
+test("calculateGarcaDistance calcula distancias por coordenadas ou nome de cidade", () => {
+  const distGarca = calculateGarcaDistance(-22.2131, -49.6553, "Garça");
+  assert.equal(distGarca, 0);
+
+  const distBastos = calculateGarcaDistance(null, null, "Bastos");
+  assert.equal(distBastos, 110);
 });
 
-test("getPotentialLevel mapeia corretamente os niveis de oportunidade", () => {
-  assert.equal(getPotentialLevel(95), PotentialLevel.CRITICAL);
-  assert.equal(getPotentialLevel(80), PotentialLevel.HIGH);
-  assert.equal(getPotentialLevel(60), PotentialLevel.MEDIUM);
-  assert.equal(getPotentialLevel(30), PotentialLevel.LOW);
+test("getPotentialLevel mapeia corretamente os niveis de oportunidade conforme nova faixa", () => {
+  assert.equal(getPotentialLevel(85), PotentialLevel.CRITICAL); // 80–100: Crítica
+  assert.equal(getPotentialLevel(70), PotentialLevel.HIGH);     // 65–79: Alta
+  assert.equal(getPotentialLevel(50), PotentialLevel.MEDIUM);   // 45–64: Média
+  assert.equal(getPotentialLevel(30), PotentialLevel.LOW);      // 0–44: Baixa
 });

@@ -39,3 +39,13 @@ dist-ssr
 
 # Large data files
 dadosCNAE/K3241.K03200Y1.D60613.ESTABELE
+
+# Private Company Data & Imports
+*.xlsx
+*.xls
+*.csv
+*.db
+frontend/data/imports/
+frontend/data/*.db
+frontend/data/processed/
+

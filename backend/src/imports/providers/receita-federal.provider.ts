@@ -44,6 +44,10 @@ const CITY_TOM_MAP: Record<string, string> = {
   bauru: "6219",
   "presidente prudente": "6929",
   aracatuba: "6155",
+  "ribeirao preto": "6969",
+  "ribeirão preto": "6969",
+  franca: "6425",
+  frança: "6425",
 };
 
 const TOM_CITY_MAP: Record<string, string> = {
@@ -58,6 +62,8 @@ const TOM_CITY_MAP: Record<string, string> = {
   "6219": "Bauru",
   "6929": "Presidente Prudente",
   "6155": "Araçatuba",
+  "6969": "Ribeirão Preto",
+  "6425": "Franca",
 };
 
 // ─── Centroides municipais (coordenada de referência — NÃO é endereço real) ─
@@ -73,10 +79,12 @@ const CITY_COORDS: Record<string, { lat: number; lng: number }> = {
   "Bauru": { lat: -22.3231, lng: -49.0738 },
   "Presidente Prudente": { lat: -22.1211, lng: -51.3881 },
   "Araçatuba": { lat: -21.2059, lng: -50.4389 },
+  "Ribeirão Preto": { lat: -21.1784, lng: -47.8063 },
+  "Franca": { lat: -20.5386, lng: -47.4008 },
 };
 
-// ─── CNAEs alvo do produto (usados para pontuação de oportunidade) ──────────
-const TARGET_CNAES = ["4712100"];
+// ─── CNAEs alvo do produto (Supermercados, Minimercados, Açougues, Hortifrúti, Padarias e Atacados) ─
+const TARGET_CNAES = ["4711302", "4712100", "4722901", "4724500", "4721102", "4729699", "4723700", "4639701"];
 const PRIORITY_CITIES = Object.values(TOM_CITY_MAP);
 
 @Injectable()
