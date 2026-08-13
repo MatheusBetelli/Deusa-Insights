@@ -7,6 +7,7 @@ export type PipelineQuery = {
   pageSize?: number;
   columnPageSize?: number;
   search?: string;
+  uf?: string;
   city?: string;
   cnae?: string;
 };

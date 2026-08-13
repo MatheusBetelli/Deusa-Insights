@@ -15,9 +15,9 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write .",
-    "data:import": "node scripts/data/import-data.js",
-    "data:compare": "node scripts/data/compare-data.js",
-    "data:prepare": "node scripts/data/prepare-data.js",
+    "data:import": "node --experimental-sqlite scripts/data/import-data.js",
+    "data:compare": "node --experimental-sqlite scripts/data/compare-data.js",
+    "data:prepare": "node --experimental-sqlite scripts/data/prepare-data.js",
     "test": "tsx --test 'src/**/*.spec.ts'"
   },
   "dependencies": {

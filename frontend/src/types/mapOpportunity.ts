@@ -7,6 +7,9 @@ export type MapOpportunity = {
   city: string;
   uf: string;
   bairro: string | null;
+  logradouro: string | null;
+  numero: string | null;
+  cep: string | null;
   latitude: number | null;
   longitude: number | null;
   score: number;
@@ -17,4 +20,8 @@ export type MapOpportunity = {
   origemCoordenada?: string | null;
   statusVerificacaoEndereco?: string | null;
   confiancaVerificacao?: number | null;
+  telefone?: string | null;
+  cnaePrincipal?: string | null;
+  responsibleName?: string | null;
 };
+

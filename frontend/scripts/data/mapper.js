@@ -45,7 +45,10 @@ export function mapCustomer(row, sourceFile) {
   const razaoSocial = asString(firstPresent(row, customerAliases.razaoSocial));
   const nome = asString(firstPresent(row, customerAliases.nome)) || razaoSocial;
   const cidade = asString(firstPresent(row, customerAliases.cidade));
-  const status = asString(firstPresent(row, customerAliases.status)) || "ATIVO";
+  let status = asString(firstPresent(row, customerAliases.status));
+  if (!status) {
+    status = (sourceFile || "").toLowerCase().includes("inativo") ? "INATIVO" : "ATIVO";
+  }
   const validation = validationResult({ nome, cidade });
 
   return {

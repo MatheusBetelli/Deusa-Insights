@@ -7,6 +7,7 @@ import {
   LogOut,
   Mail,
   MapPin,
+  Menu,
   Search,
   Settings as SettingsIcon,
   ShieldCheck,
@@ -31,7 +32,12 @@ import {
 import { AuthService, type User as AuthUser } from "@/lib/auth";
 import { toast } from "sonner";
 
-export function Topbar() {
+interface TopbarProps {
+  onToggleSidebar?: () => void;
+  onOpenMobile?: () => void;
+}
+
+export function Topbar({ onOpenMobile }: TopbarProps = {}) {
   const navigate = useNavigate();
   const user = AuthService.getUser();
   const [searchQuery, setSearchQuery] = useState("");
@@ -88,7 +94,17 @@ export function Topbar() {
 
   return (
     <header className="h-16 shrink-0 border-b border-[#DDE5EF] bg-white px-4 shadow-sm shadow-slate-200/40 lg:px-8">
-      <div className="flex h-full items-center gap-4">
+      <div className="flex h-full items-center gap-3 md:gap-4">
+        {onOpenMobile && (
+          <button
+            type="button"
+            onClick={onOpenMobile}
+            className="lg:hidden flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200/80 bg-slate-50/80 text-slate-700 outline-none transition-all hover:bg-slate-100 hover:text-slate-900 active:scale-95 shadow-xs"
+            title="Abrir menu principal"
+          >
+            <Menu className="h-5 w-5 text-slate-700" />
+          </button>
+        )}
         <form onSubmit={handleSearch} className="relative max-w-xl flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input

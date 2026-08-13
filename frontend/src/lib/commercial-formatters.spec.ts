@@ -14,9 +14,10 @@ test("formatCnpj aplica mascara XX.XXX.XXX/XXXX-XX corretamente", () => {
   assert.strictEqual(formatCnpj("12.345.678/0001-95"), "12.345.678/0001-95");
 });
 
-test("formatCnpj retorna valor original para CNPJs invalidos ou incompletos", () => {
-  assert.strictEqual(formatCnpj("123456"), "123456");
-  assert.strictEqual(formatCnpj(""), "");
+test("formatCnpj retorna 'Não disponível' para CNPJs inválidos, incompletos ou IDs externos", () => {
+  assert.strictEqual(formatCnpj("123456"), "Não disponível");
+  assert.strictEqual(formatCnpj(""), "Não disponível");
+  assert.strictEqual(formatCnpj("G-ChIJ123456"), "Não disponível");
 });
 
 test("formatCnae aplica mascara XXXX-X/XX para CNAEs com 7 digitos", () => {

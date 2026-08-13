@@ -1,6 +1,14 @@
 import { apiRequest } from "./api";
 import type { MapOpportunity } from "@/types/mapOpportunity";
 
+export type DiscoverRegionResult = {
+  success: boolean;
+  message: string;
+  discovered: number;
+  existing: number;
+  total: number;
+};
+
 export const mapService = {
   getOpportunities: () => apiRequest<MapOpportunity[]>("/map/opportunities"),
   
@@ -15,4 +23,12 @@ export const mapService = {
       method: "POST",
     });
   },
+
+  discoverRegion: (cidade: string, uf: string) => {
+    const searchParams = new URLSearchParams({ cidade, uf });
+    return apiRequest<DiscoverRegionResult>(`/map/discover-region?${searchParams.toString()}`, {
+      method: "POST",
+    });
+  },
 };
+

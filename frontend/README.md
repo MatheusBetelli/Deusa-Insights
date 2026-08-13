@@ -44,11 +44,20 @@ Interface web do Deusa Analytics, desenvolvida com React, Vite, TypeScript, Tail
 
 No diretório do frontend, você pode executar:
 
+- `npm test`: Executa os testes unitários da aplicação (formatadores, utilitários e validações).
 - `npm run dev`: Inicia o servidor de desenvolvimento do Vite.
 - `npm run build`: Compila o projeto para produção.
 - `npm run preview`: Visualiza localmente o build de produção gerado.
 - `npm run lint`: Executa a verificação estática do código com ESLint.
 - `npm run format`: Formata automaticamente todos os arquivos usando Prettier.
+
+## Testes Unitários
+
+Para rodar os testes unitários do frontend:
+
+```bash
+npm test
+```
 
 ## Estrutura do Projeto
 

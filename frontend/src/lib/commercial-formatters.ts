@@ -18,9 +18,12 @@ export const potentialLabels: Record<PotentialLevel, string> = {
   CRITICAL: "Crítico",
 };
 
-export function formatCnpj(value: string) {
+export function formatCnpj(value?: string | null) {
+  if (!value || value.startsWith("G-") || value.startsWith("GOOGLE-")) {
+    return "Não disponível";
+  }
   const digits = value.replace(/\D/g, "");
-  if (digits.length !== 14) return value;
+  if (digits.length !== 14) return "Não disponível";
   return digits.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5");
 }
 

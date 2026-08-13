@@ -29,12 +29,23 @@ export type LeadInteraction = {
   user?: UserSummary;
 };
 
+export type ScoreBreakdown = {
+  perfilPts: number;     // max 30
+  potencialPts: number;  // max 25
+  logisticaPts: number;  // max 20
+  dadosPts: number;      // max 10
+  prontidaoPts: number;  // max 10
+  territorioPts: number; // max 5
+  distanceKm: number;
+};
+
 export type Lead = {
   id: string;
   companyId: string;
   status: LeadStatus;
   score: number;
   potentialLevel: PotentialLevel;
+  scoreBreakdown?: ScoreBreakdown;
   assignedToId: string | null;
   notes: string | null;
   lastContactAt: string | null;
@@ -82,4 +93,6 @@ export type CreateLeadInteractionPayload = {
   userId: string;
   type: string;
   description: string;
+  newStatus?: LeadStatus;
+  nextActionAt?: string;
 };
