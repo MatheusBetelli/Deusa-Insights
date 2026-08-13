@@ -203,7 +203,7 @@ function BaseDeDados() {
           className="inline-flex h-9 w-fit items-center gap-1.5 rounded-lg bg-[#0B1F33] px-3.5 text-sm font-bold text-white transition hover:bg-[#1061AF]"
         >
           <FileUp className="h-4 w-4 text-[#FFF200]" />
-          Atualizar base
+          Importar CNPJs
         </Link>
       </div>
 
@@ -257,7 +257,7 @@ function BaseDeDados() {
               onClick={() => setSortOrder((current) => (current === "asc" ? "desc" : "asc"))}
               className="h-9 rounded-lg border border-[#DDE5EF] bg-white px-3 text-xs font-bold text-[#0B1F33] hover:border-[#1061AF]"
             >
-              {activeSort} · {sortOrder}
+              {formatSortLabel(activeTab, activeSort, sortOrder)}
             </button>
           </div>
         </div>
@@ -495,6 +495,25 @@ function BaseDeDados() {
   );
 }
 
+function formatSortLabel(activeTab: Tab, sortBy: string, sortOrder: SortOrder) {
+  const dir = sortOrder === "asc" ? "A–Z" : "Z–A";
+  let field = "Empresa";
+  if (activeTab === "companies") {
+    if (sortBy === "company") field = "Empresa";
+    else if (sortBy === "city") field = "Cidade";
+    else if (sortBy === "cnae") field = "CNAE";
+  } else if (activeTab === "cities") {
+    if (sortBy === "name") field = "Cidade";
+    else if (sortBy === "uf") field = "UF";
+    else if (sortBy === "companyCount") field = "Empresas";
+  } else if (activeTab === "cnaes") {
+    if (sortBy === "code") field = "Código";
+    else if (sortBy === "description") field = "Descrição";
+    else if (sortBy === "companyCount") field = "Empresas";
+  }
+  return `${field} (${dir})`;
+}
+
 function FilterTag({
   label,
   value,
@@ -515,16 +534,24 @@ function FilterTag({
 }
 
 function SituationBadge({ value }: { value: string }) {
-  const active = value?.toUpperCase() === "ATIVA";
+  const valUpper = (value || "").toUpperCase();
+  if (valUpper === "ATIVA") {
+    return (
+      <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700">
+        Ativa
+      </span>
+    );
+  }
+  if (valUpper === "INATIVA" || valUpper === "BAIXADA") {
+    return (
+      <span className="inline-flex rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[11px] font-bold text-red-700">
+        {valUpper === "BAIXADA" ? "Baixada" : "Inativa"}
+      </span>
+    );
+  }
   return (
-    <span
-      className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-bold ${
-        active
-          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-          : "border-[#DDE5EF] bg-[#F8FAFC] text-[#64748B]"
-      }`}
-    >
-      {value}
+    <span className="inline-flex rounded-full border border-[#DDE5EF] bg-[#F8FAFC] px-2 py-0.5 text-[11px] font-bold text-[#64748B]">
+      {value || "–"}
     </span>
   );
 }

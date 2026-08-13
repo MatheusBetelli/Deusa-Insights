@@ -10,7 +10,7 @@ import { cnaesService } from "@/services/cnaesService";
 import { pipelineService } from "@/services/pipelineService";
 import type { Cnae } from "@/types/cnae";
 import type { City } from "@/types/city";
-import type { LeadStatus } from "@/types/lead";
+import type { LeadStatus, PotentialLevel } from "@/types/lead";
 import type { Pipeline } from "@/types/pipeline";
 import { ArrowRight, CircleDot, Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
@@ -27,6 +27,13 @@ export const Route = createFileRoute("/_app/funil-comercial")({
 
 const columns: LeadStatus[] = ["NEW", "CONTACTED", "INTERESTED", "NEGOTIATION", "CONVERTED"];
 const COLUMN_PAGE_SIZE = 6;
+
+function priorityClass(priority: PotentialLevel) {
+  if (priority === "CRITICAL") return "border-[#ED1C24]/30 bg-[#ED1C24]/10 text-[#B91C1C]";
+  if (priority === "HIGH") return "border-[#F97316]/30 bg-[#FFF7ED] text-[#C2410C]";
+  if (priority === "MEDIUM") return "border-[#1061AF]/30 bg-blue-50 text-[#1061AF]";
+  return "border-[#DDE5EF] bg-[#F8FAFC] text-[#64748B]";
+}
 
 function CommercialFunnel() {
   const routeSearch = Route.useSearch();
@@ -140,7 +147,7 @@ function CommercialFunnel() {
             Funil Comercial
           </h1>
           <p className="mt-0.5 text-sm text-[#64748B]">
-            Etapas comerciais com carregamento progressivo por coluna.
+            Acompanhe e avance oportunidades B2B desde a prospecção até a conversão.
           </p>
         </div>
       </div>
@@ -223,9 +230,8 @@ function CommercialFunnel() {
           <section className="rounded-xl border border-[#DDE5EF] bg-white px-4 py-2.5 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3 text-xs font-medium">
               <span className="font-bold text-[#0B1F33]">{pipeline.total} leads no funil</span>
-              <span className="text-[#94A3B8]">
-                Cards priorizados por score. Arrastar e soltar não foi ativado sem suporte
-                transacional específico.
+              <span className="text-[#64748B] font-medium">
+                Visão operacional do funil comercial · Oportunidades ordenadas por prioridade
               </span>
             </div>
           </section>
@@ -260,10 +266,11 @@ function CommercialFunnel() {
 
                   <div className="max-h-[520px] min-h-[360px] space-y-2 overflow-y-auto bg-[#F8FAFC] p-2.5">
                     {items.map((lead) => (
-                      <button
+                      <Link
                         key={lead.id}
-                        onClick={() => setSelectedLeadId(lead.id)}
-                        className="w-full rounded-lg border border-[#DDE5EF] bg-white p-3 text-left shadow-sm transition hover:border-[#1061AF]"
+                        to="/leads-b2b/$leadId"
+                        params={{ leadId: lead.id }}
+                        className="block w-full rounded-lg border border-[#DDE5EF] bg-white p-3 text-left shadow-sm transition hover:border-[#1061AF]"
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
@@ -274,23 +281,29 @@ function CommercialFunnel() {
                               {lead.city}
                             </p>
                           </div>
-                          <span className="rounded-md border border-[#DDE5EF] bg-white px-2 py-1 text-xs font-bold tabular-nums text-[#0B1F33]">
+                          <span className="rounded-md border border-[#DDE5EF] bg-white px-2 py-0.5 text-xs font-bold tabular-nums text-[#0B1F33]">
                             {lead.score}
                           </span>
                         </div>
-                        <div className="mt-2 flex items-center justify-between gap-2">
-                          <span className="rounded-full bg-[#FFF8C7] px-2 py-0.5 text-[11px] font-bold text-[#854D0E]">
+                        <div className="mt-2.5 flex items-center justify-between gap-2">
+                          <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${priorityClass(lead.potentialLevel)}`}>
                             {potentialLabels[lead.potentialLevel]}
                           </span>
-                          <span className="truncate text-[11px] text-[#94A3B8]">
-                            {lead.assignedTo ?? "Sem responsável"}
-                          </span>
+                          {lead.assignedTo ? (
+                            <span className="truncate text-[11px] font-medium text-[#64748B]">
+                              {lead.assignedTo}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-800 border border-amber-200">
+                              Sem responsável
+                            </span>
+                          )}
                         </div>
-                      </button>
+                      </Link>
                     ))}
 
                     {items.length === 0 && (
-                      <div className="flex min-h-[140px] items-center justify-center rounded-lg border border-dashed border-[#CBD5E1] bg-white p-4 text-center text-sm font-medium text-[#64748B]">
+                      <div className="flex min-h-[140px] items-center justify-center rounded-lg border border-dashed border-[#CBD5E1] bg-white p-4 text-center text-xs font-medium text-[#94A3B8]">
                         Nenhum lead nesta etapa.
                       </div>
                     )}
@@ -309,16 +322,18 @@ function CommercialFunnel() {
                     )}
                   </div>
 
-                  <div className="border-t border-[#DDE5EF] p-2.5">
-                    <Link
-                      to="/leads-b2b"
-                      search={{ status: column, uf, city, cnae, search }}
-                      className="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-[#DDE5EF] bg-white text-xs font-bold text-[#0B1F33] transition hover:border-[#1061AF]"
-                    >
-                      Ver todos
-                      <ArrowRight className="h-3.5 w-3.5" />
-                    </Link>
-                  </div>
+                  {stage && stage.total > 0 && (
+                    <div className="border-t border-[#DDE5EF] p-2.5">
+                      <Link
+                        to="/leads-b2b"
+                        search={{ status: column, uf, city, cnae, search }}
+                        className="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-[#DDE5EF] bg-white text-xs font-bold text-[#0B1F33] transition hover:border-[#1061AF]"
+                      >
+                        Ver todos
+                        <ArrowRight className="h-3.5 w-3.5" />
+                      </Link>
+                    </div>
+                  )}
                 </div>
               );
             })}

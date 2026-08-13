@@ -28,7 +28,24 @@ export const Route = createFileRoute("/_app/importar-cnpjs")({
   component: ImportCnpjs,
 });
 
+const jobStatusLabels: Record<string, { label: string; class: string }> = {
+  SUCCESS: { label: "Concluído", class: "text-emerald-700 font-bold" },
+  COMPLETED: { label: "Concluído", class: "text-emerald-700 font-bold" },
+  RUNNING: { label: "Em processamento", class: "text-[#1061AF] font-bold" },
+  PROCESSING: { label: "Em processamento", class: "text-[#1061AF] font-bold" },
+  PENDING: { label: "Aguardando", class: "text-slate-600 font-bold" },
+  PARCIAL: { label: "Concluído parcialmente", class: "text-amber-700 font-bold" },
+  FAILED: { label: "Erro", class: "text-red-700 font-bold" },
+  ERROR: { label: "Erro", class: "text-red-700 font-bold" },
+};
+
+function formatJobStatus(status: string) {
+  const normalized = (status || "").toUpperCase();
+  return jobStatusLabels[normalized] ?? { label: status, class: "text-[#0B1F33] font-bold" };
+}
+
 function ImportCnpjs() {
+  const [importTab, setImportTab] = useState<"search" | "excel">("search");
   const [state, setState] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
   const [cities, setCities] = useState<City[]>([]);
@@ -36,6 +53,7 @@ function ImportCnpjs() {
   const [imports, setImports] = useState<ImportJob[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [lastJob, setLastJob] = useState<ImportJob | null>(null);
+  const [excelResult, setExcelResult] = useState<any | null>(null);
   const [form, setForm] = useState({
     estado: "SP",
     cidade: "Tupã",
@@ -72,6 +90,7 @@ function ImportCnpjs() {
   async function handleSearch() {
     setState("loading");
     setError(null);
+    setExcelResult(null);
     try {
       const city = cities.find((item) => item.name === form.cidade);
       const result = await importsService.importCnpjs({
@@ -84,11 +103,30 @@ function ImportCnpjs() {
       setCompanies(result.companies);
       setLastJob(result.job);
       setState("success");
-      toast.success(`${result.job.totalSaved} empresa(s) salvas como leads.`);
+      toast.success(`${result.job.totalSaved} empresa(s) importadas com sucesso.`);
       setImports(await importsService.getImports());
     } catch (err) {
       setState("error");
       setError(err instanceof Error ? err.message : "Não foi possível importar CNPJs.");
+    }
+  }
+
+  async function handleExcelUpload(file: File) {
+    if (!file) return;
+    setState("loading");
+    setError(null);
+    setLastJob(null);
+    try {
+      const result = await importsService.uploadExcelClients(file);
+      setExcelResult(result);
+      setState("success");
+      toast.success(
+        `Planilha processada! ${result.clientesMatcheados} clientes mapeados e ${result.novosClientesCriados} novos clientes cadastrados como ativos.`,
+      );
+      setImports(await importsService.getImports());
+    } catch (err) {
+      setState("error");
+      setError(err instanceof Error ? err.message : "Não foi possível processar a planilha Excel.");
     }
   }
 
@@ -100,10 +138,32 @@ function ImportCnpjs() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-[11px] font-bold uppercase tracking-widest text-[#1061AF]">Comercial</p>
-          <h1 className="mt-0.5 text-2xl font-bold tracking-tight text-[#0B1F33]">Importar CNPJs</h1>
+          <h1 className="mt-0.5 text-2xl font-bold tracking-tight text-[#0B1F33]">Importar CNPJs e Clientes</h1>
           <p className="mt-0.5 text-sm text-[#64748B]">
-            Busque empresas ativas e gere leads comerciais.
+            Busque estabelecimentos ativos na Receita Federal ou importe a carteira de clientes via Excel.
           </p>
+        </div>
+        <div className="flex items-center gap-1.5 rounded-lg border border-[#DDE5EF] bg-white p-1 shadow-2xs">
+          <button
+            onClick={() => setImportTab("search")}
+            className={`rounded-md px-3 py-1.5 text-xs font-bold transition ${
+              importTab === "search"
+                ? "bg-[#0B1F33] text-white"
+                : "text-[#64748B] hover:text-[#0B1F33]"
+            }`}
+          >
+            Busca Receita Federal
+          </button>
+          <button
+            onClick={() => setImportTab("excel")}
+            className={`rounded-md px-3 py-1.5 text-xs font-bold transition ${
+              importTab === "excel"
+                ? "bg-[#0B1F33] text-white"
+                : "text-[#64748B] hover:text-[#0B1F33]"
+            }`}
+          >
+            Planilha Excel (.xlsx)
+          </button>
         </div>
       </div>
 
@@ -113,9 +173,10 @@ function ImportCnpjs() {
         </div>
       )}
 
-      {/* ── Search Form ── */}
-      <section className="rounded-xl border border-[#DDE5EF] bg-white p-4 shadow-sm">
-        <div className="grid gap-3 lg:grid-cols-[110px_minmax(160px,1.2fr)_minmax(220px,1.4fr)_100px_auto] lg:items-end">
+      {/* ── Search Form (Aba 1) ── */}
+      {importTab === "search" && (
+        <section className="rounded-xl border border-[#DDE5EF] bg-white p-4 shadow-sm">
+          <div className="grid gap-3 lg:grid-cols-[110px_minmax(160px,1.2fr)_minmax(220px,1.4fr)_100px_auto] lg:items-end">
           <label className="block">
             <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-[#64748B]">UF</span>
             <select value={form.estado} onChange={(event) => updateForm("estado", event.target.value)} className="h-9 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-xs text-[#0B1F33] outline-none focus:border-[#1061AF]">
@@ -147,11 +208,89 @@ function ImportCnpjs() {
           </button>
         </div>
       </section>
+      )}
+
+      {/* ── Excel Upload (Aba 2) ── */}
+      {importTab === "excel" && (
+        <section className="rounded-xl border border-[#DDE5EF] bg-white p-6 shadow-sm">
+          <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-[#CBD5E1] bg-[#F8FAFC] p-8 text-center transition hover:border-[#1061AF]">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 text-[#1061AF]">
+              <FileUp className="h-6 w-6" />
+            </div>
+            <h3 className="mt-3 text-sm font-bold text-[#0B1F33]">Importar Planilha de Clientes (.xlsx, .xls, .csv)</h3>
+            <p className="mt-1 max-w-md text-xs text-[#64748B]">
+              Selecione o arquivo Excel com a lista de clientes atuais da empresa. O sistema fará a correspondência automática por CNPJ ou Razão Social e atualizará os marcadores do Mapa de Oportunidades.
+            </p>
+            <label className="mt-4 inline-flex cursor-pointer items-center gap-2 rounded-lg bg-[#0B1F33] px-4 py-2.5 text-xs font-bold text-white transition hover:bg-[#1061AF]">
+              <FileUp className="h-4 w-4 text-[#FFF200]" />
+              Selecionar Planilha Excel
+              <input
+                type="file"
+                accept=".xlsx, .xls, .csv"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) void handleExcelUpload(file);
+                }}
+              />
+            </label>
+          </div>
+        </section>
+      )}
 
       <section className="space-y-4">
-        {state === "idle" && <EmptyState title="Nenhuma busca realizada" description="Defina cidade, CNAE e limite para iniciar uma importação." />}
-        {state === "loading" && <LoadingState message={`Importando empresas ativas para ${form.cidade}...`} />}
-        {state === "error" && <ErrorState title="Não foi possível buscar empresas" description={error ?? "Tente novamente em alguns instantes."} action={<button onClick={handleSearch} className="h-9 rounded-lg bg-[#0B1F33] px-3 text-xs font-bold text-white">Tentar novamente</button>} />}
+        {state === "idle" && (
+          <EmptyState
+            title="Nenhuma operação realizada"
+            description="Selecione os parâmetros de busca ou envie uma planilha Excel para iniciar."
+          />
+        )}
+        {state === "loading" && <LoadingState message="Processando dados da importação..." />}
+        {state === "error" && (
+          <ErrorState
+            title="Erro na operação"
+            description={error ?? "Tente novamente em alguns instantes."}
+          />
+        )}
+
+        {state === "success" && excelResult && (
+          <div className="overflow-hidden rounded-xl border border-[#DDE5EF] bg-white shadow-sm">
+            <div className="flex flex-col gap-3 border-b border-[#DDE5EF] px-5 py-3 sm:flex-row sm:items-center sm:justify-between bg-[#F8FAFC]">
+              <div>
+                <h2 className="text-sm font-bold text-[#0B1F33]">Resultado do Processamento da Planilha</h2>
+                <p className="text-[11px] text-[#64748B]">Planilha enviada com sucesso</p>
+              </div>
+              <Link to="/mapa-oportunidades" search={{ uf: "Todos", city: "Todas" }} className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-[#0B1F33] px-3.5 text-xs font-bold text-white transition hover:bg-[#1061AF]">
+                <CheckCircle2 className="h-4 w-4 text-[#FFF200]" />
+                Ver no mapa
+              </Link>
+            </div>
+
+            <div className="grid gap-3 p-4 sm:grid-cols-3">
+              <div className="relative overflow-hidden rounded-xl border border-[#DDE5EF] bg-[#F8FAFC] p-4 shadow-xs">
+                <span className="absolute inset-y-0 left-0 w-[3px] bg-[#1061AF]" />
+                <div className="pl-1">
+                  <div className="text-2xl font-bold text-[#0B1F33] tabular-nums">{excelResult.totalLinhasProcessadas}</div>
+                  <div className="mt-1 text-[11px] font-semibold text-[#64748B]">Linhas Processadas</div>
+                </div>
+              </div>
+              <div className="relative overflow-hidden rounded-xl border border-[#DDE5EF] bg-emerald-50/70 p-4 shadow-xs">
+                <span className="absolute inset-y-0 left-0 w-[3px] bg-[#16A34A]" />
+                <div className="pl-1">
+                  <div className="text-2xl font-bold text-[#16A34A] tabular-nums">{excelResult.clientesMatcheados}</div>
+                  <div className="mt-1 text-[11px] font-semibold text-[#16A34A]">Clientes Mapeados (Existentes)</div>
+                </div>
+              </div>
+              <div className="relative overflow-hidden rounded-xl border border-[#DDE5EF] bg-blue-50/70 p-4 shadow-xs">
+                <span className="absolute inset-y-0 left-0 w-[3px] bg-[#1061AF]" />
+                <div className="pl-1">
+                  <div className="text-2xl font-bold text-[#1061AF] tabular-nums">{excelResult.novosClientesCriados}</div>
+                  <div className="mt-1 text-[11px] font-semibold text-[#1061AF]">Novos Clientes Cadastrados</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {state === "success" && lastJob && (
           <div className="overflow-hidden rounded-xl border border-[#DDE5EF] bg-white shadow-sm">
@@ -168,9 +307,9 @@ function ImportCnpjs() {
 
             <div className="grid gap-3 border-b border-[#DDE5EF] p-4 sm:grid-cols-3">
               {[
-                { label: "Encontrados", value: lastJob.totalFound, accent: "#1061AF" },
-                { label: "Salvos", value: lastJob.totalSaved, accent: "#16A34A" },
-                { label: "Ignorados", value: ignored, accent: "#64748B" },
+                { label: "Empresas encontradas", value: lastJob.totalFound, accent: "#1061AF" },
+                { label: "Empresas importadas", value: lastJob.totalSaved, accent: "#16A34A" },
+                { label: "Já existentes na base", value: ignored, accent: "#64748B" },
               ].map((item) => (
                 <div key={item.label} className="relative overflow-hidden rounded-xl border border-[#DDE5EF] bg-[#F8FAFC] p-4 shadow-sm">
                   <span
@@ -186,7 +325,7 @@ function ImportCnpjs() {
             </div>
 
             {companies.length === 0 ? (
-              <EmptyState title="Nenhuma empresa salva" description="A importação foi concluída, mas não retornou novos registros." />
+              <EmptyState title="Nenhuma empresa nova salva" description="A importação foi concluída, mas todas as empresas encontradas já estavam cadastradas." />
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[760px] text-left text-sm">
@@ -226,15 +365,26 @@ function ImportCnpjs() {
           <p className="text-sm text-[#64748B]">Nenhuma importação registrada.</p>
         ) : (
           <div className="grid gap-3">
-            {imports.slice(0, 5).map((job) => (
-              <div key={job.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-[#F8FAFC] px-4 py-3">
-                <div>
-                  <div className="font-semibold text-[#0B1F33]">{job.cityName}/{job.uf} · {formatCnae(job.cnaeCode)}</div>
-                  <div className="text-xs text-[#64748B]">{formatDateTime(job.createdAt)}</div>
+            {imports.slice(0, 5).map((job) => {
+              const statusInfo = formatJobStatus(job.status);
+              return (
+                <div key={job.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-4 py-3 transition hover:border-[#1061AF]">
+                  <div>
+                    <div className="text-xs font-bold text-[#0B1F33]">
+                      {job.cityName}/{job.uf} · {formatCnae(job.cnaeCode)}
+                    </div>
+                    <div className="mt-0.5 text-[11px] font-medium text-[#64748B]">
+                      {formatDateTime(job.createdAt)}
+                    </div>
+                  </div>
+                  <div className="text-right text-xs">
+                    <span className="font-bold text-[#0B1F33]">{job.totalSaved} empresas importadas</span>
+                    <span className="mx-1.5 text-slate-300">·</span>
+                    <span className={statusInfo.class}>{statusInfo.label}</span>
+                  </div>
                 </div>
-                <div className="text-right text-sm font-bold text-[#0B1F33]">{job.totalSaved} salvos · {job.status}</div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>

@@ -1,8 +1,9 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { EmptyState, ErrorState, LoadingState } from "@/components/common/InterfaceStates";
 import { LeadDetailsSheet } from "@/features/leads/components/LeadDetailsSheet";
 import { PaginationBar } from "@/components/common/PaginationBar";
+import { ScoreBreakdownTooltip } from "@/components/common/ScoreBreakdownTooltip";
 import {
   companyName,
   formatCnae,
@@ -84,9 +85,25 @@ function verificationLabel(status?: string | null) {
   return verificationLabels[status] ?? status;
 }
 
+function calculateDataQualityScore(company: Lead["company"]) {
+  let score = 0;
+  if (company.cnpj && company.cnpj.replace(/\D/g, "").length === 14) score += 25;
+  if (company.logradouro && company.numero && company.bairro && company.cep) score += 30;
+  if (company.telefone && company.telefone.trim().length >= 8) score += 20;
+  if (typeof company.latitude === "number" && typeof company.longitude === "number" && company.latitude !== 0) {
+    if (company.statusVerificacaoEndereco === "aproximado" || company.origemCoordenada === "municipio_centroide_jitter") {
+      score += 10;
+    } else {
+      score += 25;
+    }
+  }
+  return Math.min(100, score);
+}
+
 function priorityClass(priority: PotentialLevel) {
   if (priority === "CRITICAL") return "border-[#ED1C24]/30 bg-[#ED1C24]/10 text-[#B91C1C]";
   if (priority === "HIGH") return "border-[#F97316]/30 bg-[#FFF7ED] text-[#C2410C]";
+  if (priority === "MEDIUM") return "border-[#1061AF]/30 bg-blue-50 text-[#1061AF]";
   return "border-[#DDE5EF] bg-[#F8FAFC] text-[#64748B]";
 }
 
@@ -416,9 +433,9 @@ function LeadsB2B() {
           accent="#1061AF"
         />
         <MetricCard
-          label="Alto potencial"
+          label="Oportunidades prioritárias"
           value={highPotentialCount}
-          description="Alto ou crítico nos filtros"
+          description="Alto ou crítico (Score >= 65) nos filtros"
           accent="#ED1C24"
         />
       </section>
@@ -655,13 +672,14 @@ function LeadsB2B() {
                   return (
                     <tr key={lead.id} className="transition-colors hover:bg-[#F8FAFC]/80">
                       <td className="px-4 py-2.5">
-                        <button
-                          onClick={() => setSelectedLeadId(lead.id)}
+                        <Link
+                          to="/leads-b2b/$leadId"
+                          params={{ leadId: lead.id }}
                           className="flex min-w-0 items-start gap-2 text-left"
                         >
                           <div className="min-w-0">
                             <div
-                              className="truncate font-bold leading-tight text-[#0B1F33]"
+                              className="truncate font-bold leading-tight text-[#0B1F33] hover:text-[#1061AF]"
                               title={leadName}
                             >
                               {leadName}
@@ -673,7 +691,7 @@ function LeadsB2B() {
                           {isPriority && (
                             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#ED1C24]" />
                           )}
-                        </button>
+                        </Link>
                       </td>
                       <td className="px-4 py-2.5">
                         <div className="font-medium leading-tight text-[#0B1F33]">
@@ -696,9 +714,11 @@ function LeadsB2B() {
                         )}
                       </td>
                       <td className="px-4 py-2.5">
-                        <span className="inline-flex h-7 min-w-10 items-center justify-center rounded-md border border-[#DDE5EF] bg-white px-2 text-xs font-bold tabular-nums text-[#0B1F33]">
-                          {lead.score}
-                        </span>
+                        <ScoreBreakdownTooltip
+                          score={lead.score}
+                          variant="subtle"
+                          breakdown={lead.scoreBreakdown}
+                        />
                       </td>
                       <td className="px-4 py-2.5">
                         <span
@@ -709,8 +729,7 @@ function LeadsB2B() {
                       </td>
                       <td className="px-4 py-2.5">
                         <div className="font-semibold leading-tight text-[#0B1F33]">
-                          {lead.company.confiancaVerificacao ?? "Sem score"}
-                          {lead.company.confiancaVerificacao != null ? "/100" : ""}
+                          {calculateDataQualityScore(lead.company)}%
                         </div>
                         <div className="mt-0.5 max-w-[210px] truncate text-[11px] leading-tight text-[#64748B]">
                           {verificationLabel(lead.company.statusVerificacaoEndereco)}
@@ -731,7 +750,7 @@ function LeadsB2B() {
                                 setSelectedLeadId(lead.id);
                               }
                             }}
-                            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50/80 px-2 text-xs font-bold text-[#1061AF] transition hover:bg-[#1061AF] hover:text-white"
+                            className="inline-flex items-center gap-1 text-xs font-semibold text-[#1061AF] hover:underline cursor-pointer"
                             title="Atribuir este lead a você com 1 clique"
                           >
                             <UserPlus className="h-3.5 w-3.5" />
@@ -741,13 +760,14 @@ function LeadsB2B() {
                       </td>
                       <td className="px-4 py-2.5">
                         <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={() => setSelectedLeadId(lead.id)}
-                            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#0B1F33] px-3 text-xs font-bold text-white transition hover:bg-[#1061AF]"
+                          <Link
+                            to="/leads-b2b/$leadId"
+                            params={{ leadId: lead.id }}
+                            className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#0B1F33] px-3 text-xs font-bold text-white transition hover:bg-[#1061AF]"
                           >
-                            <Eye className="h-3.5 w-3.5 text-[#FFF200]" />
+                            <Eye className="h-3.5 w-3.5" />
                             Abrir
-                          </button>
+                          </Link>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <button className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[#DDE5EF] bg-white text-[#64748B] transition hover:border-[#1061AF] hover:text-[#0B1F33]">

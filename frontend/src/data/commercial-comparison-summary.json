@@ -1,0 +1,15 @@
+{
+  "generatedAt": "2026-08-11T21:00:57.547Z",
+  "source": "sqlite",
+  "totals": {
+    "clientesEncontrados": 0,
+    "potenciaisClientes": 0,
+    "clientesInativos": 0,
+    "dadosIncompletos": 0,
+    "estabelecimentosSemCorrespondencia": 0,
+    "regioesComOportunidade": 0
+  },
+  "regioesComOportunidade": [],
+  "cidadesComOportunidade": [],
+  "estabelecimentosSemCorrespondencia": []
+}

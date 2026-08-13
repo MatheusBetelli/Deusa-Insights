@@ -6,12 +6,12 @@ import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "@/components/common/InterfaceStates";
-import { formatCnpj } from "@/lib/commercial-formatters";
+import { formatCnae, formatCnpj, potentialLabels, statusLabels } from "@/lib/commercial-formatters";
 import { ESTADOS_UF } from "@/lib/constants";
 import { mapService } from "@/services/mapService";
 import type { LeadStatus } from "@/types/lead";
 import type { MapOpportunity } from "@/types/mapOpportunity";
-import { AlertTriangle, FileUp, Filter, Layers, RotateCcw, MapPin, Loader2 } from "lucide-react";
+import { AlertTriangle, FileUp, Filter, Layers, RotateCcw, MapPin, Loader2, Search, Navigation } from "lucide-react";
 
 export const Route = createFileRoute("/_app/mapa-oportunidades")({
   validateSearch: (search) => ({
@@ -21,45 +21,54 @@ export const Route = createFileRoute("/_app/mapa-oportunidades")({
   component: OpportunityMap,
 });
 
-const DEFAULT_CENTER: [number, number] = [-22.05, -50.18];
-const DEFAULT_ZOOM = 9;
+const DEFAULT_CENTER: [number, number] = [-21.92, -50.73];
+const DEFAULT_ZOOM = 12;
 
-type ClientCategory = "CLIENTE" | "POTENCIAL" | "NAO_CLIENTE";
+type CommercialCategory = "CLIENTE" | "CRITICO" | "PROSPECT";
 
-const clientCategoryLabels: Record<ClientCategory, string> = {
-  CLIENTE: "Cliente",
-  POTENCIAL: "Potencial Cliente",
-  NAO_CLIENTE: "Não Cliente",
-};
-
-function getClientCategory(status: LeadStatus): ClientCategory {
-  if (status === "CONVERTED") return "CLIENTE";
-  if (status === "NOT_INTERESTED" || status === "INACTIVE") return "NAO_CLIENTE";
-  return "POTENCIAL";
+function getCommercialCategory(item: MapOpportunity): CommercialCategory {
+  if (item.status === "CONVERTED") return "CLIENTE";
+  if (item.score >= 80 || item.potentialLevel === "CRITICAL") return "CRITICO";
+  return "PROSPECT";
 }
 
-// Visual config per category — colors only, no complex SVGs
-const CATEGORY_CONFIG: Record<ClientCategory, { bg: string; border: string; shadow: string }> = {
-  CLIENTE: { bg: "#16A34A", border: "#86efac", shadow: "rgba(22,163,74,0.30)" },
-  POTENCIAL: { bg: "#D97706", border: "#fcd34d", shadow: "rgba(217,119,6,0.30)" },
-  NAO_CLIENTE: { bg: "#DC2626", border: "#fca5a5", shadow: "rgba(220,38,38,0.30)" },
-};
+// Visual config para marcadores operacionais limpos
+function makePinHtml(category: CommercialCategory, isAprox: boolean): string {
+  let bg = "#1061AF"; // Navy institucional para Prospect
+  let iconSvg = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1.5-5h15L21 9"/><path d="M3 9v11a1 1 0 001 1h16a1 1 0 001-1V9"/></svg>`;
 
-// Simple filled circle with a small white dot in the centre
-function makePinHtml(category: ClientCategory, isAprox: boolean): string {
-  const c = CATEGORY_CONFIG[category];
-  const size = 22; // px — kept small to avoid pollution
-  const half = size / 2;
-  const outline = isAprox
-    ? `outline:2px dashed ${c.border};outline-offset:2px;`
-    : `box-shadow:0 2px 6px ${c.shadow},0 0 0 2px rgba(255,255,255,0.85);`;
+  if (category === "CLIENTE") {
+    bg = "#16A34A"; // Verde para Cliente Ativo
+    iconSvg = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+  } else if (category === "CRITICO") {
+    bg = "#ED1C24"; // Vermelho para Oportunidade Crítica (Score >= 80)
+    iconSvg = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`;
+  }
+
+  const strokeDash = isAprox ? `stroke-dasharray="3,3"` : ``;
+
   return `<div style="
-    width:${size}px;height:${size}px;border-radius:50%;
-    background:${c.bg};
-    ${outline}
-    display:flex;align-items:center;justify-content:center;
+    position: relative;
+    width: 30px;
+    height: 38px;
+    cursor: pointer;
   ">
-    <div style="width:${Math.round(half * 0.45)}px;height:${Math.round(half * 0.45)}px;border-radius:50%;background:rgba(255,255,255,0.80);"></div>
+    <svg width="30" height="38" viewBox="0 0 34 42" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M17 0C7.61116 0 0 7.61116 0 17C0 27 13.2 39 16.2 41.5C16.68 41.9 17.32 41.9 17.8 41.5C20.8 39 34 27 34 17C34 7.61116 26.3888 0 17 0Z" fill="${bg}" stroke="#FFFFFF" stroke-width="2" ${strokeDash}/>
+      <circle cx="17" cy="16" r="10" fill="rgba(0, 0, 0, 0.16)"/>
+    </svg>
+    <div style="
+      position: absolute;
+      top: 8px;
+      left: 9px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 12px;
+      height: 12px;
+    ">
+      ${iconSvg}
+    </div>
   </div>`;
 }
 
@@ -75,11 +84,14 @@ function OpportunityMap() {
   const [dataLoading, setDataLoading] = useState(true);
   const [dataError, setDataError] = useState<string | null>(null);
   const [opportunities, setOpportunities] = useState<MapOpportunity[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
   const [selectedUf, setSelectedUf] = useState(routeSearch.uf);
   const [selectedCity, setSelectedCity] = useState(routeSearch.city);
   const [selectedCategory, setSelectedCategory] = useState("Todas");
-  const [clustersOn, setClustersOn] = useState(true);
+  const [selectedPrecision, setSelectedPrecision] = useState("Todas");
+  const [clustersOn, setClustersOn] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
+  const [isDiscovering, setIsDiscovering] = useState(false);
   const [optimizeMessage, setOptimizeMessage] = useState<{
     text: string;
     type: "success" | "error" | "info";
@@ -114,6 +126,35 @@ function OpportunityMap() {
     }
   }
 
+  async function handleDiscoverMarkets() {
+    const cidade = selectedCity !== "Todas" ? selectedCity : "";
+    const uf = selectedUf !== "Todos" ? selectedUf : "";
+    if (!cidade || !uf) {
+      setOptimizeMessage({
+        text: "Selecione um Estado (UF) e uma Cidade nos filtros antes de descobrir mercados.",
+        type: "error",
+      });
+      return;
+    }
+    setIsDiscovering(true);
+    setOptimizeMessage(null);
+    try {
+      const result = await mapService.discoverRegion(cidade, uf);
+      setOptimizeMessage({
+        text: result.message || `Descoberta concluída: ${result.discovered} novo(s), ${result.existing} já existente(s).`,
+        type: result.success ? "success" : "error",
+      });
+      if (result.discovered > 0) await loadData();
+    } catch (err) {
+      setOptimizeMessage({
+        text: (err instanceof Error ? err.message : null) || "Falha na descoberta de mercados.",
+        type: "error",
+      });
+    } finally {
+      setIsDiscovering(false);
+    }
+  }
+
   async function loadData() {
     setDataLoading(true);
     setDataError(null);
@@ -138,14 +179,41 @@ function OpportunityMap() {
   const filtered = useMemo(
     () =>
       opportunities.filter((p) => {
-        const isClient = getClientCategory(p.status) === "CLIENTE";
-        const ufOk = selectedUf === "Todos" || p.uf === selectedUf || isClient;
-        const cityOk = selectedCity === "Todas" || p.city === selectedCity || isClient;
+        const ufOk = selectedUf === "Todos" || p.uf === selectedUf;
+        const cityOk = selectedCity === "Todas" || p.city === selectedCity;
+        const commCat = getCommercialCategory(p);
         const catOk =
-          selectedCategory === "Todas" || getClientCategory(p.status) === selectedCategory;
-        return ufOk && cityOk && catOk;
+          selectedCategory === "Todas" || commCat === selectedCategory;
+
+        // Filtro de pesquisa por comércio, CNPJ ou endereço
+        let searchOk = true;
+        if (searchQuery.trim()) {
+          const q = searchQuery.trim().toLowerCase();
+          const qClean = q.replace(/\D/g, "");
+          const cnpjClean = p.cnpj ? p.cnpj.replace(/\D/g, "") : "";
+
+          const matchName = p.companyName ? p.companyName.toLowerCase().includes(q) : false;
+          const matchCnpj = qClean.length >= 3 && cnpjClean.includes(qClean);
+          const matchLogradouro = p.logradouro ? p.logradouro.toLowerCase().includes(q) : false;
+          const matchBairro = p.bairro ? p.bairro.toLowerCase().includes(q) : false;
+          const matchCity = p.city ? p.city.toLowerCase().includes(q) : false;
+
+          searchOk = matchName || matchCnpj || matchLogradouro || matchBairro || matchCity;
+        }
+
+        // Filtro de precisão
+        let precOk = true;
+        if (selectedPrecision !== "Todas") {
+          const conf = p.confiancaVerificacao ?? 0;
+          const isAprox = !!(p.origemCoordenada?.includes("centroide") || p.origemCoordenada?.includes("jitter"));
+          if (selectedPrecision === "verificado") precOk = conf >= 90 && !isAprox;
+          else if (selectedPrecision === "provavel") precOk = conf >= 60 && conf < 90 && !isAprox;
+          else if (selectedPrecision === "aproximado") precOk = isAprox || conf < 60;
+        }
+
+        return ufOk && cityOk && catOk && precOk && searchOk;
       }),
-    [opportunities, selectedUf, selectedCity, selectedCategory],
+    [opportunities, selectedUf, selectedCity, selectedCategory, selectedPrecision, searchQuery],
   );
 
   const withCoords = useMemo(
@@ -155,11 +223,6 @@ function OpportunityMap() {
 
   const withoutCoords = useMemo(
     () => filtered.filter((p) => typeof p.latitude !== "number" || typeof p.longitude !== "number"),
-    [filtered],
-  );
-
-  const topLeads = useMemo(
-    () => [...filtered].sort((a, b) => b.score - a.score).slice(0, 5),
     [filtered],
   );
 
@@ -175,6 +238,8 @@ function OpportunityMap() {
       try {
         const Leaflet = await import("leaflet");
         if (cancelled || !mapElRef.current) return;
+
+        (window as any).L = Leaflet;
 
         const map = Leaflet.map(mapElRef.current, {
           center: DEFAULT_CENTER,
@@ -221,7 +286,6 @@ function OpportunityMap() {
 
     const map = mapRef.current;
 
-    // Remove old cluster/layer
     if (clusterRef.current) {
       map.removeLayer(clusterRef.current);
       clusterRef.current = null;
@@ -235,103 +299,132 @@ function OpportunityMap() {
 
     (async () => {
       const Leaflet = await import("leaflet");
+      (window as any).L = Leaflet;
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let group: any;
 
       if (clustersOn) {
-        // Side-effect import extends Leaflet with markerClusterGroup
-        await import("leaflet.markercluster");
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        group = (Leaflet as any).markerClusterGroup({
-          maxClusterRadius: 60,
-          spiderfyOnMaxZoom: true,
-          showCoverageOnHover: false,
-          zoomToBoundsOnClick: true,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          iconCreateFunction: (cluster: any) => {
-            const n = cluster.getChildCount();
-            const size = n >= 100 ? 48 : n >= 30 ? 40 : 32;
-            const fs = n >= 100 ? 11 : 13;
-            return Leaflet.divIcon({
-              className: "",
-              html: `<div style="
-                width:${size}px;height:${size}px;border-radius:50%;
-                background:#334155;
-                border:2.5px solid #fff;
-                box-shadow:0 2px 8px rgba(0,0,0,0.22);
-                display:flex;align-items:center;justify-content:center;
-                font-weight:700;font-size:${fs}px;
-                color:#fff;font-family:Inter,system-ui,sans-serif;
-                letter-spacing:-0.3px;
-              ">${n}</div>`,
-              iconSize: [size, size],
-              iconAnchor: [size / 2, size / 2],
+        try {
+          await import("leaflet.markercluster");
+          const MarkerClusterGroup = (Leaflet as any).markerClusterGroup || (window as any).L.markerClusterGroup;
+          if (typeof MarkerClusterGroup === "function") {
+            group = MarkerClusterGroup({
+              maxClusterRadius: 30,
+              spiderfyOnMaxZoom: true,
+              showCoverageOnHover: false,
+              zoomToBoundsOnClick: true,
+              iconCreateFunction: (cluster: any) => {
+                const n = cluster.getChildCount();
+                const bg = "#0B1F33";
+                const border = "#FFFFFF";
+                const size = n >= 50 ? 44 : n >= 15 ? 40 : 36;
+
+                return Leaflet.divIcon({
+                  className: "",
+                  html: `<div style="
+                    width:${size}px;height:${size}px;border-radius:50%;
+                    background:${bg};
+                    border:2.5px solid ${border};
+                    box-shadow:0 2px 8px rgba(0,0,0,0.25);
+                    display:flex;align-items:center;justify-content:center;
+                    font-weight:700;font-size:13px;
+                    color:#FFFFFF;font-family:Inter,system-ui,sans-serif;
+                  "><span>${n}</span></div>`,
+                  iconSize: [size, size],
+                  iconAnchor: [size / 2, size / 2],
+                });
+              },
             });
-          },
-        });
+          } else {
+            group = Leaflet.layerGroup();
+          }
+        } catch {
+          group = Leaflet.layerGroup();
+        }
       } else {
         group = Leaflet.layerGroup();
       }
 
-      withCoords.forEach((point) => {
-        const cat = getClientCategory(point.status);
+      const boundPoints: [number, number][] = [];
+
+      withCoords.forEach((point, idx) => {
+        const commCat = getCommercialCategory(point);
         const isAprox = !!(
           point.origemCoordenada?.includes("centroide") ||
           point.origemCoordenada?.includes("jitter")
         );
 
+        let lat = point.latitude!;
+        let lng = point.longitude!;
+        if (isAprox && withCoords.length > 1) {
+          const angle = (idx * 137.5 * Math.PI) / 180;
+          const radius = 0.0012 * Math.sqrt((idx % 12) + 1);
+          lat += Math.sin(angle) * radius;
+          lng += Math.cos(angle) * radius;
+        }
+
+        boundPoints.push([lat, lng]);
+
         const icon = Leaflet.divIcon({
           className: "",
-          html: makePinHtml(cat, isAprox),
-          iconSize: [22, 22],
-          iconAnchor: [11, 11],
-          popupAnchor: [0, -14],
+          html: makePinHtml(commCat, isAprox),
+          iconSize: [30, 38],
+          iconAnchor: [15, 38],
+          popupAnchor: [0, -34],
         });
 
-        const aproxBanner = isAprox
-          ? `<div style="margin-top:8px;padding:6px 8px;background:#e0f2fe;border-radius:6px;font-size:11px;color:#0369a1;display:flex;gap:6px;">
-               <span>📍</span>
-               <span>Localização aproximada por município. A Receita Federal não fornece o endereço exato.</span>
-             </div>`
-          : "";
+        const gmapsUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+        const isRealCnpj = /^\d{14}$/.test(point.cnpj.replace(/\D/g, "")) && !point.cnpj.startsWith("G-") && !point.cnpj.startsWith("GOOGLE-");
+        const cnpjLine = isRealCnpj ? `${formatCnpj(point.cnpj)} · ` : "";
+        const levelText = potentialLabels[point.potentialLevel as keyof typeof potentialLabels] || point.potentialLevel;
+        const statusText = statusLabels[point.status as keyof typeof statusLabels] || point.status;
+        const levelColor = point.score >= 80 ? "#ED1C24" : point.score >= 65 ? "#C2410C" : "#1061AF";
 
-        const marker = Leaflet.marker([point.latitude!, point.longitude!], { icon }).bindPopup(
-          `<div class="deusa-map-popup">
-             <strong>${point.companyName}</strong>
-             <span>${formatCnpj(point.cnpj)} · ${point.city}/${point.uf}</span>
-             <dl>
-               <div><dt>Bairro</dt><dd>${point.bairro ?? "–"}</dd></div>
-               <div><dt>Score</dt><dd>${point.score}</dd></div>
-               <div><dt>Categoria</dt><dd>${clientCategoryLabels[cat]}</dd></div>
-             </dl>
-             ${aproxBanner}
+        const marker = Leaflet.marker([lat, lng], { icon }).bindPopup(
+          `<div class="deusa-map-popup" style="font-family:Inter,system-ui,sans-serif;padding:2px;width:240px;">
+             <div style="font-size:13px;font-weight:700;color:#0B1F33;line-height:1.2;">${point.companyName}</div>
+             <div style="font-size:11px;color:#64748B;margin-top:2px;">${point.city}/${point.uf}</div>
+             
+             <div style="margin-top:8px;padding-top:6px;border-top:1px solid #E2E8F0;display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:11px;">
+               <div><span style="color:#64748B;">CNAE:</span> <strong style="color:#0B1F33;">${formatCnae(point.cnaePrincipal)}</strong></div>
+               <div><span style="color:#64748B;">Score:</span> <strong style="color:#0B1F33;">${point.score}/100</strong></div>
+               <div><span style="color:#64748B;">Status:</span> <strong style="color:#0B1F33;">${statusText}</strong></div>
+               <div><span style="color:#64748B;">Nível:</span> <strong style="color:${levelColor};">${levelText}</strong></div>
+               <div style="grid-column:span 2;"><span style="color:#64748B;">Responsável:</span> <strong style="color:#0B1F33;">${point.responsibleName || "Não atribuído"}</strong></div>
+             </div>
+
+             <div style="margin-top:8px;padding-top:6px;border-top:1px solid #E2E8F0;display:flex;align-items:center;justify-content:space-between;gap:6px;">
+               <a href="/leads-b2b/${point.id}" style="display:inline-flex;align-items:center;gap:4px;padding:6px 12px;border-radius:6px;background:#0B1F33;color:#FFFFFF;text-decoration:none;font-size:11px;font-weight:700;">
+                 Abrir oportunidade →
+               </a>
+               <a href="${gmapsUrl}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:4px;padding:6px 10px;border-radius:6px;background:#F1F5F9;color:#0B1F33;text-decoration:none;font-size:11px;font-weight:600;">
+                 Traçar rota
+               </a>
+             </div>
            </div>`,
-          { maxWidth: 300, minWidth: 220 },
+          { maxWidth: 280, minWidth: 230 },
         );
 
         group.addLayer(marker);
         markerById.current.set(point.id, marker);
       });
 
-      if (!mapRef.current) return; // guard: may have unmounted
+      if (!mapRef.current) return;
       group.addTo(mapRef.current);
       clusterRef.current = group;
 
-      const bounds = Leaflet.latLngBounds(withCoords.map((p) => [p.latitude!, p.longitude!]));
+      const bounds = Leaflet.latLngBounds(boundPoints);
       if (bounds.isValid()) {
-        if (withCoords.length === 1) mapRef.current.setView(bounds.getCenter(), 13);
-        else mapRef.current.fitBounds(bounds.pad(0.22), { maxZoom: 11 });
+        if (withCoords.length === 1) mapRef.current.setView(bounds.getCenter(), 14);
+        else mapRef.current.fitBounds(bounds.pad(0.12), { maxZoom: 14 });
       }
     })();
   }, [withCoords, mapStatus, clustersOn]);
 
   // --- counts ---
-  const clienteCount = filtered.filter((p) => getClientCategory(p.status) === "CLIENTE").length;
-  const potencialCount = filtered.filter((p) => getClientCategory(p.status) === "POTENCIAL").length;
-  const naoClienteCount = filtered.filter(
-    (p) => getClientCategory(p.status) === "NAO_CLIENTE",
-  ).length;
+  const clienteCount = filtered.filter((p) => getCommercialCategory(p) === "CLIENTE").length;
+  const criticaCount = filtered.filter((p) => getCommercialCategory(p) === "CRITICO").length;
+  const prospectCount = filtered.filter((p) => getCommercialCategory(p) === "PROSPECT").length;
   const aproxCount = withCoords.filter(
     (p) => p.origemCoordenada?.includes("centroide") || p.origemCoordenada?.includes("jitter"),
   ).length;
@@ -340,26 +433,39 @@ function OpportunityMap() {
     <div>
       <PageHeader
         title="Mapa"
-        subtitle="Veja onde estão as oportunidades comerciais com coordenadas válidas."
+        subtitle="Visualização operacional e inteligência territorial de oportunidades B2B."
         actions={
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleDiscoverMarkets}
+              disabled={isDiscovering}
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#DDE5EF] bg-white px-3 text-xs font-bold text-[#0B1F33] transition hover:border-[#1061AF] disabled:opacity-50"
+              title="Selecione UF e Cidade nos filtros para descobrir mercados via Google Places"
+            >
+              {isDiscovering ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-[#1061AF]" />
+              ) : (
+                <Search className="h-3.5 w-3.5 text-[#1061AF]" />
+              )}
+              {isDiscovering ? "Descobrindo..." : "Descobrir Mercados"}
+            </button>
             <button
               onClick={handleOptimizeLocations}
               disabled={isOptimizing}
-              className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#DDE5EF] bg-white px-4 text-sm font-bold text-[#0B1F33] transition hover:bg-[#F8FAFC] disabled:opacity-50"
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#DDE5EF] bg-white px-3 text-xs font-bold text-[#0B1F33] transition hover:border-[#1061AF] disabled:opacity-50"
             >
               {isOptimizing ? (
-                <Loader2 className="h-4 w-4 animate-spin text-[#1061AF]" />
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-[#1061AF]" />
               ) : (
-                <MapPin className="h-4 w-4 text-[#1061AF]" />
+                <MapPin className="h-3.5 w-3.5 text-[#1061AF]" />
               )}
               {isOptimizing ? "Otimizando..." : "Otimizar Localizações"}
             </button>
             <Link
               to="/importar-cnpjs"
-              className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#0B1F33] px-4 text-sm font-bold text-white transition hover:bg-[#1061AF]"
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#0B1F33] px-3.5 text-xs font-bold text-white transition hover:bg-[#1061AF]"
             >
-              <FileUp className="h-4 w-4 text-[#FFF200]" />
+              <FileUp className="h-3.5 w-3.5 text-[#FFF200]" />
               Importar CNPJs
             </Link>
           </div>
@@ -416,7 +522,24 @@ function OpportunityMap() {
       {/* Filters */}
       <section className="mb-4 rounded-xl border border-[#DDE5EF] bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-end gap-3">
-          <label className="block min-w-[180px]">
+          <label className="block min-w-[220px] flex-1">
+            <span className="mb-1 flex items-center gap-1.5 text-[11px] font-bold uppercase text-[#64748B]">
+              <Search className="h-3.5 w-3.5 text-[#1061AF]" />
+              Pesquisar Comércio / Empresa
+            </span>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#94A3B8]" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Nome do comércio, CNPJ, bairro..."
+                className="h-10 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] pl-9 pr-3 text-sm text-[#0B1F33] outline-none transition placeholder:text-[#94A3B8] focus:border-[#1061AF] focus:bg-white"
+              />
+            </div>
+          </label>
+
+          <label className="block min-w-[160px]">
             <span className="mb-1 flex items-center gap-1.5 text-[11px] font-bold uppercase text-[#64748B]">
               <Filter className="h-3.5 w-3.5" />
               Estado (UF)
@@ -431,12 +554,12 @@ function OpportunityMap() {
             >
               <option>Todos</option>
               {ESTADOS_UF.map((uf) => (
-                  <option key={uf}>{uf}</option>
-                ))}
+                <option key={uf}>{uf}</option>
+              ))}
             </select>
           </label>
 
-          <label className="block min-w-[180px]">
+          <label className="block min-w-[160px]">
             <span className="mb-1 block text-[11px] font-bold uppercase text-[#64748B]">
               Cidade
             </span>
@@ -446,7 +569,7 @@ function OpportunityMap() {
               className="h-10 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-sm text-[#0B1F33] outline-none focus:border-[#1061AF]"
             >
               <option>Todas</option>
-              {Array.from(new Set(opportunities.filter(p => selectedUf === "Todos" || p.uf === selectedUf).map((p) => p.city)))
+              {Array.from(new Set(opportunities.filter((p) => selectedUf === "Todos" || p.uf === selectedUf).map((p) => p.city)))
                 .filter(Boolean)
                 .sort()
                 .map((city) => (
@@ -455,7 +578,7 @@ function OpportunityMap() {
             </select>
           </label>
 
-          <label className="block min-w-[180px]">
+          <label className="block min-w-[170px]">
             <span className="mb-1 block text-[11px] font-bold uppercase text-[#64748B]">
               Categoria
             </span>
@@ -464,10 +587,27 @@ function OpportunityMap() {
               onChange={(e) => setSelectedCategory(e.target.value)}
               className="h-10 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-sm text-[#0B1F33] outline-none focus:border-[#1061AF]"
             >
+              <option value="Todas">Todas</option>
+              <option value="CLIENTE">Cliente Ativo</option>
+              <option value="CRITICO">Oportunidade Crítica (Score ≥ 80)</option>
+              <option value="PROSPECT">Prospect Normal</option>
+            </select>
+          </label>
+
+          <label className="block min-w-[160px]">
+            <span className="mb-1 flex items-center gap-1.5 text-[11px] font-bold uppercase text-[#64748B]">
+              <Navigation className="h-3.5 w-3.5" />
+              Precisão
+            </span>
+            <select
+              value={selectedPrecision}
+              onChange={(e) => setSelectedPrecision(e.target.value)}
+              className="h-10 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-sm text-[#0B1F33] outline-none focus:border-[#1061AF]"
+            >
               <option>Todas</option>
-              <option value="CLIENTE">Cliente</option>
-              <option value="POTENCIAL">Potencial Cliente</option>
-              <option value="NAO_CLIENTE">Não Cliente</option>
+              <option value="verificado">🟢 Verificado (90-100%)</option>
+              <option value="provavel">🟡 Provável (60-89%)</option>
+              <option value="aproximado">🔴 Aproximado (centroide)</option>
             </select>
           </label>
 
@@ -492,9 +632,11 @@ function OpportunityMap() {
 
           <button
             onClick={() => {
+              setSearchQuery("");
               setSelectedUf("Todos");
               setSelectedCity("Todas");
               setSelectedCategory("Todas");
+              setSelectedPrecision("Todas");
             }}
             className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#DDE5EF] bg-white text-[#64748B] transition hover:bg-[#F8FAFC] hover:text-[#0B1F33]"
             title="Limpar filtros"
@@ -507,75 +649,29 @@ function OpportunityMap() {
       {/* Summary counters */}
       {!dataLoading && opportunities.length > 0 && (
         <div className="mb-4 flex flex-wrap gap-3">
-          {/* Cliente */}
-          <div className="flex items-center gap-2 rounded-lg border border-[#DDE5EF] bg-white px-4 py-2 text-sm shadow-sm">
-            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#16A34A]">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="11"
-                height="11"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="#fff"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
-                <line x1="3" y1="6" x2="21" y2="6" />
-                <path d="M16 10a4 4 0 0 1-8 0" />
-              </svg>
-            </span>
-            <span className="font-semibold text-[#0B1F33]">Clientes:</span>
-            <span className="font-bold text-[#16A34A]">{clienteCount}</span>
+          {/* Cliente Ativo */}
+          <div className="flex items-center gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50/70 px-4 py-2 text-sm shadow-xs">
+            <span className="h-2.5 w-2.5 rounded-full bg-[#16A34A]" />
+            <span className="font-semibold text-slate-700">Clientes Ativos:</span>
+            <span className="font-extrabold text-[#16A34A] text-base">{clienteCount}</span>
           </div>
-          {/* Potencial */}
-          <div className="flex items-center gap-2 rounded-lg border border-[#DDE5EF] bg-white px-4 py-2 text-sm shadow-sm">
-            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#D97706]">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="11"
-                height="11"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="#fff"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <circle cx="12" cy="12" r="10" />
-                <circle cx="12" cy="12" r="6" />
-                <circle cx="12" cy="12" r="2" />
-              </svg>
-            </span>
-            <span className="font-semibold text-[#0B1F33]">Potenciais:</span>
-            <span className="font-bold text-[#D97706]">{potencialCount}</span>
+          {/* Oportunidades Críticas */}
+          <div className="flex items-center gap-2.5 rounded-xl border border-red-200 bg-red-50/70 px-4 py-2 text-sm shadow-xs">
+            <span className="h-2.5 w-2.5 rounded-full bg-[#ED1C24]" />
+            <span className="font-semibold text-slate-700">Oportunidades Críticas:</span>
+            <span className="font-extrabold text-[#ED1C24] text-base">{criticaCount}</span>
           </div>
-          {/* Não cliente */}
-          <div className="flex items-center gap-2 rounded-lg border border-[#DDE5EF] bg-white px-4 py-2 text-sm shadow-sm">
-            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#DC2626]">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="11"
-                height="11"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="#fff"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-            </span>
-            <span className="font-semibold text-[#0B1F33]">Não clientes:</span>
-            <span className="font-bold text-[#DC2626]">{naoClienteCount}</span>
+          {/* Prospects Mapeados */}
+          <div className="flex items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-100/80 px-4 py-2 text-sm shadow-xs">
+            <span className="h-2.5 w-2.5 rounded-full bg-[#1061AF]" />
+            <span className="font-semibold text-slate-700">Prospects Mapeados:</span>
+            <span className="font-extrabold text-[#0B1F33] text-base">{prospectCount}</span>
           </div>
           {/* No mapa */}
-          <div className="flex items-center gap-2 rounded-lg border border-[#DDE5EF] bg-white px-4 py-2 text-sm shadow-sm">
-            <span className="font-semibold text-[#0B1F33]">📍 No mapa:</span>
-            <span className="font-bold text-[#1061AF]">{withCoords.length}</span>
+          <div className="flex items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm shadow-xs">
+            <MapPin className="h-4 w-4 text-[#1061AF]" />
+            <span className="font-semibold text-slate-700">No mapa:</span>
+            <span className="font-extrabold text-[#0B1F33] text-base">{withCoords.length}</span>
           </div>
         </div>
       )}
@@ -595,65 +691,24 @@ function OpportunityMap() {
           description="Não há oportunidades cadastradas. Importe novos CNPJs."
         />
       ) : (
-        <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <section className="w-full">
           {/* Map card */}
           <div className="overflow-hidden rounded-xl border border-[#DDE5EF] bg-white shadow-sm">
             {/* Header with legend */}
-            <div className="flex flex-col gap-3 border-b border-[#DDE5EF] px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
-              <h2 className="text-lg font-bold text-[#0B1F33]">Oportunidades no mapa</h2>
+            <div className="flex flex-col gap-3 border-b border-[#DDE5EF] px-5 py-3 lg:flex-row lg:items-center lg:justify-between bg-[#F8FAFC]">
+              <h2 className="text-sm font-bold text-[#0B1F33]">Oportunidades no mapa</h2>
               <div className="flex flex-wrap gap-2">
-                <span className="flex items-center gap-1.5 rounded-full bg-[#DCFCE7] px-3 py-1 text-xs font-bold text-[#16A34A]">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="11"
-                    height="11"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
-                    <line x1="3" y1="6" x2="21" y2="6" />
-                    <path d="M16 10a4 4 0 0 1-8 0" />
-                  </svg>
-                  Cliente
+                <span className="flex items-center gap-1.5 rounded-full border border-emerald-300/60 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-800">
+                  <span className="h-2 w-2 rounded-full bg-[#16A34A]" />
+                  Cliente Ativo
                 </span>
-                <span className="flex items-center gap-1.5 rounded-full bg-[#FEF3C7] px-3 py-1 text-xs font-bold text-[#D97706]">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="11"
-                    height="11"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <circle cx="12" cy="12" r="10" />
-                    <circle cx="12" cy="12" r="6" />
-                    <circle cx="12" cy="12" r="2" />
-                  </svg>
-                  Potencial
+                <span className="flex items-center gap-1.5 rounded-full border border-red-300/60 bg-red-50 px-2.5 py-0.5 text-xs font-semibold text-red-800">
+                  <span className="h-2 w-2 rounded-full bg-[#ED1C24]" />
+                  Oportunidade Crítica (Score ≥ 80)
                 </span>
-                <span className="flex items-center gap-1.5 rounded-full bg-[#FEE2E2] px-3 py-1 text-xs font-bold text-[#DC2626]">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="11"
-                    height="11"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <line x1="18" y1="6" x2="6" y2="18" />
-                    <line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                  Não cliente
+                <span className="flex items-center gap-1.5 rounded-full border border-slate-300/60 bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700">
+                  <span className="h-2 w-2 rounded-full bg-[#1061AF]" />
+                  Prospect Normal
                 </span>
               </div>
             </div>
@@ -670,7 +725,7 @@ function OpportunityMap() {
             )}
 
             {/* Map container */}
-            <div className="relative h-[620px] bg-[#E8EEF5]">
+            <div className="relative h-[680px] bg-[#E8EEF5]">
               <div ref={mapElRef} className="h-full w-full" />
 
               {mapStatus === "loading" && (
@@ -696,58 +751,6 @@ function OpportunityMap() {
               )}
             </div>
           </div>
-
-          {/* Top leads sidebar */}
-          <aside className="rounded-xl border border-[#DDE5EF] bg-white p-4 shadow-sm">
-            <h2 className="text-lg font-bold text-[#0B1F33]">Top oportunidades</h2>
-            {topLeads.length === 0 ? (
-              <p className="mt-4 text-sm text-[#64748B]">Nenhuma oportunidade para listar.</p>
-            ) : (
-              <div className="mt-4 space-y-3">
-                {topLeads.map((point) => {
-                  const cat = getClientCategory(point.status);
-                  const c = CATEGORY_CONFIG[cat];
-                  const canFly = typeof point.latitude === "number";
-                  return (
-                    <div
-                      key={point.id}
-                      className={`rounded-lg border border-[#EEF2F7] p-3 transition-colors ${canFly ? "cursor-pointer hover:border-[#1061AF]" : ""}`}
-                      onClick={() => {
-                        if (canFly) {
-                          mapRef.current?.flyTo([point.latitude!, point.longitude!], 15);
-                          setTimeout(() => markerById.current.get(point.id)?.openPopup(), 800);
-                          window.scrollTo({ top: 0, behavior: "smooth" });
-                        }
-                      }}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex items-center gap-2">
-                          <span
-                            className="h-2.5 w-2.5 shrink-0 rounded-full"
-                            style={{ background: c.bg }}
-                          />
-                          <div>
-                            <div className="font-bold leading-snug text-[#0B1F33]">
-                              {point.companyName}
-                            </div>
-                            <div className="mt-0.5 text-xs text-[#64748B]">
-                              {point.city}/{point.uf}
-                            </div>
-                          </div>
-                        </div>
-                        <span className="shrink-0 rounded-md bg-[#1061AF]/10 px-2 py-1 text-xs font-bold text-[#0F58A0]">
-                          {point.score}
-                        </span>
-                      </div>
-                      <div className="mt-2 text-xs font-bold" style={{ color: c.bg }}>
-                        {clientCategoryLabels[cat]}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </aside>
         </section>
       )}
 

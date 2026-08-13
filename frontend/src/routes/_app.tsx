@@ -2,7 +2,7 @@ import { createFileRoute, Outlet, redirect, useNavigate } from "@tanstack/react-
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Topbar } from "@/components/layout/Topbar";
 import { AuthService } from "@/lib/auth";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 export const Route = createFileRoute("/_app")({
   beforeLoad: () => {
@@ -17,6 +17,26 @@ export const Route = createFileRoute("/_app")({
 
 function AppLayout() {
   const navigate = useNavigate();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("deusa_sidebar_collapsed") === "true";
+    }
+    return false;
+  });
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  const handleToggleSidebar = () => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      if (typeof window !== "undefined") {
+        localStorage.setItem("deusa_sidebar_collapsed", String(next));
+      }
+      return next;
+    });
+  };
+
+  const handleOpenMobile = () => setMobileOpen(true);
+  const handleCloseMobile = () => setMobileOpen(false);
 
   useEffect(() => {
     if (!AuthService.isAuthenticated()) {
@@ -26,11 +46,16 @@ function AppLayout() {
 
   return (
     <div className="flex h-screen bg-[#F5F7FA] text-[#0B1F33]">
-      <Sidebar />
+      <Sidebar
+        collapsed={sidebarCollapsed}
+        onToggle={handleToggleSidebar}
+        mobileOpen={mobileOpen}
+        onMobileClose={handleCloseMobile}
+      />
       <div className="flex-1 flex flex-col min-w-0">
-        <Topbar />
+        <Topbar onOpenMobile={handleOpenMobile} />
         <main className="flex-1 overflow-y-auto">
-          <div className="p-6 lg:p-8 max-w-[1600px] mx-auto">
+          <div className="p-4 md:p-6 lg:p-8 max-w-[1600px] mx-auto">
             <Outlet />
           </div>
         </main>
