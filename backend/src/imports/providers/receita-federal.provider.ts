@@ -31,12 +31,31 @@ import { isValidCnpj } from "../../common/cnpj-validator";
 import { normalizeCnpj } from "../../common/cnpj";
 import { CnpjProvider, CnpjSearchPayload, ExternalCompany } from "./cnpj-provider.interface";
 
-// ─── Mapeamento Cidade → Código TOM da Receita Federal ─────────────────────
+// ─── Mapeamento Cidade → Código TOM da Receita Federal (26 Cidades Monitoradas) ─
 const CITY_TOM_MAP: Record<string, string> = {
   tupa: "7201",
+  tupã: "7201",
   marilia: "6681",
+  marília: "6681",
   pompeia: "6901",
+  pompéia: "6901",
   garca: "6475",
+  garça: "6475",
+  quintana: "6951",
+  "vera cruz": "7237",
+  veracruz: "7237",
+  oriente: "6817",
+  echapora: "6389",
+  echaporã: "6389",
+  herculandia: "6515",
+  herculândia: "6515",
+  iacri: "6537",
+  parapua: "6845",
+  parapuã: "6845",
+  rinopolis: "6979",
+  rinópolis: "6979",
+  galia: "6471",
+  gália: "6471",
   bastos: "6215",
   assis: "6179",
   ourinhos: "6795",
@@ -44,6 +63,12 @@ const CITY_TOM_MAP: Record<string, string> = {
   bauru: "6219",
   "presidente prudente": "6929",
   aracatuba: "6155",
+  araçatuba: "6155",
+  adamantina: "6101",
+  lucelia: "6653",
+  lucélia: "6653",
+  "osvaldo cruz": "6825",
+  dracena: "6377",
   "ribeirao preto": "6969",
   "ribeirão preto": "6969",
   franca: "6425",
@@ -55,6 +80,15 @@ const TOM_CITY_MAP: Record<string, string> = {
   "6681": "Marília",
   "6901": "Pompeia",
   "6475": "Garça",
+  "6951": "Quintana",
+  "7237": "Vera Cruz",
+  "6817": "Oriente",
+  "6389": "Echaporã",
+  "6515": "Herculândia",
+  "6537": "Iacri",
+  "6845": "Parapuã",
+  "6979": "Rinópolis",
+  "6471": "Gália",
   "6215": "Bastos",
   "6179": "Assis",
   "6795": "Ourinhos",
@@ -62,6 +96,10 @@ const TOM_CITY_MAP: Record<string, string> = {
   "6219": "Bauru",
   "6929": "Presidente Prudente",
   "6155": "Araçatuba",
+  "6101": "Adamantina",
+  "6653": "Lucélia",
+  "6825": "Osvaldo Cruz",
+  "6377": "Dracena",
   "6969": "Ribeirão Preto",
   "6425": "Franca",
 };
@@ -72,6 +110,15 @@ const CITY_COORDS: Record<string, { lat: number; lng: number }> = {
   "Marília": { lat: -22.2172, lng: -49.9501 },
   "Pompeia": { lat: -22.1070, lng: -50.1712 },
   "Garça": { lat: -22.2125, lng: -49.6546 },
+  "Quintana": { lat: -22.0722, lng: -50.3125 },
+  "Vera Cruz": { lat: -22.2225, lng: -49.8211 },
+  "Oriente": { lat: -22.1558, lng: -49.9961 },
+  "Echaporã": { lat: -22.4294, lng: -50.2106 },
+  "Herculândia": { lat: -21.9744, lng: -50.3806 },
+  "Iacri": { lat: -21.8586, lng: -50.6881 },
+  "Parapuã": { lat: -21.7778, lng: -50.8447 },
+  "Rinópolis": { lat: -21.7247, lng: -50.7192 },
+  "Gália": { lat: -22.2889, lng: -49.5544 },
   "Bastos": { lat: -21.9210, lng: -50.7358 },
   "Assis": { lat: -22.6612, lng: -50.4113 },
   "Ourinhos": { lat: -22.9787, lng: -49.8701 },
@@ -79,12 +126,16 @@ const CITY_COORDS: Record<string, { lat: number; lng: number }> = {
   "Bauru": { lat: -22.3231, lng: -49.0738 },
   "Presidente Prudente": { lat: -22.1211, lng: -51.3881 },
   "Araçatuba": { lat: -21.2059, lng: -50.4389 },
+  "Adamantina": { lat: -21.6859, lng: -51.0735 },
+  "Lucélia": { lat: -21.7199, lng: -51.0181 },
+  "Osvaldo Cruz": { lat: -21.7946, lng: -50.8795 },
+  "Dracena": { lat: -21.4828, lng: -51.5322 },
   "Ribeirão Preto": { lat: -21.1784, lng: -47.8063 },
   "Franca": { lat: -20.5386, lng: -47.4008 },
 };
 
-// ─── CNAEs alvo do produto (Supermercados, Minimercados, Açougues, Hortifrúti, Padarias e Atacados) ─
-const TARGET_CNAES = ["4711302", "4712100", "4722901", "4724500", "4721102", "4729699", "4723700", "4639701"];
+// ─── CNAEs alvo do produto (PRIMARY: 4711302, 4712100, 4729699 | SECONDARY: 4639701, 4721102) ─
+const TARGET_CNAES = ["4711302", "4712100", "4729699", "4639701", "4721102"];
 const PRIORITY_CITIES = Object.values(TOM_CITY_MAP);
 
 @Injectable()

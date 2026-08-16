@@ -557,11 +557,13 @@ export class CompaniesService {
           });
         }
 
-        report.cnpjsProcessados.push(company.cnpj);
+        if (company.cnpj) {
+          report.cnpjsProcessados.push(company.cnpj);
+        }
         report.totalProcessed++;
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
-        report.erros.push(`Erro no CNPJ ${company.cnpj}: ${errMsg}`);
+        report.erros.push(`Erro na empresa ${company.cnpj || company.id}: ${errMsg}`);
       }
 
       // Delay de 500ms entre as chamadas para rate limiting

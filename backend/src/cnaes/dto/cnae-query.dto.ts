@@ -1,5 +1,5 @@
 import { Type } from "class-transformer";
-import { IsIn, IsInt, IsOptional, IsString, Max, Min } from "class-validator";
+import { IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min } from "class-validator";
 
 export class CnaeQueryDto {
   @IsOptional()
@@ -17,6 +17,7 @@ export class CnaeQueryDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(120)
   search?: string;
 
   @IsOptional()

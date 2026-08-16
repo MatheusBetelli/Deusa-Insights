@@ -1,9 +1,11 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from "@nestjs/common";
+import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { AuthGuard } from "../auth/auth.guard";
 import { CnaesService } from "./cnaes.service";
 import { CnaeQueryDto } from "./dto/cnae-query.dto";
 import { CreateCnaeDto } from "./dto/create-cnae.dto";
 import { UpdateCnaeDto } from "./dto/update-cnae.dto";
 
+@UseGuards(AuthGuard)
 @Controller("cnaes")
 export class CnaesController {
   constructor(private readonly cnaesService: CnaesService) {}

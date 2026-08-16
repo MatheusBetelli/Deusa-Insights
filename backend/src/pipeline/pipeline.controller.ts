@@ -1,7 +1,9 @@
-import { Controller, Get, Param, Query } from "@nestjs/common";
+import { Controller, Get, Param, Query, UseGuards } from "@nestjs/common";
+import { AuthGuard } from "../auth/auth.guard";
 import { PipelineQueryDto } from "./dto/pipeline-query.dto";
 import { PipelineService } from "./pipeline.service";
 
+@UseGuards(AuthGuard)
 @Controller("pipeline")
 export class PipelineController {
   constructor(private readonly pipelineService: PipelineService) {}

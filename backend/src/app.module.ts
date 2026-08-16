@@ -16,6 +16,8 @@ import { PrismaModule } from "./prisma/prisma.module";
 import { UsersModule } from "./users/users.module";
 import { ClassificationModule } from "./classification/classification.module";
 
+import { NotificationsModule } from "./notifications/notifications.module";
+
 import { HealthModule } from "./health/health.module";
 
 @Module({
@@ -41,6 +43,7 @@ import { HealthModule } from "./health/health.module";
     MapOpportunitiesModule,
     PipelineModule,
     ClassificationModule,
+    NotificationsModule,
   ],
   providers: [
     {

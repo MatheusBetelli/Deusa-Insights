@@ -186,7 +186,35 @@ export class ImportsService {
         });
         createdCount++;
         processedCompanies.push(newCompany);
+        company = newCompany;
       }
+
+      // Persiste na base comercial privada client_accounts
+      const codCliente = normalizedRow.codigo || normalizedRow.codigocliente || normalizedRow.cod || `EXCEL-${cnpj || Date.now()}`;
+      await this.prisma.clientAccount.upsert({
+        where: { codigoClienteDeusa: codCliente },
+        update: {
+          cnpj: cnpj.length === 14 ? cnpj : null,
+          razaoSocial: nome,
+          nomeFantasia: nome,
+          cidade,
+          uf,
+          companyId: company?.id || null,
+          isCurrentClient: true,
+          lastImportAt: new Date(),
+        },
+        create: {
+          codigoClienteDeusa: codCliente,
+          cnpj: cnpj.length === 14 ? cnpj : null,
+          razaoSocial: nome,
+          nomeFantasia: nome,
+          cidade,
+          uf,
+          companyId: company?.id || null,
+          isCurrentClient: true,
+          lastImportAt: new Date(),
+        },
+      }).catch(() => null);
     }
 
     // Calcula resumo de Abate para a região (Ribeirão Preto & Franca)

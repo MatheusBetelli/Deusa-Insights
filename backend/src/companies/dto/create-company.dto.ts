@@ -1,26 +1,32 @@
 import { Type } from "class-transformer";
-import { IsArray, IsDate, IsNumber, IsOptional, IsString } from "class-validator";
+import { IsArray, IsDate, IsNumber, IsOptional, IsString, Length, MaxLength } from "class-validator";
 
 export class CreateCompanyDto {
   @IsString()
+  @MaxLength(32)
   cnpj!: string;
 
   @IsString()
+  @MaxLength(255)
   razaoSocial!: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(255)
   nomeFantasia?: string;
 
   @IsString()
+  @MaxLength(40)
   situacaoCadastral!: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(40)
   porte?: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(40)
   matrizFilial?: string;
 
   @IsOptional()
@@ -30,32 +36,40 @@ export class CreateCompanyDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(20)
   cnaePrincipal?: string;
 
   @IsString()
+  @Length(2, 2)
   uf!: string;
 
   @IsString()
+  @MaxLength(120)
   cidade!: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(120)
   bairro?: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(16)
   cep?: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(160)
   logradouro?: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(20)
   numero?: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(120)
   complemento?: string;
 
   @IsOptional()
@@ -70,10 +84,12 @@ export class CreateCompanyDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(80)
   source?: string;
 
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
+  @MaxLength(20, { each: true })
   cnaes?: string[];
 }

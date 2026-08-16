@@ -1,32 +1,47 @@
-import { Controller, Get, Post, Query } from "@nestjs/common";
+import { Controller, Get, Post, Query, UseGuards } from "@nestjs/common";
+import { Transform } from "class-transformer";
+import { IsOptional, IsString, IsNotEmpty, Length, Matches, MaxLength } from "class-validator";
+import { Throttle } from "@nestjs/throttler";
+import { AuthGuard } from "../auth/auth.guard";
 import { MapOpportunitiesService } from "./map-opportunities.service";
-import { IsOptional, IsString, IsNotEmpty } from "class-validator";
 
-// DTO simplificado — somente filtros regionais (sem validação individual)
 class HeatmapQueryDto {
   @IsOptional()
   @IsString()
+  @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
+  @Matches(/^(Todos|[A-Za-z]{2})$/, { message: "estado deve ser uma UF válida" })
   estado?: string;
 
   @IsOptional()
   @IsString()
+  @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
+  @MaxLength(120)
   municipio?: string;
 
   @IsOptional()
   @IsString()
+  @Transform(({ value }) => {
+    if (typeof value !== "string" || value === "Todos") return value;
+    return value.replace(/\D/g, "");
+  })
+  @Matches(/^(Todos|\d{7})$/, { message: "cnae deve conter 7 dígitos" })
   cnae?: string;
 }
 
 class DiscoverRegionDto {
   @IsNotEmpty({ message: "A cidade é obrigatória" })
   @IsString()
+  @MaxLength(120)
   cidade!: string;
 
   @IsNotEmpty({ message: "O estado (UF) é obrigatório" })
   @IsString()
+  @Length(2, 2)
+  @Matches(/^[A-Za-z]{2}$/, { message: "uf deve ser uma UF válida" })
   uf!: string;
 }
 
+@UseGuards(AuthGuard)
 @Controller("map")
 export class MapOpportunitiesController {
   constructor(private readonly mapOpportunitiesService: MapOpportunitiesService) {}
@@ -45,6 +60,7 @@ export class MapOpportunitiesController {
    * Retorna: { success, message, discovered, existing, total }
    */
   @Post("discover-region")
+  @Throttle({ default: { ttl: 60000, limit: 6 } })
   discoverRegion(@Query() query: DiscoverRegionDto) {
     return this.mapOpportunitiesService.discoverRegion(query.cidade, query.uf);
   }
@@ -72,4 +88,3 @@ export class MapOpportunitiesController {
     });
   }
 }
-

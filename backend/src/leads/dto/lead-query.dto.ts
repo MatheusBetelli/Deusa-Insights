@@ -1,5 +1,5 @@
 import { Type } from "class-transformer";
-import { IsEnum, IsIn, IsInt, IsOptional, IsString, Max, Min } from "class-validator";
+import { IsEnum, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min } from "class-validator";
 import { LeadStatus, PotentialLevel } from "@prisma/client";
 
 export class LeadQueryDto {
@@ -40,14 +40,17 @@ export class LeadQueryDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(120)
   city?: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(2)
   uf?: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(20)
   cnae?: string;
 
   @IsOptional()
@@ -74,21 +77,26 @@ export class LeadQueryDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(64)
   assignedToId?: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(120)
   search?: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(40)
   statusVerificacaoEndereco?: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(10)
   pendenteValidacao?: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(40)
   situacaoCadastral?: string;
 }

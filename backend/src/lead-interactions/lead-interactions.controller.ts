@@ -1,7 +1,9 @@
-import { Body, Controller, Get, Param, Post } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
+import { AuthGuard } from "../auth/auth.guard";
 import { CreateLeadInteractionDto } from "./dto/create-lead-interaction.dto";
 import { LeadInteractionsService } from "./lead-interactions.service";
 
+@UseGuards(AuthGuard)
 @Controller("leads/:id/interactions")
 export class LeadInteractionsController {
   constructor(private readonly leadInteractionsService: LeadInteractionsService) {}

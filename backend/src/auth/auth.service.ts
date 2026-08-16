@@ -6,6 +6,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { ChangePasswordDto } from "./dto/change-password.dto";
 import { LoginDto } from "./dto/login.dto";
 import { ResetPasswordDto } from "./dto/reset-password.dto";
+import { escapeHtml } from "../common/html-safety";
 
 @Injectable()
 export class AuthService {
@@ -55,7 +56,7 @@ export class AuthService {
     const passwordMatches = await bcrypt.compare(dto.currentPassword, user.passwordHash);
     if (!passwordMatches) throw new UnauthorizedException("Senha atual inválida");
 
-    const passwordHash = await bcrypt.hash(dto.newPassword, 10);
+    const passwordHash = await bcrypt.hash(dto.newPassword, 12);
     await this.prisma.user.update({
       where: { id: userId },
       data: { passwordHash },
@@ -75,6 +76,8 @@ export class AuthService {
 
       const frontendUrl = process.env.FRONTEND_URL || "http://localhost:8080";
       const resetLink = `${frontendUrl}/reset-password?token=${resetToken}`;
+      const safeResetLink = escapeHtml(resetLink);
+      const safeUserName = escapeHtml(user.name);
 
       const resendApiKey = process.env.RESEND_API_KEY;
       if (resendApiKey) {
@@ -88,22 +91,23 @@ export class AuthService {
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
                 <h2 style="color: #1061AF; margin-top: 0;">Deusa Analytics</h2>
                 <h3 style="color: #0f172a;">Solicitação de Redefinição de Senha</h3>
-                <p style="color: #334155; font-size: 15px; line-height: 1.5;">Olá, <strong>${user.name}</strong>!</p>
+                <p style="color: #334155; font-size: 15px; line-height: 1.5;">Olá, <strong>${safeUserName}</strong>!</p>
                 <p style="color: #334155; font-size: 15px; line-height: 1.5;">Recebemos uma solicitação para redefinir a senha da sua conta corporativa.</p>
                 <div style="margin: 28px 0; text-align: center;">
-                  <a href="${resetLink}" style="background-color: #1061AF; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 15px; display: inline-block; box-shadow: 0 4px 6px -1px rgba(16, 97, 175, 0.2);">Redefinir Minha Senha</a>
+                  <a href="${safeResetLink}" style="background-color: #1061AF; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 15px; display: inline-block; box-shadow: 0 4px 6px -1px rgba(16, 97, 175, 0.2);">Redefinir Minha Senha</a>
                 </div>
                 <p style="color: #64748b; font-size: 13px; line-height: 1.5; margin-bottom: 0;">Se você não solicitou a redefinição de senha, ignore este e-mail com segurança. Este link expira em 1 hora.</p>
               </div>
             `,
           });
         } catch (error) {
-          console.error("[Resend Email Error]:", error);
+          console.error("[Resend Email Error]:", error instanceof Error ? error.message : "Falha ao enviar e-mail");
         }
-      } else {
+      } else if (process.env.NODE_ENV !== "production") {
+        const redactedResetLink = resetLink.replace(/token=[^&]+/, "token=<redacted>");
         console.log(`\n======================================================`);
         console.log(`[LINK DE REDEFINIÇÃO DE SENHA GERADO - MODO DEV]`);
-        console.log(`Para testar acesse: ${resetLink}`);
+        console.log(`Link gerado para ${user.email}: ${redactedResetLink}`);
         console.log(`======================================================\n`);
       }
     }
@@ -134,7 +138,7 @@ export class AuthService {
       throw new UnauthorizedException("Usuário não encontrado.");
     }
 
-    const passwordHash = await bcrypt.hash(dto.newPassword, 10);
+    const passwordHash = await bcrypt.hash(dto.newPassword, 12);
     await this.prisma.user.update({
       where: { id: user.id },
       data: { passwordHash },
@@ -143,5 +147,4 @@ export class AuthService {
     return { message: "Sua senha foi redefinida com sucesso! Você já pode fazer login com sua nova senha." };
   }
 }
-
 

@@ -1,5 +1,5 @@
 import { Type } from "class-transformer";
-import { IsInt, IsOptional, IsString, Max, Min } from "class-validator";
+import { IsInt, IsOptional, IsString, Max, MaxLength, Min } from "class-validator";
 
 export class PipelineQueryDto {
   @IsOptional()
@@ -24,17 +24,21 @@ export class PipelineQueryDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(120)
   search?: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(2)
   uf?: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(120)
   city?: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(20)
   cnae?: string;
 }

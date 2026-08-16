@@ -1,57 +1,13 @@
 import { Injectable, Logger } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { GeocodingService } from "../common/geocoding.service";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Tabela estática de centroides municipais (IBGE / OpenStreetMap)
-// Usada como fallback quando o município não tem coordenadas nas empresas
-// Fonte: dados públicos — sem API paga
-// ─────────────────────────────────────────────────────────────────────────────
-const IBGE_CENTROIDES: Record<string, { lat: number; lon: number }> = {
-  // SP — Marília, Tupã, Alta Paulista e Região
-  "tupã|sp": { lat: -21.9347, lon: -50.5136 },
-  "tupa|sp": { lat: -21.9347, lon: -50.5136 },
-  "presidente prudente|sp": { lat: -22.1208, lon: -51.3882 },
-  "pompeia|sp": { lat: -22.1085, lon: -50.1749 },
-  "pompéia|sp": { lat: -22.1085, lon: -50.1749 },
-  "araçatuba|sp": { lat: -21.2094, lon: -50.4384 },
-  "aracatuba|sp": { lat: -21.2094, lon: -50.4384 },
-  "marília|sp": { lat: -22.2139, lon: -49.9467 },
-  "marilia|sp": { lat: -22.2139, lon: -49.9467 },
-  "garça|sp": { lat: -22.2131, lon: -49.6553 },
-  "garca|sp": { lat: -22.2131, lon: -49.6553 },
-  "quintana|sp": { lat: -22.0722, lon: -50.3125 },
-  "vera cruz|sp": { lat: -22.2225, lon: -49.8211 },
-  "oriente|sp": { lat: -22.1558, lon: -49.9961 },
-  "echaporã|sp": { lat: -22.4294, lon: -50.2106 },
-  "echapora|sp": { lat: -22.4294, lon: -50.2106 },
-  "herculândia|sp": { lat: -21.9744, lon: -50.3806 },
-  "herculandia|sp": { lat: -21.9744, lon: -50.3806 },
-  "iacri|sp": { lat: -21.8586, lon: -50.6881 },
-  "parapuã|sp": { lat: -21.7778, lon: -50.8447 },
-  "parapua|sp": { lat: -21.7778, lon: -50.8447 },
-  "rinópolis|sp": { lat: -21.7247, lon: -50.7192 },
-  "rinopolis|sp": { lat: -21.7247, lon: -50.7192 },
-  "gália|sp": { lat: -22.2889, lon: -49.5544 },
-  "galia|sp": { lat: -22.2889, lon: -49.5544 },
-  "bastos|sp": { lat: -21.9235, lon: -50.7256 },
-  "adamantina|sp": { lat: -21.6859, lon: -51.0735 },
-  "lucélia|sp": { lat: -21.7199, lon: -51.0181 },
-  "lucelia|sp": { lat: -21.7199, lon: -51.0181 },
-  "osvaldo cruz|sp": { lat: -21.7946, lon: -50.8795 },
-  "dracena|sp": { lat: -21.4828, lon: -51.5322 },
-  "assis|sp": { lat: -22.6628, lon: -50.4124 },
-  "ourinhos|sp": { lat: -22.9789, lon: -49.8701 },
-  "lins|sp": { lat: -21.6786, lon: -49.7503 },
-  "bauru|sp": { lat: -22.3246, lon: -49.0959 },
-  "botucatu|sp": { lat: -22.8851, lon: -48.4454 },
-  "são paulo|sp": { lat: -23.5505, lon: -46.6333 },
-  "sao paulo|sp": { lat: -23.5505, lon: -46.6333 },
-  "campinas|sp": { lat: -22.9099, lon: -47.0626 },
-  "ribeirão preto|sp": { lat: -21.1784, lon: -47.8063 },
-  "ribeirao preto|sp": { lat: -21.1784, lon: -47.8063 },
-  "franca|sp": { lat: -20.5386, lon: -47.4008 },
-};
+import { calculateOpportunityScoreDetails } from "../common/scoring";
+import {
+  isValidOpportunity,
+  TARGET_OPPORTUNITY_CNAES,
+  IBGE_CENTROIDES,
+} from "../common/opportunity-filter";
 
 export type HeatmapQueryParams = {
   estado?: string;
@@ -70,6 +26,11 @@ export type HeatmapPoint = {
 };
 
 export type HeatmapResponse = HeatmapPoint[];
+
+function joinSqlFragments(fragments: Prisma.Sql[], separator: Prisma.Sql): Prisma.Sql {
+  if (fragments.length === 0) return Prisma.empty;
+  return fragments.slice(1).reduce((sql, fragment) => Prisma.sql`${sql}${separator}${fragment}`, fragments[0]);
+}
 
 @Injectable()
 export class MapOpportunitiesService {
@@ -103,11 +64,12 @@ export class MapOpportunitiesService {
       }
     }
 
-    // 2. Buscar TODOS os leads com empresas ativas (situacaoCadastral = ATIVA)
+    // 2. Buscar APENAS oportunidades ativas pertencentes às 4 categorias autorizadas (Minimercados, Supermercados, Hipermercados, Açougues)
     const leads = await this.prisma.lead.findMany({
       where: {
         company: {
           situacaoCadastral: "ATIVA",
+          cnaePrincipal: { in: Array.from(TARGET_OPPORTUNITY_CNAES) },
         },
       },
       include: {
@@ -117,16 +79,25 @@ export class MapOpportunitiesService {
       orderBy: { score: "desc" },
     });
 
-    // 3. Mapear para exibição no mapa, aplicando fallback de centroide se lat/lon forem nulas ou divergentes
-    return leads.map((lead) => {
+    // 3. Filtrar estritamente por geofence urbano e não-rural
+    const validLeads = leads.filter((lead) => isValidOpportunity(lead.company));
+
+    // 4. Mapear para exibição no mapa, aplicando fallback de centroide se lat/lon forem nulas ou divergentes
+    return validLeads.map((lead) => {
       let lat = lead.company.latitude;
       let lng = lead.company.longitude;
       let origemCoordenada = lead.company.origemCoordenada;
       let confiancaVerificacao = lead.company.confiancaVerificacao ?? 70;
 
-      // Se o status da verificação for divergente ou a confiança for baixa (< 60), descartar coordenadas físicas suspeitas
+      // Se o status da verificação for divergente ou as coordenadas estiverem fora da região das 26 cidades monitoradas em SP (-23.10 a -20.10 lat, -51.90 a -47.10 lon)
+      const isOutOfSpBounds =
+        typeof lat === "number" &&
+        typeof lng === "number" &&
+        (lat > -20.10 || lat < -23.10 || lng > -47.10 || lng < -51.90);
+
       const isDivergent =
         lead.company.statusVerificacaoEndereco === "divergente" ||
+        isOutOfSpBounds ||
         (typeof lead.company.confiancaVerificacao === "number" &&
           lead.company.confiancaVerificacao < 60 &&
           lead.company.origemCoordenada === "geocodificado");
@@ -167,6 +138,8 @@ export class MapOpportunitiesService {
         statusVerificacaoEndereco: lead.company.statusVerificacaoEndereco,
         confiancaVerificacao,
         telefone: lead.company.details?.telefone || lead.company.telefoneEncontrado || null,
+        email: lead.company.details?.email || null,
+        cnaePrincipal: lead.company.cnaePrincipal || null,
         responsibleName: lead.assignedTo?.name || "Não atribuído",
       };
     });
@@ -175,8 +148,9 @@ export class MapOpportunitiesService {
   // ─────────────────────────────────────────────────────────────────────────────
   // DESCOBERTA DE MERCADOS VIA GOOGLE PLACES (NEW)
   //
-  // Busca no Google Places por supermercados/mercearias em uma cidade e cadastra
-  // automaticamente os que ainda não existem no banco como novos leads.
+  // Busca no Google Places por estabelecimentos comerciais relevantes em uma cidade,
+  // utilizando paginação (nextPageToken), busca multi-termo (8 termos) e expansão
+  // territorial. Cadastra somente registros únicos e separa Place ID do CNPJ.
   // ─────────────────────────────────────────────────────────────────────────────
   async discoverRegion(cidade: string, uf: string) {
     if (!this.geocodingService.isAvailable()) {
@@ -186,41 +160,112 @@ export class MapOpportunitiesService {
         discovered: 0,
         existing: 0,
         total: 0,
+        diagnostico: null,
       };
     }
 
-    const queries = [
-      `supermercado em ${cidade} ${uf}`,
-      `minimercado em ${cidade} ${uf}`,
-      `mercearia em ${cidade} ${uf}`,
-      `açougue em ${cidade} ${uf}`,
-      `hortifruti em ${cidade} ${uf}`,
-      `armazém em ${cidade} ${uf}`,
+    const cidadeNorm = cidade.trim();
+    const ufNorm = uf.toUpperCase().trim();
+    const cidadeSemAcento = cidadeNorm.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+    // Termos de busca comerciais focados EXCLUSIVAMENTE nas 4 categorias autorizadas
+    const baseTerms = [
+      "supermercado",
+      "hipermercado",
+      "minimercado",
+      "mercearia",
+      "açougue",
+      "casa de carnes",
     ];
 
-    // Deduplica resultados por place id
+    // Cidades de médio/grande porte com expansão por regiões territoriais
+    const largeCities = ["marilia", "marília", "bauru", "ribeirao preto", "ribeirão preto", "franca", "presidente prudente", "assis", "aracatuba", "araçatuba"];
+    const isLargeCity = largeCities.some((c) => cidadeSemAcento.includes(c));
+
+    const queries: string[] = [];
+    for (const term of baseTerms) {
+      queries.push(`${term} em ${cidadeNorm} ${ufNorm}`);
+      if (isLargeCity && (term === "supermercado" || term === "minimercado" || term === "açougue")) {
+        queries.push(`${term} centro em ${cidadeNorm} ${ufNorm}`);
+        queries.push(`${term} zona norte em ${cidadeNorm} ${ufNorm}`);
+        queries.push(`${term} zona sul em ${cidadeNorm} ${ufNorm}`);
+      }
+    }
+
     const placesMap = new Map<string, any>();
+    let totalBrutos = 0;
+    let queriesExecutadas = 0;
 
     for (const query of queries) {
-      const results = await this.geocodingService.searchPlace(query);
-      if (results) {
+      queriesExecutadas++;
+      const results = await this.geocodingService.searchPlace(query, { maxPages: 3 });
+      if (results && results.length > 0) {
+        totalBrutos += results.length;
         for (const place of results) {
-          if (place.id && !placesMap.has(place.id)) {
-            // Filtrar apenas resultados que contêm a cidade no endereço
-            const addr = (place.formattedAddress || "").toLowerCase();
-            if (addr.includes(cidade.toLowerCase())) {
+          if (!place.id) continue;
+
+          // Filtra por tipo indesejado (restaurante, bar, padaria, atacadista, etc.)
+          const types: string[] = place.types || [];
+          const primaryType: string = place.primaryType || "";
+          const isExcludedType =
+            primaryType === "restaurant" ||
+            primaryType === "bar" ||
+            primaryType === "night_club" ||
+            primaryType === "bakery" ||
+            primaryType === "wholesaler" ||
+            types.includes("meal_takeaway") ||
+            types.includes("meal_delivery");
+
+          if (isExcludedType) continue;
+
+          // Filtrar apenas resultados que contêm o município no endereço formatado (tratando abreviações como Pres. Prudente)
+          const addr = (place.formattedAddress || "").toLowerCase();
+          const addrSemAcento = addr.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+          let isCityMatch = addrSemAcento.includes(cidadeSemAcento);
+
+          if (!isCityMatch) {
+            if (cidadeSemAcento.includes("presidente prudente") && (addrSemAcento.includes("pres. prudente") || addrSemAcento.includes("pres prudente"))) {
+              isCityMatch = true;
+            } else if (cidadeSemAcento.includes("vera cruz") && (addrSemAcento.includes("v. cruz") || addrSemAcento.includes("v cruz"))) {
+              isCityMatch = true;
+            } else if (cidadeSemAcento.includes("ribeirao preto") && (addrSemAcento.includes("rib. preto") || addrSemAcento.includes("rib preto"))) {
+              isCityMatch = true;
+            }
+          }
+
+          if (isCityMatch) {
+            if (!placesMap.has(place.id)) {
               placesMap.set(place.id, place);
             }
           }
         }
       }
-      // Rate limit entre queries
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      await new Promise((resolve) => setTimeout(resolve, 250));
     }
 
     const allPlaces = Array.from(placesMap.values());
-    let discovered = 0;
-    let existing = 0;
+    const duplicadosRemovidos = totalBrutos - allPlaces.length;
+
+    // Métricas para o log de diagnóstico
+    let cnaePrimaryCount = 0;
+    let cnaeSecondaryCount = 0;
+    let semCnaeCount = 0;
+    let descartadosCount = 0;
+    let existingCount = 0;
+    let discoveredCount = 0;
+    let comCoordenadasCount = 0;
+    let semCoordenadasCount = 0;
+
+    // Busca todas as empresas já existentes no banco para a cidade
+    const existingCompanies = await this.prisma.company.findMany({
+      where: {
+        cidade: { equals: cidadeNorm, mode: "insensitive" },
+        uf: ufNorm,
+      },
+      select: { id: true, placeId: true, cnpj: true, nomeFantasia: true, razaoSocial: true },
+    });
+
+    const existingPlaceIds = new Set(existingCompanies.map((c) => c.placeId).filter(Boolean));
 
     for (const place of allPlaces) {
       const placeName = place.displayName?.text || "";
@@ -229,66 +274,152 @@ export class MapOpportunitiesService {
       const lng = place.location?.longitude;
       const phone = place.nationalPhoneNumber || null;
 
-      if (!placeName || !lat || !lng) continue;
+      const isSpBounds =
+        typeof lat === "number" &&
+        typeof lng === "number" &&
+        lat >= -25.5 && lat <= -19.5 &&
+        lng >= -53.5 && lng <= -44.0;
 
-      // Verifica se já existe no banco (por nome parecido + mesma cidade)
-      const normalizedName = placeName
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, " ")
-        .replace(/\s+/g, " ")
-        .trim();
+      if (!placeName || typeof lat !== "number" || typeof lng !== "number" || !isSpBounds) {
+        semCoordenadasCount++;
+        descartadosCount++;
+        continue;
+      }
+      comCoordenadasCount++;
 
-      const existingCompanies = await this.prisma.company.findMany({
-        where: {
-          cidade: { equals: cidade, mode: "insensitive" },
-          uf: uf.toUpperCase(),
-        },
-        select: { id: true, nomeFantasia: true, razaoSocial: true },
-      });
+      // 1. Validação estrita de businessStatus (descartar fechados/inativos)
+      if (place.businessStatus && place.businessStatus !== "OPERATIONAL") {
+        descartadosCount++;
+        continue;
+      }
 
-      const alreadyExists = existingCompanies.some((c) => {
-        const existingName = (c.nomeFantasia || c.razaoSocial)
+      // 2. Inferência rigorosa de CNAE com prioridade ABSOLUTA ao primaryType oficial do Google
+      const primaryType = place.primaryType || "";
+      const types: string[] = place.types || [];
+      let inferredCnae = "";
+
+      // Mapeamento estrito permitido
+      if (primaryType === "supermarket") {
+        inferredCnae = "4711302"; // Supermercado
+        cnaePrimaryCount++;
+      } else if (primaryType === "hypermarket") {
+        inferredCnae = "4711301"; // Hipermercado
+        cnaePrimaryCount++;
+      } else if (primaryType === "grocery_store" || primaryType === "asian_grocery_store" || primaryType === "japanese_grocery_store") {
+        inferredCnae = "4712100"; // Minimercado
+        cnaePrimaryCount++;
+      } else if (primaryType === "butcher_shop") {
+        inferredCnae = "4722901"; // Açougue
+        cnaePrimaryCount++;
+      } else if (!primaryType && (types.includes("supermarket") || types.includes("grocery_store") || types.includes("butcher_shop"))) {
+        // Fallback apenas se primaryType estiver ausente mas types contiver um tipo estrito autorizado
+        if (types.includes("supermarket")) inferredCnae = "4711302";
+        else if (types.includes("butcher_shop")) inferredCnae = "4722901";
+        else inferredCnae = "4712100";
+        cnaePrimaryCount++;
+      } else {
+        // ⚠️ REGRA CRÍTICA: Se primaryType for um tipo incompatível (ex: health_food_store, bakery, liquor_store, etc.)
+        // ou genérico/ausente, O NOME JAMAIS CONTRADIZ O PRIMARYTYPE. Descarte imediato!
+        descartadosCount++;
+        continue;
+      }
+
+      if (!inferredCnae) {
+        descartadosCount++;
+        continue;
+      }
+
+      // Validação rigorosa se é Oportunidade Válida (perímetro urbano + não rural)
+      const candidateCompany = {
+        situacaoCadastral: "ATIVA",
+        cnaePrincipal: inferredCnae,
+        cidade: cidadeNorm,
+        uf: ufNorm,
+        latitude: lat,
+        longitude: lng,
+        nomeFantasia: placeName,
+        razaoSocial: placeName,
+        logradouro: placeAddr,
+      };
+
+      if (!isValidOpportunity(candidateCompany)) {
+        descartadosCount++;
+        continue;
+      }
+
+      // Verificação de duplicidade: por placeId OU por nome similar na mesma cidade
+      let isDuplicate = existingPlaceIds.has(place.id);
+
+      if (!isDuplicate) {
+        const normalizedName = placeName
           .normalize("NFD")
           .replace(/[\u0300-\u036f]/g, "")
           .toLowerCase()
           .replace(/[^a-z0-9]/g, " ")
           .replace(/\s+/g, " ")
           .trim();
-        return (
-          existingName.includes(normalizedName) ||
-          normalizedName.includes(existingName) ||
-          (normalizedName.length >= 5 &&
-            existingName.length >= 5 &&
-            normalizedName.substring(0, 8) === existingName.substring(0, 8))
-        );
-      });
 
-      if (alreadyExists) {
-        existing++;
+        isDuplicate = existingCompanies.some((c) => {
+          const existingName = (c.nomeFantasia || c.razaoSocial)
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .toLowerCase()
+            .replace(/[^a-z0-9]/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+
+          return (
+            existingName === normalizedName ||
+            (normalizedName.length >= 6 && existingName.length >= 6 && (existingName.includes(normalizedName) || normalizedName.includes(existingName)))
+          );
+        });
+      }
+
+      if (isDuplicate) {
+        existingCount++;
         continue;
       }
 
-      // Extrair logradouro/número do endereço formatado do Google
+      // Extração de logradouro/número do endereço formatado
       const addrParts = placeAddr.split(",").map((s: string) => s.trim());
       const logradouro = addrParts[0] || placeName;
       const numero = addrParts[1] || "S/N";
 
+      // SEPARAÇÃO SEMÂNTICA: Google Place ID vai para `placeId`, e `cnpj` recebe código interno PROSPECT-
+      const prospectCode = `PROSPECT-${place.id}`;
+
+      // Cálculo de score de oportunidade
+      const scoreResult = calculateOpportunityScoreDetails({
+        cnpj: prospectCode,
+        situacaoCadastral: "ATIVA",
+        cnaePrincipal: inferredCnae,
+        nomeFantasia: placeName,
+        cidade: cidadeNorm,
+        uf: ufNorm,
+        latitude: lat,
+        longitude: lng,
+        logradouro,
+        numero,
+        telefone: phone,
+      });
+
       try {
-        // Criar empresa
         const company = await this.prisma.company.create({
           data: {
-            cnpj: `GOOGLE-${place.id.substring(0, 20)}`,
+            cnpj: prospectCode,
+            placeId: place.id,
             razaoSocial: placeName,
             nomeFantasia: placeName,
             situacaoCadastral: "ATIVA",
-            uf: uf.toUpperCase(),
-            cidade,
+            cnaePrincipal: inferredCnae,
+            uf: ufNorm,
+            cidade: cidadeNorm,
             logradouro,
             numero,
             latitude: lat,
             longitude: lng,
+            latitudeVerificada: lat,
+            longitudeVerificada: lng,
             source: "google_discovery",
             origemCoordenada: "google_places",
             statusVerificacaoEndereco: "verificado",
@@ -297,10 +428,9 @@ export class MapOpportunitiesService {
             fonteGeocodificacao: "google_places_v1",
             dataVerificacaoGeo: new Date(),
             enderecoCompleto: true,
-            pontuacaoOportunidade: 80,
-            nivelOportunidade: "alta",
-            motivoPontuacao: ["Descoberto via Google Places", "Localização verificada"],
-            placeId: place.id,
+            pontuacaoOportunidade: scoreResult.score,
+            nivelOportunidade: scoreResult.level.toLowerCase(),
+            motivoPontuacao: ["Descoberto via Google Places", `CNAE Estimado: ${inferredCnae}`, `Categoria: ${place.primaryType || "Mercado"}`],
             nomeEncontrado: placeName,
             enderecoEncontrado: placeAddr,
             telefoneEncontrado: phone,
@@ -308,17 +438,15 @@ export class MapOpportunitiesService {
           },
         });
 
-        // Criar lead para a empresa
         await this.prisma.lead.create({
           data: {
             companyId: company.id,
-            score: 80,
-            potentialLevel: "HIGH",
+            score: scoreResult.score,
+            potentialLevel: scoreResult.level,
             status: "NEW",
           },
         });
 
-        // Salvar telefone em company_details se disponível
         if (phone) {
           await this.prisma.companyDetails.create({
             data: {
@@ -329,20 +457,42 @@ export class MapOpportunitiesService {
           });
         }
 
-        discovered++;
-        this.logger.log(`📍 Novo mercado descoberto: ${placeName} (${cidade}/${uf})`);
+        discoveredCount++;
       } catch (err) {
-        // Ignora erros de duplicação (CNPJ unique constraint)
-        this.logger.warn(`Erro ao cadastrar ${placeName}: ${err instanceof Error ? err.message : String(err)}`);
+        this.logger.warn(`Falha ao persistir ${placeName}: ${err instanceof Error ? err.message : String(err)}`);
       }
     }
 
+    const summaryLog = {
+      cidade: cidadeNorm,
+      uf: ufNorm,
+      diagnostico: {
+        queriesExecutadas,
+        resultadosBrutos: totalBrutos,
+        resultadosComPaginacao: totalBrutos,
+        duplicadosRemovidos,
+        resultadosUnicos: allPlaces.length,
+        cnaePrimary: cnaePrimaryCount,
+        cnaeSecondary: cnaeSecondaryCount,
+        semCnaeInferido: semCnaeCount,
+        descartados: descartadosCount,
+        jaExistentesNoBanco: existingCount,
+        novosPersistidos: discoveredCount,
+        comCoordenadas: comCoordenadasCount,
+        semCoordenadas: semCoordenadasCount,
+        renderizaveisNoMapa: existingCount + discoveredCount,
+      },
+    };
+
+    this.logger.log(`📊 Diagnostic Discovery Summary (${cidadeNorm}/${ufNorm}): ${JSON.stringify(summaryLog.diagnostico)}`);
+
     return {
       success: true,
-      message: `Descoberta concluída em ${cidade}/${uf}. ${discovered} novo(s) mercado(s) encontrado(s) e cadastrado(s).`,
-      discovered,
-      existing,
+      message: `Descoberta concluída em ${cidadeNorm}/${ufNorm}. ${discoveredCount} novo(s) mercado(s) cadastrado(s), ${existingCount} já existia(m). Total no mapa: ${existingCount + discoveredCount}.`,
+      discovered: discoveredCount,
+      existing: existingCount,
       total: allPlaces.length,
+      diagnostico: summaryLog.diagnostico,
     };
   }
 
@@ -361,41 +511,38 @@ export class MapOpportunitiesService {
   // ─────────────────────────────────────────────────────────────────────────────
   async getHeatmapData(params: HeatmapQueryParams): Promise<HeatmapResponse> {
     // ── Monta condições WHERE dinamicamente ──────────────────────────────────
-    const conditions: string[] = [`LOWER("situacaoCadastral") = 'ativa'`];
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const values: any[] = [];
-    let paramIdx = 1;
+    const conditions: Prisma.Sql[] = [Prisma.sql`LOWER("situacaoCadastral") = 'ativa'`];
 
     if (params.estado && params.estado !== "Todos") {
-      conditions.push(`UPPER(uf) = $${paramIdx++}`);
-      values.push(params.estado.toUpperCase());
+      conditions.push(Prisma.sql`UPPER(uf) = ${params.estado.toUpperCase()}`);
     }
 
     if (params.municipio && params.municipio !== "Todas") {
-      conditions.push(`LOWER(cidade) = LOWER($${paramIdx++})`);
-      values.push(params.municipio.trim());
+      conditions.push(Prisma.sql`LOWER(cidade) = LOWER(${params.municipio.trim()})`);
     }
 
     if (params.cnae && params.cnae !== "Todos") {
       // Normaliza o código CNAE removendo pontuação
       const cnaeNorm = params.cnae.replace(/\D/g, "");
       conditions.push(
-        `(REGEXP_REPLACE("cnaePrincipal", '\\\\D', '', 'g') = $${paramIdx}
-         OR EXISTS (
-           SELECT 1 FROM company_cnaes cc
-           WHERE cc."companyId" = companies.id
-             AND REGEXP_REPLACE(cc."cnaeCode", '\\\\D', '', 'g') = $${paramIdx}
-         ))`,
+        Prisma.sql`(REGEXP_REPLACE("cnaePrincipal", '\\\\D', '', 'g') = ${cnaeNorm}
+          OR EXISTS (
+            SELECT 1 FROM company_cnaes cc
+            WHERE cc."companyId" = companies.id
+              AND REGEXP_REPLACE(cc."cnaeCode", '\\\\D', '', 'g') = ${cnaeNorm}
+          ))`,
       );
-      values.push(cnaeNorm);
-      paramIdx++;
+    } else {
+      conditions.push(
+        Prisma.sql`REGEXP_REPLACE("cnaePrincipal", '\\\\D', '', 'g') IN (${Prisma.join(Array.from(TARGET_OPPORTUNITY_CNAES))})`,
+      );
     }
 
-    const whereClause = conditions.join(" AND ");
+    const whereClause = joinSqlFragments(conditions, Prisma.sql` AND `);
 
     // ── Consulta SQL com COUNT(DISTINCT cnpj) para deduplicação ──────────────
     // Retorna agrupado por cidade+uf com centroide médio das coordenadas válidas
-    const rows = await this.prisma.$queryRawUnsafe<
+    const rows = await this.prisma.$queryRaw<
       Array<{
         cidade: string;
         uf: string;
@@ -403,8 +550,7 @@ export class MapOpportunitiesService {
         lat_media: number | null;
         lon_media: number | null;
       }>
-    >(
-      `
+    >(Prisma.sql`
       SELECT
         TRIM(cidade)                                           AS cidade,
         UPPER(TRIM(uf))                                        AS uf,
@@ -417,9 +563,7 @@ export class MapOpportunitiesService {
         AND uf    IS NOT NULL
       GROUP BY TRIM(cidade), UPPER(TRIM(uf))
       ORDER BY quantidade DESC
-      `,
-      ...values,
-    );
+      `);
 
     if (rows.length === 0) return [];
 

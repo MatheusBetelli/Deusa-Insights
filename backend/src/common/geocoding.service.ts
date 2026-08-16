@@ -302,34 +302,71 @@ export class GeocodingService implements OnModuleInit {
   }
 
   /**
-   * Chamada direta à Places API (New) para buscar estabelecimentos por texto.
+   * Chamada direta à Places API (New) para buscar estabelecimentos por texto com suporte a PAGINAÇÃO (nextPageToken).
    */
-  async searchPlace(query: string): Promise<any[] | null> {
+  async searchPlace(
+    query: string,
+    options?: { maxPages?: number; locationBias?: any },
+  ): Promise<any[] | null> {
     if (!this.apiKey) {
       this.apiKey = process.env.GOOGLE_MAPS_API_KEY?.trim();
     }
     if (!this.apiKey) return null;
 
+    const maxPages = options?.maxPages ?? 3;
+    const allPlaces: any[] = [];
+    let pageToken: string | undefined = undefined;
+    let pageCount = 0;
+
     try {
-      const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Goog-Api-Key": this.apiKey,
-          "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.location,places.nationalPhoneNumber,places.businessStatus,places.primaryType",
-        },
-        body: JSON.stringify({
+      do {
+        pageCount++;
+        const body: any = {
           textQuery: query,
           languageCode: "pt-BR",
-        }),
-      });
+          pageSize: 20,
+        };
+        if (pageToken) {
+          body.pageToken = pageToken;
+        }
+        if (options?.locationBias) {
+          body.locationBias = options.locationBias;
+        }
 
-      if (!res.ok) return null;
-      const data = (await res.json()) as any;
-      return data.places || [];
+        const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Goog-Api-Key": this.apiKey,
+            "X-Goog-FieldMask":
+              "places.id,places.displayName,places.formattedAddress,places.location,places.nationalPhoneNumber,places.businessStatus,places.primaryType,places.types,places.websiteUri,places.googleMapsUri,nextPageToken",
+          },
+          body: JSON.stringify(body),
+        });
+
+        if (!res.ok) {
+          const errTxt = await res.text();
+          this.logger.warn(`searchPlace ("${query}") HTTP ${res.status}: ${errTxt}`);
+          break;
+        }
+
+        const data = (await res.json()) as any;
+        const places = data.places || [];
+        allPlaces.push(...places);
+
+        pageToken = data.nextPageToken;
+        if (pageToken && pageCount < maxPages) {
+          // Pequena pausa recomendada entre páginas da Places API
+          await new Promise((resolve) => setTimeout(resolve, 300));
+        } else {
+          break;
+        }
+      } while (pageToken && pageCount < maxPages);
+
+      return allPlaces;
     } catch (err) {
       this.logger.error(`Erro na Places API (New): ${err instanceof Error ? err.message : String(err)}`);
-      return null;
+      return allPlaces.length > 0 ? allPlaces : null;
     }
   }
 }

@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { LeadStatus, Prisma } from "@prisma/client";
 import { calculateLeadScore, getPotentialLevel, calculateOpportunityScoreDetails } from "../common/scoring";
+import { isValidOpportunity, TARGET_OPPORTUNITY_CNAES } from "../common/opportunity-filter";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateLeadDto } from "./dto/create-lead.dto";
 import { LeadQueryDto } from "./dto/lead-query.dto";
@@ -18,7 +19,7 @@ const safeAssignedToSelect = {
 } as const;
 
 const leadInclude = {
-  company: { include: { cnaes: true } },
+  company: { include: { cnaes: true, details: true } },
   assignedTo: { select: safeAssignedToSelect },
 } satisfies Prisma.LeadInclude;
 
@@ -36,7 +37,7 @@ export class LeadsService {
     const pageSize = Math.min(Math.max(1, query.pageSize ?? query.limit ?? query.perPage ?? 10), 100);
 
     const where = this.buildWhere(query);
-    const [total, items] = await this.prisma.$transaction([
+    const [total, items, targetCompanies] = await this.prisma.$transaction([
       this.prisma.lead.count({ where }),
       this.prisma.lead.findMany({
         where,
@@ -45,9 +46,20 @@ export class LeadsService {
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
+      this.prisma.company.findMany({
+        where: {
+          situacaoCadastral: "ATIVA",
+          cnaePrincipal: { in: Array.from(TARGET_OPPORTUNITY_CNAES) },
+        },
+        select: { id: true, cidade: true, bairro: true, latitude: true, longitude: true },
+      }),
     ]);
 
-    const enrichedItems = items.map((lead) => {
+    const validItems = items.filter((lead) => isValidOpportunity(lead.company));
+    const neighborCounts = this.computeSpatialClusters(validItems, targetCompanies);
+
+    const enrichedItems = validItems.map((lead) => {
+      const neighborCount = neighborCounts.get(lead.company.id) ?? 0;
       const fullScore = calculateOpportunityScoreDetails({
         cnpj: lead.company.cnpj,
         situacaoCadastral: lead.company.situacaoCadastral,
@@ -63,6 +75,7 @@ export class LeadsService {
         bairro: lead.company.bairro,
         cep: lead.company.cep,
         statusLead: lead.status,
+        neighborCount,
       });
 
       return {
@@ -75,7 +88,7 @@ export class LeadsService {
 
     return {
       items: enrichedItems,
-      total,
+      total: total,
       page,
       pageSize,
       totalPages: Math.max(1, Math.ceil(total / pageSize)),
@@ -86,7 +99,7 @@ export class LeadsService {
     const page = Math.max(1, query.page ?? 1);
     const pageSize = Math.min(Math.max(1, query.pageSize ?? query.limit ?? query.perPage ?? 25), 100);
     const where = this.buildWhere(query);
-    const [total, items] = await this.prisma.$transaction([
+    const [total, items, targetCompanies] = await this.prisma.$transaction([
       this.prisma.lead.count({ where }),
       this.prisma.lead.findMany({
         where,
@@ -95,9 +108,20 @@ export class LeadsService {
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
+      this.prisma.company.findMany({
+        where: {
+          situacaoCadastral: "ATIVA",
+          cnaePrincipal: { in: Array.from(TARGET_OPPORTUNITY_CNAES) },
+        },
+        select: { id: true, cidade: true, bairro: true, latitude: true, longitude: true },
+      }),
     ]);
 
-    const enrichedItems = items.map((lead) => {
+    const validItems = items.filter((lead) => isValidOpportunity(lead.company));
+    const neighborCounts = this.computeSpatialClusters(validItems, targetCompanies);
+
+    const enrichedItems = validItems.map((lead) => {
+      const neighborCount = neighborCounts.get(lead.company.id) ?? 0;
       const fullScore = calculateOpportunityScoreDetails({
         cnpj: lead.company.cnpj,
         situacaoCadastral: lead.company.situacaoCadastral,
@@ -113,6 +137,7 @@ export class LeadsService {
         bairro: lead.company.bairro,
         cep: lead.company.cep,
         statusLead: lead.status,
+        neighborCount,
       });
 
       return {
@@ -125,7 +150,7 @@ export class LeadsService {
 
     return {
       items: enrichedItems,
-      total,
+      total: total,
       page,
       pageSize,
       totalPages: Math.max(1, Math.ceil(total / pageSize)),
@@ -133,12 +158,14 @@ export class LeadsService {
   }
 
   async exportCsv(query: LeadQueryDto) {
-    const leads = await this.prisma.lead.findMany({
+    const rawLeads = await this.prisma.lead.findMany({
       where: this.buildWhere(query),
       include: leadInclude,
       orderBy: this.buildOrderBy(query),
       take: 10000,
     });
+
+    const leads = rawLeads.filter((lead) => isValidOpportunity(lead.company));
 
     const header = [
       "Empresa",
@@ -189,6 +216,12 @@ export class LeadsService {
     const and: Prisma.LeadWhereInput[] = [
       { company: { situacaoCadastral: "ATIVA" } },
     ];
+
+    if (!query.cnae) {
+      and.push({
+        company: { cnaePrincipal: { in: Array.from(TARGET_OPPORTUNITY_CNAES) } },
+      });
+    }
 
     if (query.status) where.status = query.status;
     if (query.potentialLevel) where.potentialLevel = query.potentialLevel;
@@ -424,6 +457,56 @@ export class LeadsService {
       assignedCount,
       message: `${assignedCount} leads foram atribuídos automaticamente aos vendedores por região de atuação.`,
     };
+  }
+
+  private computeSpatialClusters<T extends { company: { id: string; cidade?: string | null; bairro?: string | null; latitude?: number | null; longitude?: number | null } }>(
+    leads: T[],
+    allCompanies: Array<{ id: string; cidade: string; bairro?: string | null; latitude?: number | null; longitude?: number | null }>,
+  ): Map<string, number> {
+    const counts = new Map<string, number>();
+
+    for (const lead of leads) {
+      let count = 0;
+      const lat1 = lead.company.latitude;
+      const lon1 = lead.company.longitude;
+      const city1 = (lead.company.cidade || "").toLowerCase().trim();
+      const bairro1 = (lead.company.bairro || "").toLowerCase().trim();
+
+      for (const comp of allCompanies) {
+        if (comp.id === lead.company.id) continue;
+        const city2 = (comp.cidade || "").toLowerCase().trim();
+        if (city1 && city2 && city1 !== city2) continue;
+
+        const lat2 = comp.latitude;
+        const lon2 = comp.longitude;
+
+        if (
+          typeof lat1 === "number" &&
+          typeof lon1 === "number" &&
+          lat1 !== 0 &&
+          typeof lat2 === "number" &&
+          typeof lon2 === "number" &&
+          lat2 !== 0
+        ) {
+          const dLat = ((lat2 - lat1) * Math.PI) / 180;
+          const dLon = ((lon2 - lon1) * Math.PI) / 180;
+          const a =
+            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos((lat1 * Math.PI) / 180) *
+              Math.cos((lat2 * Math.PI) / 180) *
+              Math.sin(dLon / 2) *
+              Math.sin(dLon / 2);
+          const distKm = 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+          if (distKm <= 1.5) {
+            count++;
+          }
+        } else if (bairro1 && comp.bairro && bairro1 === comp.bairro.toLowerCase().trim()) {
+          count++;
+        }
+      }
+      counts.set(lead.company.id, count);
+    }
+    return counts;
   }
 
   private async getTargetCnaes() {

@@ -3,9 +3,32 @@ import { Logger, ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { ConfigService } from "@nestjs/config";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
+import helmet from "helmet";
 import { AppModule } from "./app.module";
 
 const DEV_JWT_SECRET = "dev-secret-change-me";
+
+function getConfiguredAllowedOrigins(configService: ConfigService): string[] {
+  const configured = configService.get<string>("ALLOWED_ORIGINS");
+  const frontendUrl = configService.get<string>("FRONTEND_URL");
+  const origins = [
+    ...(configured ? configured.split(",") : []),
+    ...(frontendUrl ? [frontendUrl] : []),
+  ]
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
+  return Array.from(new Set(origins));
+}
+
+function isLocalhostOrigin(origin: string): boolean {
+  try {
+    const { hostname } = new URL(origin);
+    return hostname === "localhost" || hostname === "127.0.0.1";
+  } catch {
+    return false;
+  }
+}
 
 function validateEnv(configService: ConfigService, logger: Logger): void {
   const nodeEnv = configService.get<string>("NODE_ENV") ?? "development";
@@ -22,9 +45,11 @@ function validateEnv(configService: ConfigService, logger: Logger): void {
     process.exit(1);
   }
 
-  if (nodeEnv === "production" && jwtSecret === DEV_JWT_SECRET) {
+  const normalizedJwtSecret = jwtSecret.toLowerCase();
+  const weakSecretMarkers = [DEV_JWT_SECRET, "change-me", "dev-secret", "placeholder", "gere_um_segredo"];
+  if (nodeEnv === "production" && weakSecretMarkers.some((marker) => normalizedJwtSecret.includes(marker))) {
     logger.error(
-      "❌ SEGURANÇA: JWT_SECRET está usando o valor padrão de desenvolvimento em NODE_ENV=production. " +
+      "❌ SEGURANÇA: JWT_SECRET parece usar valor padrão, placeholder ou segredo de desenvolvimento em NODE_ENV=production. " +
       "Defina um segredo forte antes de continuar.",
     );
     process.exit(1);
@@ -37,6 +62,18 @@ function validateEnv(configService: ConfigService, logger: Logger): void {
     );
     process.exit(1);
   }
+
+  // Validar allowlist de origens obrigatória em produção
+  if (nodeEnv === "production") {
+    const allowedOrigins = getConfiguredAllowedOrigins(configService);
+    if (allowedOrigins.length === 0 || allowedOrigins.some(isLocalhostOrigin)) {
+      logger.error(
+        "❌ SEGURANÇA: ALLOWED_ORIGINS/FRONTEND_URL não está definida ou aponta para localhost em produção. " +
+        "Configure com os domínios reais do frontend.",
+      );
+      process.exit(1);
+    }
+  }
 }
 
 async function bootstrap() {
@@ -48,32 +85,53 @@ async function bootstrap() {
   validateEnv(configService, logger);
 
   const port = configService.get<number>("PORT") ?? 3001;
-  const frontendUrl = configService.get<string>("FRONTEND_URL");
   const nodeEnv = configService.get<string>("NODE_ENV") ?? "development";
+  const isProduction = nodeEnv === "production";
+  const allowedOrigins = getConfiguredAllowedOrigins(configService);
 
-  app.enableCors({
-    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-      // Permite requisições sem origin (Postman/curl) e qualquer porta de localhost/127.0.0.1 (8080, 8081, 5173, etc.)
-      if (!origin || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
-        callback(null, true);
-      } else if (frontendUrl && origin === frontendUrl) {
-        callback(null, true);
-      } else {
-        callback(new Error(`CORS bloqueado: origem não permitida → ${origin}`), false);
-      }
-    },
-    credentials: true,
-  });
+  // ── Helmet — Headers de Segurança HTTP (substitui headers manuais) ──────
+  app.use(
+    helmet({
+      contentSecurityPolicy: isProduction ? undefined : false, // desabilitar CSP em dev (Swagger)
+      crossOriginEmbedderPolicy: false, // necessário para mapas Leaflet
+      hsts: isProduction ? { maxAge: 31536000, includeSubDomains: true, preload: true } : false,
+    }),
+  );
 
-  // Middleware de Cabeçalhos de Segurança (Art. 46 LGPD)
+  // Headers customizados de conformidade LGPD
   app.use((req: any, res: any, next: any) => {
-    res.setHeader("X-Content-Type-Options", "nosniff");
-    res.setHeader("X-Frame-Options", "DENY");
-    res.setHeader("X-XSS-Protection", "1; mode=block");
-    res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
     res.setHeader("Permissions-Policy", "geolocation=(), camera=(), microphone=()");
     res.setHeader("X-LGPD-Compliance", "Enforced (Lei 13.709/2018)");
     next();
+  });
+
+  // ── CORS — restritivo em produção, permissivo em desenvolvimento ────────
+  app.enableCors({
+    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+      // Sem origin = server-to-server (curl, Postman) → permitir em dev, bloquear em prod
+      if (!origin) {
+        callback(null, !isProduction);
+        return;
+      }
+
+      // Em desenvolvimento: permitir qualquer localhost
+      if (!isProduction && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      // Origens explicitamente configuradas por ambiente
+      if (allowedOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error(`CORS bloqueado: origem não permitida → ${origin}`), false);
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    maxAge: 86400, // Cache preflight por 24h
   });
 
   app.useGlobalPipes(
@@ -86,7 +144,7 @@ async function bootstrap() {
   );
 
   // ── Swagger / OpenAPI — disponível apenas fora de produção ─────────────────
-  if (nodeEnv !== "production") {
+  if (!isProduction) {
     const swaggerConfig = new DocumentBuilder()
       .setTitle("Deusa Analytics API")
       .setDescription(
@@ -111,8 +169,8 @@ async function bootstrap() {
   logger.log(`🚀 Backend Deusa Analytics ativo em: http://localhost:${port}`);
   logger.log(`🩺 Endpoint de Saúde: http://localhost:${port}/health`);
   logger.log(`🌍 Ambiente: ${nodeEnv.toUpperCase()}`);
+  logger.log(`🛡️ Helmet ativado — Headers de segurança HTTP configurados`);
   logger.log(`🛡️ Proteção de Dados LGPD ativada (Lei nº 13.709/2018)`);
 }
 
 bootstrap();
-

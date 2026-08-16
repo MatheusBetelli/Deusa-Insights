@@ -1,12 +1,16 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from "@nestjs/common";
+import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Throttle } from "@nestjs/throttler";
+import { AuthGuard } from "../auth/auth.guard";
 import { CompaniesService } from "./companies.service";
 import { CompanyQueryDto } from "./dto/company-query.dto";
 import { CreateCompanyDto } from "./dto/create-company.dto";
+import { GeocodeBatchQueryDto } from "./dto/geocode-batch-query.dto";
 import { UpdateCompanyDto } from "./dto/update-company.dto";
 import { VerifyGoogleBatchQueryDto } from "./dto/verify-google-batch-query.dto";
 import { CompanyDetailsDto } from "./dto/company-details.dto";
 import { ValidateLocationDto } from "./dto/validate-location.dto";
 
+@UseGuards(AuthGuard)
 @Controller("companies")
 export class CompaniesController {
   constructor(private readonly companiesService: CompaniesService) {}
@@ -22,15 +26,12 @@ export class CompaniesController {
   }
 
   @Post("geocode-batch-process")
-  geocodeBatchProcess(
-    @Query("cnaeCode") cnaeCode?: string,
-    @Query("limit") limit?: string,
-    @Query("force") force?: string,
-  ) {
+  @Throttle({ default: { ttl: 60000, limit: 6 } })
+  geocodeBatchProcess(@Query() query: GeocodeBatchQueryDto) {
     return this.companiesService.geocodeBatchCompanies(
-      cnaeCode || "4712100",
-      limit ? parseInt(limit, 10) : 50,
-      force === "true",
+      query.cnaeCode || "4712100",
+      query.limit ?? 50,
+      query.force ?? false,
     );
   }
 
@@ -55,6 +56,7 @@ export class CompaniesController {
   }
 
   @Post("verify-google-batch")
+  @Throttle({ default: { ttl: 60000, limit: 10 } })
   verifyGoogleBatch(@Query() query: VerifyGoogleBatchQueryDto) {
     return this.companiesService.verifyGoogleBatch(query);
   }
@@ -84,4 +86,3 @@ export class CompaniesController {
     return this.companiesService.getLocationCandidates(id);
   }
 }
-

@@ -1,5 +1,5 @@
 import { Type } from "class-transformer";
-import { IsDate, IsEnum, IsInt, IsOptional, IsString, Max, Min } from "class-validator";
+import { IsDate, IsEnum, IsInt, IsOptional, IsString, Max, MaxLength, Min } from "class-validator";
 import { LeadStatus, PotentialLevel } from "@prisma/client";
 
 export class UpdateLeadDto {
@@ -20,10 +20,12 @@ export class UpdateLeadDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(64)
   assignedToId?: string;
 
   @IsOptional()
   @IsString()
+  @MaxLength(2000)
   notes?: string;
 
   @IsOptional()

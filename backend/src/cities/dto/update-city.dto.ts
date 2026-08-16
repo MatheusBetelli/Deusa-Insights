@@ -1,8 +1,9 @@
-import { IsBoolean, IsOptional, IsString, Length } from "class-validator";
+import { IsBoolean, IsOptional, IsString, Length, MaxLength } from "class-validator";
 
 export class UpdateCityDto {
   @IsOptional()
   @IsString()
+  @MaxLength(120)
   name?: string;
 
   @IsOptional()
@@ -12,6 +13,7 @@ export class UpdateCityDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(12)
   ibgeCode?: string;
 
   @IsOptional()
