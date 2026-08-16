@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { calculateOpportunityScoreDetails, calculateLeadScore, getPotentialLevel, calculateGarcaDistance } from "./scoring";
 import { PotentialLevel } from "@prisma/client";
 
-test("calculateOpportunityScoreDetails calcula score dos 6 pilares corretamente para minimercado em Garça", () => {
+test("calculateOpportunityScoreDetails calcula score dos 6 pilares corretamente para minimercado em Garça com cluster de vizinhos", () => {
   const result = calculateOpportunityScoreDetails({
     cnpj: "25332029000100",
     situacaoCadastral: "ATIVA",
@@ -18,16 +18,39 @@ test("calculateOpportunityScoreDetails calcula score dos 6 pilares corretamente 
     telefone: "1434710000",
     latitude: -22.2131,
     longitude: -49.6553,
+    neighborCount: 5,
   });
 
   assert.equal(result.breakdown.perfilPts, 30);
-  assert.equal(result.breakdown.potencialPts, 25);
+  assert.equal(result.breakdown.potencialPts, 25); // Cluster max pts (>= 5 vizinhos)
   assert.equal(result.breakdown.logisticaPts, 20); // 0km de Garça
   assert.equal(result.breakdown.dadosPts, 10);
   assert.equal(result.breakdown.prontidaoPts, 10);
   assert.equal(result.breakdown.territorioPts, 5);
   assert.equal(result.score, 100);
   assert.equal(result.level, PotentialLevel.CRITICAL);
+});
+
+test("calculateOpportunityScoreDetails limita o score e garante nível LOW para CNAEs não-alvo (ex: oficinas, farmácias)", () => {
+  const result = calculateOpportunityScoreDetails({
+    cnpj: "25332029000100",
+    situacaoCadastral: "ATIVA",
+    cnaePrincipal: "4520000", // Manutenção de veículos
+    nomeFantasia: "Auto Peças Silva",
+    porte: "EPP",
+    cidade: "Garça",
+    logradouro: "Rua das Flores",
+    numero: "100",
+    bairro: "Centro",
+    cep: "17400000",
+    telefone: "1434710000",
+    latitude: -22.2131,
+    longitude: -49.6553,
+  });
+
+  assert.equal(result.breakdown.perfilPts, 0);
+  assert.ok(result.score <= 30);
+  assert.equal(result.level, PotentialLevel.LOW);
 });
 
 test("calculateGarcaDistance calcula distancias por coordenadas ou nome de cidade", () => {
@@ -44,3 +67,4 @@ test("getPotentialLevel mapeia corretamente os niveis de oportunidade conforme n
   assert.equal(getPotentialLevel(50), PotentialLevel.MEDIUM);   // 45–64: Média
   assert.equal(getPotentialLevel(30), PotentialLevel.LOW);      // 0–44: Baixa
 });
+
