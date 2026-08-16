@@ -18,7 +18,6 @@ import {
   UserCheck,
   X,
 } from "lucide-react";
-import { ExecutiveDashboardMap } from "@/components/dashboard/ExecutiveDashboardMap";
 import { ExecutiveCityRanking } from "@/components/dashboard/ExecutiveCityRanking";
 import {
   CartesianGrid,
@@ -61,20 +60,55 @@ const BRAND = {
 
 const PORTFOLIO_COLORS: Record<string, string> = {
   active: "#22C55E",
-  inactive: "#C95D63",
+  inactive: "#9CA3AF",
+  "Clientes Ativos": "#22C55E",
+  "Clientes Inativos": "#9CA3AF",
 };
 
 const POSITIVATION_COLORS: Record<string, string> = {
   positivated: "#22C55E",
-  inactive: "#C95D63",
+  inactive: "#9CA3AF",
 };
 
 const POTENTIAL_COLORS: Record<string, string> = {
+  "Oportunidades Críticas": "#EF4444",
+  "CRITICAL": "#EF4444",
   "Crítica": "#EF4444",
+  "Crítico": "#EF4444",
+
+  "Alto Potencial": "#F59E0B",
+  "HIGH": "#F59E0B",
   "Alta": "#F59E0B",
+
+  "Médio Potencial": "#3B82F6",
+  "MEDIUM": "#3B82F6",
   "Média": "#3B82F6",
+
+  "Baixo Potencial": "#9CA3AF",
+  "LOW": "#9CA3AF",
   "Baixa": "#9CA3AF",
 };
+
+function getSegmentColor(key: string, colors: Record<string, string>): string {
+  if (colors[key]) return colors[key];
+  const norm = key.toLowerCase();
+  if (norm.includes("crític") || norm.includes("critic")) return "#EF4444";
+  if (norm.includes("alto") || norm.includes("high")) return "#F59E0B";
+  if (norm.includes("médio") || norm.includes("medio") || norm.includes("medium")) return "#3B82F6";
+  if (norm.includes("baixo") || norm.includes("low")) return "#9CA3AF";
+  return BRAND.blue;
+}
+
+function getShortSegmentName(name: string): string {
+  const norm = name.toLowerCase();
+  if (norm.includes("crític") || norm.includes("critic")) return "Crítico";
+  if (norm.includes("alto") || norm.includes("high")) return "Alto Potencial";
+  if (norm.includes("médio") || norm.includes("medio") || norm.includes("medium")) return "Médio Potencial";
+  if (norm.includes("baixo") || norm.includes("low")) return "Baixo Potencial";
+  if (norm.includes("ativo")) return "Ativos";
+  if (norm.includes("inativo")) return "Inativos";
+  return name;
+}
 
 const RADIAN = Math.PI / 180;
 
@@ -498,27 +532,7 @@ function Dashboard() {
             />
           </section>
 
-          {/* Linha 2: Análise Geográfica (Mapa Executivo) + Potencial por Município (Ranking Executivo) */}
-          <section className="grid gap-4 xl:grid-cols-3">
-            <div className="xl:col-span-2">
-              <ExecutiveDashboardMap
-                selectedCity={city}
-                selectedCnae={cnae !== "Todos" ? cnae : null}
-                selectedUf={uf}
-                selectedResponsibleId={assignedToId !== "Todos" ? assignedToId : undefined}
-                onSelectCity={(nextCity) => setCity(nextCity)}
-              />
-            </div>
-            <div className="xl:col-span-1">
-              <ExecutiveCityRanking
-                expansionByCity={summary.expansionByCity}
-                selectedCity={city}
-                onSelectCity={(nextCity) => setCity(nextCity)}
-              />
-            </div>
-          </section>
-
-          {/* Linha 3: Diagnóstico de Carteira & Potencial Comercial & Evolução Mensal */}
+          {/* Linha 2: Diagnóstico de Carteira & Potencial Comercial & Evolução Mensal */}
           <section className="grid gap-4 xl:grid-cols-3">
             <ChartCard
               eyebrow="Carteira de clientes"
@@ -608,6 +622,15 @@ function Dashboard() {
                 </div>
               )}
             </ChartCard>
+          </section>
+
+          {/* Linha 3: Ranking por Município (Espaço Comercial Disponível) */}
+          <section>
+            <ExecutiveCityRanking
+              expansionByCity={summary.expansionByCity}
+              selectedCity={city}
+              onSelectCity={(nextCity) => setCity(nextCity)}
+            />
           </section>
 
           {summary.filters.unsupported.length > 0 && (
@@ -795,33 +818,33 @@ function DonutChart(props: {
   const chartData = props.data.filter((item) => item.count > 0);
   if (chartData.length === 0) {
     return (
-      <div className="flex h-[280px] flex-col items-center justify-center rounded-lg bg-white text-center">
-        <div className="text-5xl font-light leading-none text-[#334155]">
+      <div className="flex h-[260px] flex-col items-center justify-center rounded-lg bg-white text-center">
+        <div className="text-4xl font-extrabold tracking-tight text-[#0B1F33]">
           {formatNumber(props.centerValue)}
         </div>
-        <div className="mt-3 max-w-[180px] text-2xl font-light leading-tight text-[#94A3B8]">
+        <div className="mt-1 text-xs font-bold uppercase tracking-wider text-[#64748B]">
           {props.centerLabel}
         </div>
         {props.emptyMessage ? (
-          <div className="mt-12 text-sm font-semibold text-[#64748B]">{props.emptyMessage}</div>
+          <div className="mt-6 text-xs font-semibold text-[#64748B]">{props.emptyMessage}</div>
         ) : (
-          <div className="mt-8 text-sm font-semibold text-[#64748B]">{props.emptyLabel}</div>
+          <div className="mt-6 text-xs font-semibold text-[#64748B]">{props.emptyLabel}</div>
         )}
       </div>
     );
   }
 
   return (
-    <div className="relative h-[280px]">
+    <div className="relative h-[250px] w-full">
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
           <Pie
             data={chartData}
             cx="50%"
             cy="50%"
-            innerRadius={78}
-            outerRadius={106}
-            paddingAngle={2}
+            innerRadius={68}
+            outerRadius={96}
+            paddingAngle={3}
             dataKey="count"
             nameKey="name"
             stroke="#FFFFFF"
@@ -830,7 +853,7 @@ function DonutChart(props: {
             label={renderDonutPercentLabel}
           >
             {chartData.map((entry) => (
-              <Cell key={entry.key} fill={props.colors[entry.key] ?? BRAND.blue} />
+              <Cell key={entry.key} fill={getSegmentColor(entry.key, props.colors)} />
             ))}
           </Pie>
           <RechartsTooltip
@@ -842,21 +865,23 @@ function DonutChart(props: {
               ];
             }}
             contentStyle={{
-              backgroundColor: BRAND.navy,
-              border: "none",
+              backgroundColor: "#0B1F33",
+              border: "1px solid #1E293B",
               borderRadius: 8,
               color: "#FFFFFF",
               fontSize: 12,
+              boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.3)",
+              padding: "8px 12px",
             }}
-            itemStyle={{ color: "#FFFFFF" }}
+            itemStyle={{ color: "#F8FAFC", fontWeight: 600 }}
           />
         </PieChart>
       </ResponsiveContainer>
-      <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-5xl font-light leading-none text-[#334155]">
+      <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center p-2 text-center">
+        <span className="text-3xl font-extrabold tracking-tight text-[#0B1F33]">
           {formatNumber(props.centerValue)}
         </span>
-        <span className="mt-2 max-w-[150px] text-center text-2xl font-light leading-tight text-[#94A3B8]">
+        <span className="mt-1 text-[11px] font-bold uppercase tracking-wider text-[#64748B]">
           {props.centerLabel}
         </span>
       </div>
@@ -873,41 +898,43 @@ function SegmentLegend(props: {
   if (props.items.length === 0) return null;
 
   return (
-    <div className="mt-2 grid gap-x-5 gap-y-3 sm:grid-cols-2">
+    <div className="mt-3 grid gap-2 sm:grid-cols-2">
       {props.items.map((item) => {
         const isMuted = props.selectedKeys.length > 0 && !props.selectedKeys.includes(item.key);
         const isEmpty = item.count === 0;
+        const color = getSegmentColor(item.key, props.colors);
+        const displayName = getShortSegmentName(item.name);
+
         return (
           <button
             key={item.key}
             type="button"
             disabled={isEmpty}
             onClick={() => props.onToggle(item.key)}
-            className={`grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-md px-1 py-1 text-left transition ${
+            className={`flex items-center justify-between gap-2 rounded-lg border border-slate-100 bg-slate-50/70 px-2.5 py-1.5 text-left transition ${
               isMuted
-                ? "bg-white opacity-45"
-                : "bg-white hover:bg-[#F8FAFC]"
+                ? "opacity-40"
+                : "hover:border-slate-200 hover:bg-slate-100"
             }`}
           >
             <span className="flex min-w-0 items-center gap-2">
               <span
-                className="h-3.5 w-3.5 shrink-0 rounded-full"
-                style={{ backgroundColor: props.colors[item.key] ?? BRAND.blue }}
+                className="h-3 w-3 shrink-0 rounded-full"
+                style={{ backgroundColor: color }}
               />
               <span
-                className={`truncate text-sm font-semibold ${
-                  isEmpty ? "text-[#CBD5E1]" : "text-[#334155]"
+                className={`truncate text-xs font-bold ${
+                  isEmpty ? "text-slate-400" : "text-slate-700"
                 }`}
               >
-                {formatNumber(item.count)} {item.name.toLowerCase()}
+                {displayName}
               </span>
             </span>
-            <span
-              className={`text-xs font-bold tabular-nums ${
-                isEmpty ? "text-[#CBD5E1]" : "text-[#64748B]"
-              }`}
-            >
-              {formatPercent(item.percentage)}
+            <span className="flex shrink-0 items-center gap-1 text-xs tabular-nums">
+              <span className="font-extrabold text-slate-900">{formatNumber(item.count)}</span>
+              <span className="text-[11px] font-semibold text-slate-500">
+                ({formatPercent(item.percentage)})
+              </span>
             </span>
           </button>
         );
