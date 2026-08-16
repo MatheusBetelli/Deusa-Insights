@@ -56,3 +56,14 @@ export function formatRelativeTime(dateString?: string | null): string {
   if (diffDays < 7) return `Há ${diffDays} dias`;
   return new Intl.DateTimeFormat("pt-BR", { dateStyle: "short" }).format(date);
 }
+
+export function formatNumber(value: number): string {
+  return new Intl.NumberFormat("pt-BR").format(value);
+}
+
+export function formatPercent(value: number, decimals: number = 1): string {
+  return new Intl.NumberFormat("pt-BR", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: decimals,
+  }).format(value) + "%";
+}

@@ -7,6 +7,7 @@ import {
   ArrowRight,
   BarChart3,
   Building2,
+  CalendarRange,
   CheckCircle2,
   LineChart as LineChartIcon,
   MapPinned,
@@ -17,6 +18,8 @@ import {
   UserCheck,
   X,
 } from "lucide-react";
+import { ExecutiveDashboardMap } from "@/components/dashboard/ExecutiveDashboardMap";
+import { ExecutiveCityRanking } from "@/components/dashboard/ExecutiveCityRanking";
 import {
   CartesianGrid,
   Cell,
@@ -64,6 +67,13 @@ const PORTFOLIO_COLORS: Record<string, string> = {
 const POSITIVATION_COLORS: Record<string, string> = {
   positivated: "#22C55E",
   inactive: "#C95D63",
+};
+
+const POTENTIAL_COLORS: Record<string, string> = {
+  "Crítica": "#EF4444",
+  "Alta": "#F59E0B",
+  "Média": "#3B82F6",
+  "Baixa": "#9CA3AF",
 };
 
 const RADIAN = Math.PI / 180;
@@ -187,6 +197,28 @@ function Dashboard() {
     () => filterSegments(positivationComparisonSegments, selectedPositivationKeys),
     [positivationComparisonSegments, selectedPositivationKeys],
   );
+
+  const potentialSegments = useMemo(() => {
+    if (!summary?.potentialDistribution) return [];
+    const total = summary.potentialDistribution.reduce((acc, curr) => acc + curr.count, 0) || 1;
+    return summary.potentialDistribution.map((item) => ({
+      key: item.name,
+      name: item.name,
+      count: item.count,
+      percentage: Math.round((item.count / total) * 1000) / 10,
+    }));
+  }, [summary]);
+
+  const potentialData = useMemo(() => potentialSegments, [potentialSegments]);
+
+  const hasEnoughEvolutionData = useMemo(() => {
+    if (!summary?.monthlyEvolution || summary.monthlyEvolution.length < 2) return false;
+    const sum = summary.monthlyEvolution.reduce(
+      (acc, item) => acc + item.activeClients + item.positivatedClients,
+      0,
+    );
+    return sum > 0;
+  }, [summary]);
 
   const activeFilters = useMemo(() => {
     const filters: { label: string; value: string; clear: () => void }[] = [];
@@ -466,17 +498,39 @@ function Dashboard() {
             />
           </section>
 
+          {/* Linha 2: Análise Geográfica (Mapa Executivo) + Potencial por Município (Ranking Executivo) */}
+          <section className="grid gap-4 xl:grid-cols-3">
+            <div className="xl:col-span-2">
+              <ExecutiveDashboardMap
+                selectedCity={city}
+                selectedCnae={cnae !== "Todos" ? cnae : null}
+                selectedUf={uf}
+                selectedResponsibleId={assignedToId !== "Todos" ? assignedToId : undefined}
+                onSelectCity={(nextCity) => setCity(nextCity)}
+              />
+            </div>
+            <div className="xl:col-span-1">
+              <ExecutiveCityRanking
+                expansionByCity={summary.expansionByCity}
+                selectedCity={city}
+                onSelectCity={(nextCity) => setCity(nextCity)}
+              />
+            </div>
+          </section>
+
+          {/* Linha 3: Diagnóstico de Carteira & Potencial Comercial & Evolução Mensal */}
           <section className="grid gap-4 xl:grid-cols-3">
             <ChartCard
               eyebrow="Carteira de clientes"
+              title="Composição da Carteira"
               action={<PeriodLabel>{formatPeriodHeading(summary.period)}</PeriodLabel>}
             >
               <DonutChart
                 data={portfolioData}
                 total={sumSegments(portfolioData)}
                 colors={PORTFOLIO_COLORS}
-                centerValue={sumSegments(portfolioData)}
-                centerLabel="Clientes"
+                centerValue={summary.portfolio.activeClients}
+                centerLabel="Clientes Ativos"
                 emptyLabel="Sem carteira para os filtros atuais"
               />
               <SegmentLegend
@@ -488,108 +542,71 @@ function Dashboard() {
               <DetailLink
                 to="/leads-b2b"
                 search={{ ...leadSearchBase, status: "CONVERTED" }}
-                label={`Detalhar carteira`}
+                label="Detalhar carteira de clientes"
               />
             </ChartCard>
 
             <ChartCard
-              eyebrow="Positivação"
+              eyebrow="Potencial Comercial"
+              title="Oportunidades por Nível"
               action={<PeriodLabel>{formatPeriodHeading(summary.period)}</PeriodLabel>}
             >
               <DonutChart
-                data={positivationData}
-                total={sumSegments(positivationData)}
-                colors={POSITIVATION_COLORS}
-                centerValue={
-                  selectedPositivationKeys.length > 0
-                    ? sumSegments(positivationData)
-                    : summary.positivation.total
-                }
-                centerLabel={
-                  selectedPositivationKeys.length > 0 ? "Clientes filtrados" : "Clientes positivados"
-                }
-                emptyMessage="Nenhum cliente foi positivado neste mês"
-                emptyLabel="Sem positivação registrada no período"
+                data={potentialData}
+                total={sumSegments(potentialData)}
+                colors={POTENTIAL_COLORS}
+                centerValue={summary.coverage.opportunities}
+                centerLabel="Oportunidades"
+                emptyLabel="Sem oportunidades no período"
               />
               <SegmentLegend
-                items={positivationComparisonSegments}
-                colors={POSITIVATION_COLORS}
-                selectedKeys={selectedPositivationKeys}
-                onToggle={(key) => toggleIsolatingSelection(key, setSelectedPositivationKeys)}
+                items={potentialSegments}
+                colors={POTENTIAL_COLORS}
+                selectedKeys={[]}
+                onToggle={() => {}}
               />
-              <div className="mt-3 flex items-center justify-between gap-3">
-                <PositivationDelta summary={summary} />
-                <DetailLink
-                  to="/leads-b2b"
-                  search={leadSearchBase}
-                  label="Detalhar positivação"
-                  compact
-                />
-              </div>
-            </ChartCard>
-
-            <ChartCard
-              eyebrow="Cobertura de mercado"
-              title="Clientes Deusa x oportunidades"
-              action={
-                <Link
-                  to="/mapa-oportunidades"
-                  search={mapSearchBase}
-                  className="inline-flex items-center gap-1 text-xs font-bold text-[#1061AF] hover:underline"
-                >
-                  Ver oportunidades
-                  <ArrowRight className="h-3 w-3" />
-                </Link>
-              }
-            >
-              <CoveragePanel summary={summary} />
-            </ChartCard>
-          </section>
-
-          <section className="grid gap-4 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.25fr)]">
-            <ChartCard
-              eyebrow="Potencial por município"
-              title="Maior espaço comercial disponível"
-              action={
-                city !== "Todas" ? (
-                  <button
-                    type="button"
-                    onClick={() => setCity("Todas")}
-                    className="text-xs font-bold text-[#1061AF] hover:underline"
-                  >
-                    Remover cidade
-                  </button>
-                ) : null
-              }
-            >
-              <ExpansionBars
-                items={summary.expansionByCity}
-                selectedCity={city}
-                onSelectCity={(nextCity) => setCity(nextCity)}
-                uf={uf}
+              <DetailLink
+                to="/mapa-oportunidades"
+                search={mapSearchBase}
+                label="Ver oportunidades no mapa"
               />
             </ChartCard>
 
             <ChartCard
               eyebrow="Evolução comercial"
-              title="Séries mensais disponíveis"
+              title="Séries Mensais Acumuladas"
               action={
-                <SeriesLegend
-                  active={activeEvolutionSeries}
-                  onToggle={(key) =>
-                    setActiveEvolutionSeries((current) =>
-                      current.includes(key)
-                        ? current.filter((item) => item !== key)
-                        : [...current, key],
-                    )
-                  }
-                />
+                hasEnoughEvolutionData ? (
+                  <SeriesLegend
+                    active={activeEvolutionSeries}
+                    onToggle={(key) =>
+                      setActiveEvolutionSeries((current) =>
+                        current.includes(key)
+                          ? current.filter((item) => item !== key)
+                          : [...current, key],
+                      )
+                    }
+                  />
+                ) : null
               }
             >
-              <EvolutionChart
-                data={summary.monthlyEvolution}
-                activeSeries={activeEvolutionSeries}
-              />
+              {hasEnoughEvolutionData ? (
+                <EvolutionChart
+                  data={summary.monthlyEvolution}
+                  activeSeries={activeEvolutionSeries}
+                />
+              ) : (
+                <div className="flex h-56 flex-col items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50/50 p-6 text-center">
+                  <CalendarRange className="mb-2.5 h-8 w-8 text-slate-400" />
+                  <h4 className="text-sm font-bold text-slate-800">Histórico Mensal em Formação</h4>
+                  <p className="mt-1 max-w-xs text-xs text-slate-500">
+                    Os indicadores consolidados de positivação e ativação dos próximos ciclos mensais alimentarão este gráfico automaticamente.
+                  </p>
+                  <span className="mt-3.5 rounded-full bg-slate-200/70 px-3 py-1 text-[11px] font-semibold text-slate-700">
+                    Módulo Analítico Deusa Insights
+                  </span>
+                </div>
+              )}
             </ChartCard>
           </section>
 
@@ -703,7 +720,7 @@ function PeriodLabel({ children }: { children: ReactNode }) {
 }
 
 function DetailLink(props: {
-  to: "/leads-b2b";
+  to: "/leads-b2b" | "/mapa-oportunidades";
   search: Record<string, unknown>;
   label: string;
   compact?: boolean;
