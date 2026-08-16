@@ -46,7 +46,7 @@ function ResetPasswordPage() {
     setCapsLockOn(e.getModifierState("CapsLock"));
   };
 
-  const isMinLength = newPassword.length >= 6;
+  const isMinLength = newPassword.length >= 8;
   const isMatch = newPassword.length > 0 && newPassword === confirmPassword;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -57,7 +57,7 @@ function ResetPasswordPage() {
     }
 
     if (!isMinLength) {
-      setError("A nova senha deve ter no mínimo 6 caracteres.");
+      setError("A nova senha deve ter no mínimo 8 caracteres.");
       return;
     }
 
@@ -228,7 +228,7 @@ function ResetPasswordPage() {
                     <div className="h-1.5 w-1.5 rounded-full bg-slate-300 ml-1 mr-1 shrink-0" />
                   )}
                   <span className={isMinLength ? "text-emerald-700 font-medium" : ""}>
-                    No mínimo 6 caracteres
+                    No mínimo 8 caracteres
                   </span>
                 </div>
                 <div className="flex items-center gap-2">

@@ -50,7 +50,32 @@ export type LeadsB2BSearch = {
   cnae?: string;
   status?: string;
   potentialLevel?: string;
+  statusVerificacaoEndereco?: string;
+  pendenteValidacao?: string;
+  situacaoCadastral?: string;
+  sortBy?: string;
+  sortOrder?: string;
+  page?: number;
 };
+
+const B2B_STORAGE_KEY = "deusa_b2b_filters";
+
+function getStoredB2BFilters(): LeadsB2BSearch {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(B2B_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function setStoredB2BFilters(filters: LeadsB2BSearch) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(B2B_STORAGE_KEY, JSON.stringify(filters));
+  } catch {}
+}
 
 export const Route = createFileRoute("/_app/leads-b2b")({
   validateSearch: (search: Record<string, unknown>): LeadsB2BSearch => ({
@@ -60,6 +85,12 @@ export const Route = createFileRoute("/_app/leads-b2b")({
     cnae: typeof search.cnae === "string" ? search.cnae : undefined,
     status: typeof search.status === "string" ? search.status : undefined,
     potentialLevel: typeof search.potentialLevel === "string" ? search.potentialLevel : undefined,
+    statusVerificacaoEndereco: typeof search.statusVerificacaoEndereco === "string" ? search.statusVerificacaoEndereco : undefined,
+    pendenteValidacao: typeof search.pendenteValidacao === "string" ? search.pendenteValidacao : undefined,
+    situacaoCadastral: typeof search.situacaoCadastral === "string" ? search.situacaoCadastral : undefined,
+    sortBy: typeof search.sortBy === "string" ? search.sortBy : undefined,
+    sortOrder: search.sortOrder === "asc" || search.sortOrder === "desc" ? search.sortOrder : undefined,
+    page: typeof search.page === "number" ? search.page : typeof search.page === "string" ? parseInt(search.page, 10) || 1 : undefined,
   }),
   component: LeadsB2B,
 });
@@ -113,6 +144,9 @@ function statusClass() {
 
 function LeadsB2B() {
   const routeSearch = Route.useSearch();
+  const navigate = Route.useNavigate();
+  const storedFilters = useMemo(() => getStoredB2BFilters(), []);
+
   const [autoAssigning, setAutoAssigning] = useState(false);
   const currentUser = AuthService.getUser();
 
@@ -128,6 +162,7 @@ function LeadsB2B() {
       setAutoAssigning(false);
     }
   }
+
   const [leads, setLeads] = useState<Lead[]>([]);
   const [cities, setCities] = useState<City[]>([]);
   const [cnaes, setCnaes] = useState<Cnae[]>([]);
@@ -135,39 +170,69 @@ function LeadsB2B() {
   const [optionsLoading, setOptionsLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [query, setQuery] = useState(routeSearch.search || "");
-  const [uf, setUf] = useState(routeSearch.uf || "Todos");
-  const [city, setCity] = useState(routeSearch.city || "Todas");
-  const [cnae, setCnae] = useState(routeSearch.cnae || "Todos");
-  const [status, setStatus] = useState(routeSearch.status || "Todos");
-  const [potentialLevel, setPotentialLevel] = useState(routeSearch.potentialLevel || "Todos");
-  const [statusVerificacaoEndereco, setStatusVerificacaoEndereco] = useState("Todos");
-  const [pendenteValidacao, setPendenteValidacao] = useState("Todos");
-  const [situacaoCadastral, setSituacaoCadastral] = useState("ATIVA");
+
+  const initialSearch = routeSearch.search ?? storedFilters.search ?? "";
+  const initialUf = routeSearch.uf ?? storedFilters.uf ?? "Todos";
+  const initialCity = routeSearch.city ?? storedFilters.city ?? "Todas";
+  const initialCnae = routeSearch.cnae ?? storedFilters.cnae ?? "Todos";
+  const initialStatus = routeSearch.status ?? storedFilters.status ?? "Todos";
+  const initialPotentialLevel = routeSearch.potentialLevel ?? storedFilters.potentialLevel ?? "Todos";
+  const initialStatusVerificacao = routeSearch.statusVerificacaoEndereco ?? storedFilters.statusVerificacaoEndereco ?? "Todos";
+  const initialPendenteValidacao = routeSearch.pendenteValidacao ?? storedFilters.pendenteValidacao ?? "Todos";
+  const initialSituacaoCadastral = routeSearch.situacaoCadastral ?? storedFilters.situacaoCadastral ?? "ATIVA";
+  const initialSortBy = (routeSearch.sortBy as SortBy) ?? (storedFilters.sortBy as SortBy) ?? "score";
+  const initialSortOrder = (routeSearch.sortOrder as "asc" | "desc") ?? (storedFilters.sortOrder as "asc" | "desc") ?? "desc";
+  const initialPage = routeSearch.page ?? storedFilters.page ?? 1;
+
+  const [query, setQuery] = useState(initialSearch);
+  const [uf, setUf] = useState(initialUf);
+  const [city, setCity] = useState(initialCity);
+  const [cnae, setCnae] = useState(initialCnae);
+  const [status, setStatus] = useState(initialStatus);
+  const [potentialLevel, setPotentialLevel] = useState(initialPotentialLevel);
+  const [statusVerificacaoEndereco, setStatusVerificacaoEndereco] = useState(initialStatusVerificacao);
+  const [pendenteValidacao, setPendenteValidacao] = useState(initialPendenteValidacao);
+  const [situacaoCadastral, setSituacaoCadastral] = useState(initialSituacaoCadastral);
   const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [sortBy, setSortBy] = useState<SortBy>("score");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
-  const [page, setPage] = useState(1);
+  const [sortBy, setSortBy] = useState<SortBy>(initialSortBy);
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">(initialSortOrder);
+  const [page, setPage] = useState(initialPage);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [highPotentialCount, setHighPotentialCount] = useState(0);
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
 
   useEffect(() => {
-    setQuery(routeSearch.search ?? "");
-    setUf(routeSearch.uf ?? "");
-    setCity(routeSearch.city ?? "");
-    setCnae(routeSearch.cnae ?? "");
-    setStatus(routeSearch.status ?? "");
-    setPotentialLevel(routeSearch.potentialLevel ?? "");
-    setPage(1);
+    const currentParams: LeadsB2BSearch = {
+      search: query.trim() || undefined,
+      uf: uf !== "Todos" ? uf : undefined,
+      city: city !== "Todas" ? city : undefined,
+      cnae: cnae !== "Todos" ? cnae : undefined,
+      status: status !== "Todos" ? status : undefined,
+      potentialLevel: potentialLevel !== "Todos" ? potentialLevel : undefined,
+      statusVerificacaoEndereco: statusVerificacaoEndereco !== "Todos" ? statusVerificacaoEndereco : undefined,
+      pendenteValidacao: pendenteValidacao !== "Todos" ? pendenteValidacao : undefined,
+      situacaoCadastral: situacaoCadastral !== "ATIVA" ? situacaoCadastral : undefined,
+      sortBy: sortBy !== "score" ? sortBy : undefined,
+      sortOrder: sortOrder !== "desc" ? sortOrder : undefined,
+      page: page > 1 ? page : undefined,
+    };
+    setStoredB2BFilters(currentParams);
+    void navigate({ search: currentParams as any, replace: true });
   }, [
-    routeSearch.search,
-    routeSearch.uf,
-    routeSearch.city,
-    routeSearch.cnae,
-    routeSearch.status,
-    routeSearch.potentialLevel,
+    query,
+    uf,
+    city,
+    cnae,
+    status,
+    potentialLevel,
+    statusVerificacaoEndereco,
+    pendenteValidacao,
+    situacaoCadastral,
+    sortBy,
+    sortOrder,
+    page,
+    navigate,
   ]);
 
   async function loadOptions() {

@@ -15,4 +15,9 @@ export const companiesService = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+  updateCompany: (id: string, payload: Partial<Company>) =>
+    apiRequest<Company>(`/companies/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
 };

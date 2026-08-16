@@ -21,6 +21,7 @@ export type MapOpportunity = {
   statusVerificacaoEndereco?: string | null;
   confiancaVerificacao?: number | null;
   telefone?: string | null;
+  email?: string | null;
   cnaePrincipal?: string | null;
   responsibleName?: string | null;
 };

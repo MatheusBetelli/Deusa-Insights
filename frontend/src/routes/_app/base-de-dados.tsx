@@ -23,7 +23,39 @@ import { ArrowRight, FileUp, Search } from "lucide-react";
 import { AuthService } from "@/lib/auth";
 import { redirect } from "@tanstack/react-router";
 
+export type DatabaseSearch = {
+  tab?: "companies" | "cities" | "cnaes";
+  search?: string;
+  uf?: string;
+  page?: number;
+};
+
+const DATABASE_STORAGE_KEY = "deusa_database_filters";
+
+function getStoredDatabaseFilters(): DatabaseSearch {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(DATABASE_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function setStoredDatabaseFilters(filters: DatabaseSearch) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(DATABASE_STORAGE_KEY, JSON.stringify(filters));
+  } catch {}
+}
+
 export const Route = createFileRoute("/_app/base-de-dados")({
+  validateSearch: (search: Record<string, unknown>): DatabaseSearch => ({
+    tab: search.tab === "companies" || search.tab === "cities" || search.tab === "cnaes" ? search.tab : undefined,
+    search: typeof search.search === "string" ? search.search : undefined,
+    uf: typeof search.uf === "string" ? search.uf : undefined,
+    page: typeof search.page === "number" ? search.page : typeof search.page === "string" ? parseInt(search.page, 10) || 1 : undefined,
+  }),
   beforeLoad: () => {
     if (typeof window !== "undefined") {
       const user = AuthService.getUser();
@@ -51,9 +83,14 @@ function emptyPage<T>(): PaginatedResponse<T> {
 
 function BaseDeDados() {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<Tab>("companies");
-  const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
+  const routeSearch = Route.useSearch();
+  const storedFilters = useMemo(() => getStoredDatabaseFilters(), []);
+
+  const [activeTab, setActiveTab] = useState<Tab>(routeSearch.tab ?? storedFilters.tab ?? "companies");
+  const [search, setSearch] = useState(routeSearch.search ?? storedFilters.search ?? "");
+  const [uf, setUf] = useState(routeSearch.uf ?? storedFilters.uf ?? "Todos");
+  const [page, setPage] = useState(routeSearch.page ?? storedFilters.page ?? 1);
+
   const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
   const [companySortBy, setCompanySortBy] =
     useState<NonNullable<CompanyQuery["sortBy"]>>("company");
@@ -61,9 +98,19 @@ function BaseDeDados() {
   const [cnaeSortBy, setCnaeSortBy] = useState<
     "code" | "description" | "category" | "companyCount"
   >("code");
-  const [uf, setUf] = useState("Todos");
   const [companyCity, setCompanyCity] = useState<string | undefined>();
   const [companyCnae, setCompanyCnae] = useState<string | undefined>();
+
+  useEffect(() => {
+    const params: DatabaseSearch = {
+      tab: activeTab !== "companies" ? activeTab : undefined,
+      search: search.trim() || undefined,
+      uf: uf !== "Todos" ? uf : undefined,
+      page: page > 1 ? page : undefined,
+    };
+    setStoredDatabaseFilters(params);
+    void navigate({ search: params as any, replace: true });
+  }, [activeTab, search, uf, page, navigate]);
   const [companies, setCompanies] = useState<PaginatedResponse<Company>>(emptyPage);
   const [cities, setCities] = useState<PaginatedResponse<City>>(emptyPage);
   const [cnaes, setCnaes] = useState<PaginatedResponse<Cnae>>(emptyPage);

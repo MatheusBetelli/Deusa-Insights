@@ -1,16 +1,15 @@
 import {
+  AlertCircle,
   Bell,
   CheckCircle2,
   ChevronDown,
-  Clock,
   Loader2,
   LogOut,
   Mail,
-  MapPin,
   Menu,
   Search,
-  Settings as SettingsIcon,
   ShieldCheck,
+  Sparkles,
   User,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -30,11 +29,31 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { AuthService, type User as AuthUser } from "@/lib/auth";
+import { formatRelativeTime } from "@/lib/commercial-formatters";
+import { notificationsService, type AppNotification } from "@/services/notificationsService";
 import { toast } from "sonner";
 
 interface TopbarProps {
   onToggleSidebar?: () => void;
   onOpenMobile?: () => void;
+}
+
+function getUserInitials(name?: string): string {
+  if (!name) return "U";
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+  return parts[0].substring(0, 2).toUpperCase();
+}
+
+function getRoleLabel(role?: string): string {
+  if (!role) return "Consultor Comercial";
+  const r = role.toUpperCase();
+  if (r === "ADMIN") return "Administrador";
+  if (r === "MANAGER") return "Gerente Comercial";
+  if (r === "SALES") return "Consultor Comercial";
+  return role;
 }
 
 export function Topbar({ onOpenMobile }: TopbarProps = {}) {
@@ -46,9 +65,69 @@ export function Topbar({ onOpenMobile }: TopbarProps = {}) {
   const [profile, setProfile] = useState<AuthUser | null>(user);
   const [profileLoading, setProfileLoading] = useState(false);
 
+  // Notificações reais do backend
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [readIds, setReadIds] = useState<string[]>([]);
+
   useEffect(() => {
     setMounted(true);
+    if (user?.id) {
+      try {
+        const saved = localStorage.getItem(`deusa_read_notifs_${user.id}`);
+        if (saved) setReadIds(JSON.parse(saved));
+      } catch {
+        // Fallback
+      }
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadNotifications() {
+      try {
+        const data = await notificationsService.getNotifications();
+        if (isMounted) setNotifications(data);
+      } catch {
+        // Se a API não responder, mantém lista vazia sem inventar notificações falsas
+        if (isMounted) setNotifications([]);
+      }
+    }
+    void loadNotifications();
+    return () => {
+      isMounted = false;
+    };
   }, []);
+
+  function saveReadIds(newReadIds: string[]) {
+    setReadIds(newReadIds);
+    if (user?.id) {
+      try {
+        localStorage.setItem(`deusa_read_notifs_${user.id}`, JSON.stringify(newReadIds));
+      } catch {
+        // Fallback
+      }
+    }
+  }
+
+  function markAsRead(id: string) {
+    if (!readIds.includes(id)) {
+      saveReadIds([...readIds, id]);
+    }
+  }
+
+  function markAllAsRead() {
+    const allIds = notifications.map((n) => n.id);
+    saveReadIds(Array.from(new Set([...readIds, ...allIds])));
+  }
+
+  const unreadCount = notifications.filter((n) => !readIds.includes(n.id)).length;
+
+  function handleNotificationClick(notif: AppNotification) {
+    markAsRead(notif.id);
+    if (notif.targetUrl) {
+      navigate({ to: notif.targetUrl as any });
+    }
+  }
 
   async function openProfile() {
     setProfileOpen(true);
@@ -75,36 +154,23 @@ export function Topbar({ onOpenMobile }: TopbarProps = {}) {
     navigate({ to: "/leads-b2b", search: { search: term } });
   };
 
-  const notifications = [
-    {
-      id: 1,
-      title: "Base de leads B2B atualizada",
-      time: "Hoje",
-      icon: CheckCircle2,
-      color: "text-green-500",
-    },
-    {
-      id: 2,
-      title: "Leads críticos aguardam contato",
-      time: "Pendente",
-      icon: Clock,
-      color: "text-amber-500",
-    },
-  ];
+  const userInitials = mounted ? getUserInitials(user?.name) : "U";
+  const userRoleLabel = mounted ? getRoleLabel(user?.role) : "Consultor Comercial";
 
   return (
-    <header className="h-16 shrink-0 border-b border-[#DDE5EF] bg-white px-4 shadow-sm shadow-slate-200/40 lg:px-8">
+    <header className="h-16 shrink-0 border-b border-[#DDE5EF] bg-white px-4 shadow-xs lg:px-8">
       <div className="flex h-full items-center gap-3 md:gap-4">
         {onOpenMobile && (
           <button
             type="button"
             onClick={onOpenMobile}
-            className="lg:hidden flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200/80 bg-slate-50/80 text-slate-700 outline-none transition-all hover:bg-slate-100 hover:text-slate-900 active:scale-95 shadow-xs"
+            className="lg:hidden flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-700 outline-none transition hover:bg-slate-100 hover:text-slate-900 cursor-pointer"
             title="Abrir menu principal"
           >
             <Menu className="h-5 w-5 text-slate-700" />
           </button>
         )}
+
         <form onSubmit={handleSearch} className="relative max-w-xl flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
@@ -117,208 +183,174 @@ export function Topbar({ onOpenMobile }: TopbarProps = {}) {
         </form>
 
         <div className="ml-auto flex items-center gap-2.5 shrink-0">
+          {/* Menu de Notificações Reais */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200/70 bg-slate-50/70 text-slate-600 outline-none transition-all hover:border-slate-300 hover:bg-slate-100 hover:text-slate-900 active:scale-95">
+              <button
+                className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-600 outline-none transition hover:border-slate-300 hover:bg-slate-100 hover:text-slate-900 cursor-pointer"
+                title="Notificações da Operação"
+              >
                 <Bell className="h-[18px] w-[18px]" />
-                <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#ED1C24] text-[10px] font-bold text-white ring-2 ring-white">
-                  {notifications.length}
-                </span>
+                {/* Ocultar badge se unreadCount === 0 */}
+                {unreadCount > 0 && (
+                  <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#ED1C24] text-[10px] font-bold text-white ring-2 ring-white">
+                    {unreadCount}
+                  </span>
+                )}
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-80 overflow-hidden p-0 shadow-xl border border-slate-200/80 rounded-xl">
-              <DropdownMenuLabel className="border-b border-slate-100 bg-slate-50/80 px-4 py-3 font-bold text-slate-800">
-                Notificações
-              </DropdownMenuLabel>
-              <div className="max-h-[300px] overflow-y-auto">
-                {notifications.map((notification) => {
-                  const Icon = notification.icon;
-                  return (
-                    <DropdownMenuItem
-                      key={notification.id}
-                      className="flex cursor-default items-start gap-3 border-b border-slate-50 px-4 py-3 last:border-0 focus:bg-slate-50"
-                    >
-                      <div className={`mt-0.5 ${notification.color}`}>
-                        <Icon className="h-4 w-4" />
-                      </div>
-                      <div className="flex-1">
-                        <div className="text-sm font-medium text-slate-900">{notification.title}</div>
-                        <div className="mt-1 text-xs text-slate-500">{notification.time}</div>
-                      </div>
-                    </DropdownMenuItem>
-                  );
-                })}
+            <DropdownMenuContent align="end" className="w-80 overflow-hidden p-0 shadow-xl border border-slate-200 rounded-xl">
+              <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-4 py-3">
+                <span className="font-bold text-slate-900 text-sm">Notificações Operacionais</span>
+                {unreadCount > 0 && (
+                  <button
+                    onClick={markAllAsRead}
+                    className="text-[11px] font-bold text-[#1061AF] hover:underline cursor-pointer"
+                  >
+                    Marcar lidas
+                  </button>
+                )}
               </div>
-              <div className="border-t border-slate-100 bg-slate-50/80 p-2 text-center">
-                <button
-                  onClick={() => navigate({ to: "/configuracoes" })}
-                  className="text-xs font-bold text-[#1061AF] hover:underline"
-                >
-                  Configurar notificações
-                </button>
+
+              <div className="max-h-[320px] overflow-y-auto">
+                {notifications.length === 0 ? (
+                  <div className="p-6 text-center text-xs text-slate-500 font-medium">
+                    Nenhuma notificação no momento.
+                  </div>
+                ) : (
+                  notifications.map((notif) => {
+                    const isUnread = !readIds.includes(notif.id);
+                    let IconComponent = Sparkles;
+                    let iconColor = "text-amber-500";
+
+                    if (notif.category === "IMPORT") {
+                      IconComponent = CheckCircle2;
+                      iconColor = "text-emerald-600";
+                    } else if (notif.category === "ACTION") {
+                      IconComponent = AlertCircle;
+                      iconColor = "text-[#1061AF]";
+                    }
+
+                    return (
+                      <DropdownMenuItem
+                        key={notif.id}
+                        onClick={() => handleNotificationClick(notif)}
+                        className={`flex cursor-pointer items-start gap-3 border-b border-slate-100 px-4 py-3 last:border-0 hover:bg-slate-50 transition-colors ${
+                          isUnread ? "bg-blue-50/40" : ""
+                        }`}
+                      >
+                        <div className={`mt-0.5 shrink-0 ${iconColor}`}>
+                          <IconComponent className="h-4 w-4" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-1">
+                            <span className={`text-xs ${isUnread ? "font-bold text-slate-900" : "font-medium text-slate-700"}`}>
+                              {notif.title}
+                            </span>
+                            {isUnread && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#1061AF]" />}
+                          </div>
+                          <p className="mt-0.5 text-[11px] text-slate-500 line-clamp-2">{notif.message}</p>
+                          <span className="mt-1 block text-[10px] font-semibold text-slate-400">
+                            {formatRelativeTime(notif.createdAt)}
+                          </span>
+                        </div>
+                      </DropdownMenuItem>
+                    );
+                  })
+                )}
               </div>
             </DropdownMenuContent>
           </DropdownMenu>
 
+          {/* Perfil do Usuário Autenticado */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="group flex items-center gap-3 rounded-xl border border-slate-200/80 bg-slate-50/60 px-3 py-1.5 outline-none transition-all hover:border-slate-300 hover:bg-slate-100/80 cursor-pointer shadow-xs active:scale-[0.99]">
+              <button className="group flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 outline-none transition hover:border-slate-300 hover:bg-slate-100 cursor-pointer">
                 <div className="hidden text-right sm:block">
                   <div className="text-sm font-bold leading-tight text-[#0B1F33] transition-colors group-hover:text-[#1061AF]">
                     {mounted ? user?.name || "Usuário" : "Usuário"}
                   </div>
                   <div className="flex items-center justify-end gap-1 text-[11px] font-semibold text-slate-500">
-                    <span>{mounted ? user?.role || "Comercial" : "Comercial"}</span>
-                    <span>·</span>
-                    <span className="text-[#1061AF] font-bold">{mounted ? user?.location || "SP" : "SP"}</span>
+                    <span>{userRoleLabel}</span>
                     <ChevronDown className="h-3 w-3 text-slate-400 transition-transform group-hover:text-slate-600 group-data-[state=open]:rotate-180" />
                   </div>
                 </div>
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-[#1061AF] to-[#0A3D6E] text-xs font-extrabold text-white shadow-md ring-2 ring-white border border-blue-200/40">
-                  {mounted ? user?.name?.substring(0, 2).toUpperCase() || "U" : "U"}
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#0B1F33] text-xs font-bold text-[#FFF200] ring-2 ring-white border border-slate-200">
+                  {userInitials}
                 </div>
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56 p-1.5 shadow-xl border border-slate-200/80 rounded-xl">
+
+            <DropdownMenuContent align="end" className="w-56 p-1.5 shadow-xl border border-slate-200 rounded-xl">
               <DropdownMenuLabel className="px-2 py-1.5 text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
                 Minha Conta
               </DropdownMenuLabel>
               <DropdownMenuItem
                 onClick={() => void openProfile()}
-                className="flex cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 text-slate-700 hover:text-slate-900 focus:bg-slate-100/80 font-medium"
+                className="flex cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 text-slate-700 hover:text-slate-900 focus:bg-slate-100 font-medium text-sm"
               >
                 <User className="h-4 w-4 text-[#1061AF]" />
-                <span className="text-sm">Meu perfil</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => navigate({ to: "/configuracoes" })}
-                className="flex cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 text-slate-700 hover:text-slate-900 focus:bg-slate-100/80 font-medium"
-              >
-                <SettingsIcon className="h-4 w-4 text-slate-500" />
-                <span className="text-sm">Configurações</span>
+                <span>Meu perfil</span>
               </DropdownMenuItem>
               <DropdownMenuSeparator className="my-1 bg-slate-100" />
               <DropdownMenuItem
                 onClick={handleLogout}
-                className="flex cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 text-red-600 focus:bg-red-50 font-bold"
+                className="flex cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 text-red-600 focus:bg-red-50 font-bold text-sm"
               >
                 <LogOut className="h-4 w-4 text-red-500" />
-                <span className="text-sm">Sair da conta</span>
+                <span>Sair da conta</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
       </div>
 
+      {/* Modal Meu Perfil */}
       <Dialog open={profileOpen} onOpenChange={setProfileOpen}>
-        <DialogContent className="border border-slate-200/80 bg-white p-0 sm:max-w-[440px] overflow-hidden rounded-2xl shadow-2xl">
-          <DialogHeader className="sr-only">
-            <DialogTitle>Meu Perfil</DialogTitle>
+        <DialogContent className="border border-slate-200 bg-white p-6 sm:max-w-[400px] rounded-2xl shadow-xl">
+          <DialogHeader>
+            <DialogTitle className="text-center text-lg font-bold text-[#0B1F33]">Meu Perfil</DialogTitle>
           </DialogHeader>
 
           {profileLoading ? (
-            <div className="flex h-64 items-center justify-center text-sm font-semibold text-slate-500">
-              <Loader2 className="mr-2 h-6 w-6 animate-spin text-[#1061AF]" />
+            <div className="flex h-40 items-center justify-center text-xs font-semibold text-slate-500">
+              <Loader2 className="mr-2 h-5 w-5 animate-spin text-[#1061AF]" />
               Carregando dados do perfil...
             </div>
           ) : (
-            <div className="flex flex-col">
-              {/* Banner Topo */}
-              <div className="relative h-28 w-full bg-gradient-to-r from-[#1061AF] via-[#0E5496] to-[#0B1F33] p-4 flex items-start justify-end">
-                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-white/10 via-transparent to-transparent opacity-60" />
-                <span className="relative z-10 inline-flex items-center gap-1.5 rounded-full bg-emerald-500/20 backdrop-blur-md px-3 py-1 text-[11px] font-bold text-emerald-200 border border-emerald-400/30">
-                  <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-                  Conta Verificada
-                </span>
+            <div className="flex flex-col items-center text-center space-y-4 pt-2">
+              <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[#0B1F33] text-2xl font-black text-[#FFF200] shadow-md border-2 border-slate-200">
+                {getUserInitials(profile?.name || user?.name)}
               </div>
 
-              {/* Header com Avatar Flutuante */}
-              <div className="px-6 pb-6 pt-0 flex flex-col items-center text-center -mt-14">
-                <div className="relative mb-3 flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-[#1061AF] to-[#0A3D6E] text-3xl font-black text-white shadow-xl ring-4 ring-white border border-slate-200/40">
-                  {profile?.name?.substring(0, 2).toUpperCase() || "DE"}
-                </div>
-
-                <h3 className="text-xl font-extrabold text-slate-900 tracking-tight">
-                  {profile?.name || "Deusa Alimentos"}
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">
+                  {profile?.name || user?.name || "Usuário"}
                 </h3>
-
-                <div className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-[#1061AF] border border-blue-200/60 shadow-xs">
-                  <ShieldCheck className="h-3.5 w-3.5 text-[#1061AF]" />
-                  {profile?.role === "ADMIN" ? "Administrador de Sistema" : profile?.role || "Consultor Comercial"}
-                </div>
-
-                {/* Cards de Informações */}
-                <div className="mt-6 w-full space-y-2.5 text-left">
-                  {/* Email */}
-                  <div className="flex items-center gap-3.5 rounded-xl border border-slate-200/70 bg-slate-50/70 p-3.5 transition-colors hover:border-slate-300 hover:bg-slate-50">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-[#1061AF] border border-blue-100">
-                      <Mail className="h-4 w-4" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        E-mail Corporativo
-                      </div>
-                      <div className="truncate text-sm font-bold text-slate-800">
-                        {profile?.email || "deusaalimentos01@gmail.com"}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Região */}
-                  <div className="flex items-center gap-3.5 rounded-xl border border-slate-200/70 bg-slate-50/70 p-3.5 transition-colors hover:border-slate-300 hover:bg-slate-50">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-600 border border-amber-100">
-                      <MapPin className="h-4 w-4" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        Região de Atuação
-                      </div>
-                      <div className="text-sm font-bold text-slate-800">
-                        São Paulo ({profile?.location || "SP"})
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Nível de Acesso */}
-                  <div className="flex items-center gap-3.5 rounded-xl border border-slate-200/70 bg-slate-50/70 p-3.5 transition-colors hover:border-slate-300 hover:bg-slate-50">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-100">
-                      <ShieldCheck className="h-4 w-4" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        Nível de Acesso
-                      </div>
-                      <div className="text-sm font-bold text-slate-800">
-                        Acesso Completo (Full Access)
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Botões de Ação */}
-                <div className="mt-6 w-full space-y-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setProfileOpen(false);
-                      navigate({ to: "/configuracoes" });
-                    }}
-                    className="flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#1061AF] text-sm font-bold text-white shadow-lg shadow-blue-900/10 transition-all hover:bg-[#0E5496] active:scale-[0.99]"
-                  >
-                    <SettingsIcon className="h-4 w-4" />
-                    Gerenciar Configurações da Conta
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleLogout}
-                    className="flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white text-xs font-bold text-red-600 hover:bg-red-50 hover:border-red-200 transition-all"
-                  >
-                    <LogOut className="h-3.5 w-3.5" />
-                    Encerrar Sessão
-                  </button>
+                <div className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-0.5 text-xs font-bold text-[#1061AF] border border-blue-200">
+                  <ShieldCheck className="h-3.5 w-3.5" />
+                  {getRoleLabel(profile?.role || user?.role)}
                 </div>
               </div>
+
+              <div className="w-full space-y-2 text-left pt-2">
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">E-mail Corporativo</div>
+                  <div className="mt-0.5 flex items-center gap-2 text-xs font-bold text-slate-800">
+                    <Mail className="h-3.5 w-3.5 text-[#1061AF]" />
+                    <span className="truncate">{profile?.email || user?.email}</span>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="mt-2 flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white text-xs font-bold text-red-600 hover:bg-red-50 hover:border-red-200 transition cursor-pointer"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                Encerrar Sessão
+              </button>
             </div>
           )}
         </DialogContent>
@@ -326,4 +358,3 @@ export function Topbar({ onOpenMobile }: TopbarProps = {}) {
     </header>
   );
 }
-

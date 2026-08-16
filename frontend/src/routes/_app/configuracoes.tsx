@@ -46,12 +46,6 @@ const cards = [
     text: "Usuários cadastrados, níveis de acesso e distribuição de leads.",
   },
   {
-    id: "notifications" as const,
-    icon: Bell,
-    title: "Notificações",
-    text: "Alertas para oportunidades críticas, leads sem contato e importações.",
-  },
-  {
     id: "governance" as const,
     icon: ShieldCheck,
     title: "Governança",

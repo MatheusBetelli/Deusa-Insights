@@ -84,28 +84,28 @@ export function ScoreBreakdownTooltip({ score, breakdown, className = "", varian
 
           <div className="space-y-1.5 text-xs font-medium">
             <div className="flex items-center justify-between">
-              <span className="text-slate-600">• Perfil / CNAE (30%):</span>
+              <span className="text-slate-600">• Perfil CNAE Alvo (30%):</span>
               <strong className="text-slate-900 font-bold">{b.perfilPts}/30</strong>
             </div>
 
             <div className="flex items-center justify-between">
-              <span className="text-slate-600">• Potencial Comercial (25%):</span>
+              <span className="text-slate-600">• Cluster Logístico (25%):</span>
               <strong className="text-slate-900 font-bold">{b.potencialPts}/25</strong>
             </div>
 
             <div className="flex items-center justify-between">
-              <span className="text-slate-600">• Logística Garça/SP (20%):</span>
+              <span className="text-slate-600">• Proximidade Garça/SP (20%):</span>
               <strong className="text-slate-900 font-bold">{b.logisticaPts}/20</strong>
             </div>
 
             <div className="flex items-center justify-between">
-              <span className="text-slate-600">• Qualidade dos Dados (10%):</span>
-              <strong className="text-slate-900 font-bold">{b.dadosPts}/10</strong>
+              <span className="text-slate-600">• Porte / Giro Estimado (10%):</span>
+              <strong className="text-slate-900 font-bold">{b.prontidaoPts}/10</strong>
             </div>
 
             <div className="flex items-center justify-between">
-              <span className="text-slate-600">• Prontidão Comercial (10%):</span>
-              <strong className="text-slate-900 font-bold">{b.prontidaoPts}/10</strong>
+              <span className="text-slate-600">• Qualidade Cadastral & GPS (10%):</span>
+              <strong className="text-slate-900 font-bold">{b.dadosPts}/10</strong>
             </div>
 
             <div className="flex items-center justify-between">
@@ -115,7 +115,7 @@ export function ScoreBreakdownTooltip({ score, breakdown, className = "", varian
           </div>
 
           <div className="mt-2.5 pt-2 border-t border-slate-100 text-[10px] text-slate-400 leading-tight">
-            Fórmula reproduzível normalizada de 0 a 100 com base em CNAE, porte e logística.
+            Pontuação focada em Minimercados, Supermercados e Açougues próximos (cluster logístico).
           </div>
         </div>
       )}

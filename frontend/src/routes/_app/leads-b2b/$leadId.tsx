@@ -12,6 +12,7 @@ import {
 } from "@/components/common/QualityBadges";
 import { companyName, formatCnae, formatCnpj, formatDateTime, potentialLabels, statusLabels } from "@/lib/commercial-formatters";
 import { leadsService } from "@/services/leadsService";
+import { companiesService } from "@/services/companiesService";
 import type { Lead, LeadInteraction, LeadStatus } from "@/types/lead";
 import {
   ArrowLeft,
@@ -22,6 +23,7 @@ import {
   MapPin,
   MessageSquare,
   Navigation,
+  Pencil,
   Phone,
   PhoneCall,
   UserCheck,
@@ -41,9 +43,10 @@ function LeadDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Modais de interação e planejamento de visita
+  // Modais de interação, planejamento de visita e edição cadastral
   const [showInteractionModal, setShowInteractionModal] = useState(false);
   const [showVisitModal, setShowVisitModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
 
   const [interactionForm, setInteractionForm] = useState({
     type: "Ligação comercial",
@@ -56,6 +59,69 @@ function LeadDetail() {
     date: "",
     notes: "",
   });
+
+  const [editForm, setEditForm] = useState({
+    telefone: "",
+    email: "",
+    nomeFantasia: "",
+    razaoSocial: "",
+    logradouro: "",
+    numero: "",
+    bairro: "",
+    cep: "",
+    cidade: "",
+    uf: "",
+  });
+
+  function handleOpenEditModal() {
+    if (!lead) return;
+    const c = lead.company;
+    const ph = c.details?.telefone || c.telefoneEncontrado || c.telefone || "";
+    const em = c.details?.email || c.email || "";
+    setEditForm({
+      telefone: ph,
+      email: em,
+      nomeFantasia: c.nomeFantasia || "",
+      razaoSocial: c.razaoSocial || "",
+      logradouro: c.logradouro || "",
+      numero: c.numero || "",
+      bairro: c.bairro || "",
+      cep: c.cep || "",
+      cidade: c.cidade || "",
+      uf: c.uf || "",
+    });
+    setShowEditModal(true);
+  }
+
+  async function handleSaveCompanyDetails(e: React.FormEvent) {
+    e.preventDefault();
+    if (!lead) return;
+
+    try {
+      await Promise.all([
+        companiesService.upsertCompanyDetails(lead.company.id, {
+          telefone: editForm.telefone.trim() || undefined,
+          email: editForm.email.trim() || undefined,
+        }),
+        companiesService.updateCompany(lead.company.id, {
+          nomeFantasia: editForm.nomeFantasia.trim() || undefined,
+          razaoSocial: editForm.razaoSocial.trim() || undefined,
+          logradouro: editForm.logradouro.trim() || undefined,
+          numero: editForm.numero.trim() || undefined,
+          bairro: editForm.bairro.trim() || undefined,
+          cep: editForm.cep.trim() || undefined,
+          cidade: editForm.cidade.trim() || undefined,
+          uf: editForm.uf.trim() ? editForm.uf.trim().toUpperCase() : undefined,
+        }),
+      ]);
+
+      toast.success("Cadastro e contatos do mercado atualizados com sucesso!");
+      setShowEditModal(false);
+      loadLead();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Falha ao atualizar cadastro.");
+    }
+  }
 
   async function loadLead() {
     setLoading(true);
@@ -182,8 +248,8 @@ function LeadDetail() {
 
   const company = lead.company;
   const isRealCnpj = /^\d{14}$/.test(company.cnpj.replace(/\D/g, "")) && !company.cnpj.startsWith("G-") && !company.cnpj.startsWith("GOOGLE-");
-  const phone = company.telefone || null;
-  const email = company.email || null;
+  const phone = company.details?.telefone || company.telefoneEncontrado || company.telefone || null;
+  const email = company.details?.email || company.email || null;
   const website = null;
 
   const phoneDigits = phone ? phone.replace(/\D/g, "") : "";
@@ -219,6 +285,13 @@ function LeadDetail() {
             <ArrowLeft className="h-4 w-4" />
             Voltar para Leads
           </Link>
+          <button
+            onClick={handleOpenEditModal}
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#DDE5EF] bg-white px-3.5 text-xs font-bold text-[#0B1F33] transition hover:border-[#1061AF]"
+          >
+            <Pencil className="h-3.5 w-3.5 text-[#1061AF]" />
+            Editar cadastro
+          </button>
           <button
             onClick={() => setShowInteractionModal(true)}
             className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#0B1F33] px-4 text-xs font-bold text-white transition hover:bg-[#1061AF]"
@@ -640,6 +713,145 @@ function LeadDetail() {
                   className="h-9 rounded-lg bg-[#0B1F33] px-4 text-xs font-bold text-white transition hover:bg-[#1061AF]"
                 >
                   Agendar Visita
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL 3: Editar Cadastro do Mercado ── */}
+      {showEditModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-lg rounded-2xl border border-[#DDE5EF] bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-3">
+              <div>
+                <h3 className="text-base font-bold text-[#0B1F33]">Editar Cadastro do Mercado</h3>
+                <p className="text-xs text-[#64748B]">Atualize manualmente telefone, e-mail e dados de localização.</p>
+              </div>
+              <button onClick={() => setShowEditModal(false)} className="rounded-lg p-1 text-[#64748B] hover:bg-[#F1F5F9]">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveCompanyDetails} className="mt-4 space-y-4">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wide text-[#64748B]">Telefone Principal</label>
+                  <input
+                    type="text"
+                    placeholder="(16) 99999-9999"
+                    value={editForm.telefone}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, telefone: e.target.value }))}
+                    className="mt-1.5 h-9 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-xs text-[#0B1F33] outline-none focus:border-[#1061AF]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wide text-[#64748B]">E-mail Comercial</label>
+                  <input
+                    type="email"
+                    placeholder="comercial@mercado.com.br"
+                    value={editForm.email}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, email: e.target.value }))}
+                    className="mt-1.5 h-9 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-xs text-[#0B1F33] outline-none focus:border-[#1061AF]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wide text-[#64748B]">Nome Fantasia</label>
+                  <input
+                    type="text"
+                    placeholder="Supermercado Exemplo"
+                    value={editForm.nomeFantasia}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, nomeFantasia: e.target.value }))}
+                    className="mt-1.5 h-9 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-xs text-[#0B1F33] outline-none focus:border-[#1061AF]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wide text-[#64748B]">Razão Social</label>
+                  <input
+                    type="text"
+                    placeholder="Razão Social LTDA"
+                    value={editForm.razaoSocial}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, razaoSocial: e.target.value }))}
+                    className="mt-1.5 h-9 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-xs text-[#0B1F33] outline-none focus:border-[#1061AF]"
+                  />
+                </div>
+              </div>
+
+              <div className="border-t border-[#E2E8F0] pt-3">
+                <span className="block text-xs font-bold uppercase tracking-wide text-[#0B1F33]">Endereço & Localização</span>
+                
+                <div className="mt-2 grid gap-3 sm:grid-cols-3">
+                  <div className="sm:col-span-2">
+                    <label className="block text-[11px] font-semibold text-[#64748B]">Logradouro / Rua</label>
+                    <input
+                      type="text"
+                      value={editForm.logradouro}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, logradouro: e.target.value }))}
+                      className="mt-1 h-9 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-xs text-[#0B1F33] outline-none focus:border-[#1061AF]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#64748B]">Número</label>
+                    <input
+                      type="text"
+                      value={editForm.numero}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, numero: e.target.value }))}
+                      className="mt-1 h-9 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-xs text-[#0B1F33] outline-none focus:border-[#1061AF]"
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-2 grid gap-3 sm:grid-cols-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#64748B]">Bairro</label>
+                    <input
+                      type="text"
+                      value={editForm.bairro}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, bairro: e.target.value }))}
+                      className="mt-1 h-9 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-xs text-[#0B1F33] outline-none focus:border-[#1061AF]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#64748B]">Cidade</label>
+                    <input
+                      type="text"
+                      value={editForm.cidade}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, cidade: e.target.value }))}
+                      className="mt-1 h-9 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-xs text-[#0B1F33] outline-none focus:border-[#1061AF]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#64748B]">UF</label>
+                    <input
+                      type="text"
+                      maxLength={2}
+                      value={editForm.uf}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, uf: e.target.value.toUpperCase() }))}
+                      className="mt-1 h-9 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-xs text-[#0B1F33] outline-none focus:border-[#1061AF]"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#E2E8F0]">
+                <button
+                  type="button"
+                  onClick={() => setShowEditModal(false)}
+                  className="h-9 rounded-lg border border-[#DDE5EF] px-4 text-xs font-bold text-[#64748B] hover:bg-[#F1F5F9]"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="h-9 rounded-lg bg-[#0B1F33] px-4 text-xs font-bold text-white transition hover:bg-[#1061AF]"
+                >
+                  Salvar Cadastro
                 </button>
               </div>
             </form>

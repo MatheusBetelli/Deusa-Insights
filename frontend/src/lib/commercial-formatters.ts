@@ -41,3 +41,18 @@ export function formatDateTime(value?: string | null) {
 export function companyName(company: { nomeFantasia?: string | null; razaoSocial: string }) {
   return company.nomeFantasia || company.razaoSocial;
 }
+
+export function formatRelativeTime(dateString?: string | null): string {
+  if (!dateString) return "Hoje";
+  const date = new Date(dateString);
+  const diffMs = Date.now() - date.getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return "Agora";
+  if (diffMin < 60) return `Há ${diffMin} min`;
+  const diffHours = Math.floor(diffMin / 60);
+  if (diffHours < 24) return `Há ${diffHours}h`;
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays === 1) return "Ontem";
+  if (diffDays < 7) return `Há ${diffDays} dias`;
+  return new Intl.DateTimeFormat("pt-BR", { dateStyle: "short" }).format(date);
+}

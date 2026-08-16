@@ -1,68 +1,142 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { SkeletonMetricCards } from "@/components/common/InterfaceStates";
-import { ScoreBreakdownTooltip } from "@/components/common/ScoreBreakdownTooltip";
-import { dashboardService } from "@/services/dashboardService";
-import type { DashboardSummary } from "@/types/dashboard";
-import { useEffect, useState } from "react";
-import { ESTADOS_UF } from "@/lib/constants";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { Dispatch, ReactNode, SetStateAction } from "react";
+import type { LucideIcon } from "lucide-react";
 import {
   AlertTriangle,
   ArrowRight,
   BarChart3,
   Building2,
   CheckCircle2,
-  ChevronRight,
-  HelpCircle,
   LineChart as LineChartIcon,
-  MapPin,
-  MessageSquare,
+  MapPinned,
   PieChart as PieChartIcon,
-  Sparkles,
+  RotateCcw,
   Target,
   TrendingUp,
-  UserX,
+  UserCheck,
   X,
 } from "lucide-react";
 import {
+  CartesianGrid,
+  Cell,
+  Line,
+  LineChart,
+  Pie,
+  PieChart,
   ResponsiveContainer,
-  BarChart,
-  Bar,
+  Tooltip as RechartsTooltip,
   XAxis,
   YAxis,
-  Tooltip as RechartsTooltip,
-  PieChart,
-  Pie,
-  Cell,
-  LineChart,
-  Line,
-  CartesianGrid,
-  Legend,
 } from "recharts";
+import type { PieLabelRenderProps } from "recharts";
+import { SkeletonMetricCards } from "@/components/common/InterfaceStates";
+import { ESTADOS_UF } from "@/lib/constants";
+import { formatCnae } from "@/lib/commercial-formatters";
+import { cnaesService } from "@/services/cnaesService";
+import { citiesService } from "@/services/citiesService";
+import { dashboardService } from "@/services/dashboardService";
+import type { Cnae } from "@/types/cnae";
+import type { City } from "@/types/city";
+import type {
+  DashboardPeriod,
+  DashboardQuery,
+  DashboardSegment,
+  DashboardSummary,
+  MonthlyEvolutionPoint,
+} from "@/types/dashboard";
 
 export const Route = createFileRoute("/_app/dashboard")({
   component: Dashboard,
 });
 
-const PIE_COLORS = ["#1061AF", "#38BDF8", "#F59E0B", "#16A34A", "#94A3B8", "#ED1C24"];
+const BRAND = {
+  navy: "#0B1F33",
+  blue: "#1061AF",
+  muted: "#64748B",
+};
+
+const PORTFOLIO_COLORS: Record<string, string> = {
+  active: "#22C55E",
+  inactive: "#C95D63",
+};
+
+const POSITIVATION_COLORS: Record<string, string> = {
+  positivated: "#22C55E",
+  inactive: "#C95D63",
+};
+
+const RADIAN = Math.PI / 180;
+
+const PERIOD_OPTIONS: { value: DashboardPeriod; label: string }[] = [
+  { value: "current_month", label: "Mês atual" },
+  { value: "last_3_months", label: "Últimos 3 meses" },
+  { value: "last_6_months", label: "Últimos 6 meses" },
+  { value: "last_12_months", label: "Últimos 12 meses" },
+  { value: "selected_month", label: "Mês específico" },
+];
+
+const MONTH_OPTIONS = [
+  "Janeiro",
+  "Fevereiro",
+  "Março",
+  "Abril",
+  "Maio",
+  "Junho",
+  "Julho",
+  "Agosto",
+  "Setembro",
+  "Outubro",
+  "Novembro",
+  "Dezembro",
+];
+
+const EVOLUTION_SERIES = [
+  { key: "activeClients", name: "Clientes ativos", color: BRAND.blue },
+  { key: "positivatedClients", name: "Clientes positivados", color: "#16A34A" },
+] as const;
+
+type EvolutionSeriesKey = (typeof EVOLUTION_SERIES)[number]["key"];
 
 function Dashboard() {
+  const today = useMemo(() => new Date(), []);
+  const [period, setPeriod] = useState<DashboardPeriod>("current_month");
+  const [month, setMonth] = useState(today.getMonth() + 1);
+  const [year, setYear] = useState(today.getFullYear());
   const [uf, setUf] = useState("Todos");
+  const [city, setCity] = useState("Todas");
+  const [cnae, setCnae] = useState("Todos");
+  const [assignedToId, setAssignedToId] = useState("Todos");
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
+  const [cities, setCities] = useState<City[]>([]);
+  const [cnaes, setCnaes] = useState<Cnae[]>([]);
   const [loading, setLoading] = useState(true);
+  const [optionsLoading, setOptionsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showMetricHelpModal, setShowMetricHelpModal] = useState(false);
+  const [selectedPortfolioKeys, setSelectedPortfolioKeys] = useState<string[]>([]);
+  const [selectedPositivationKeys, setSelectedPositivationKeys] = useState<string[]>([]);
+  const [activeEvolutionSeries, setActiveEvolutionSeries] = useState<EvolutionSeriesKey[]>(
+    EVOLUTION_SERIES.map((item) => item.key),
+  );
 
-  async function loadSummary() {
+  const query = useMemo<DashboardQuery>(() => {
+    const next: DashboardQuery = { period };
+    if (period === "selected_month") {
+      next.month = month;
+      next.year = year;
+    }
+    if (uf !== "Todos") next.uf = uf;
+    if (city !== "Todas") next.city = city;
+    if (cnae !== "Todos") next.cnae = cnae;
+    if (assignedToId !== "Todos") next.assignedToId = assignedToId;
+    return next;
+  }, [assignedToId, city, cnae, month, period, uf, year]);
+
+  const loadSummary = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      setSummary(await dashboardService.getSummary(uf));
+      setSummary(await dashboardService.getSummary(query));
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Não foi possível carregar a Central Comercial.",
@@ -70,158 +144,278 @@ function Dashboard() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [query]);
 
   useEffect(() => {
-    loadSummary();
-  }, [uf]);
+    void loadSummary();
+  }, [loadSummary]);
 
-  const summaryCards = [
-    {
-      label: "Potenciais clientes",
-      description: "Leads ativos aguardando abordagem",
-      value: summary?.potentialClients ?? 410,
-      icon: Sparkles,
-      iconColor: "text-[#1061AF]",
-      valueColor: "text-[#0B1F33]",
-      alert: false,
-    },
-    {
-      label: "Clientes ativos",
-      description: "Com relacionamento comercial em curso",
-      value: summary?.activeClients ?? 12,
-      icon: CheckCircle2,
-      iconColor: "text-[#16A34A]",
-      valueColor: "text-[#0B1F33]",
-      alert: false,
-    },
-    {
-      label: "Clientes inativos",
-      description: "Sem contato ou desqualificados",
-      value: summary?.inactiveClients ?? 8,
-      icon: UserX,
-      iconColor: "text-[#94A3B8]",
-      valueColor: "text-[#0B1F33]",
-      alert: false,
-    },
-    {
-      label: "Oportunidades críticas (Total)",
-      description: "Leads de score alto (80-100) em toda a base",
-      value: summary?.criticalOpportunities ?? 28,
-      icon: AlertTriangle,
-      iconColor: "text-[#ED1C24]",
-      valueColor: "text-[#C81920]",
-      alert: true,
-    },
-  ];
+  useEffect(() => {
+    async function loadOptions() {
+      setOptionsLoading(true);
+      try {
+        const [cityData, cnaeData] = await Promise.all([
+          citiesService.getCities(),
+          cnaesService.getCnaes(),
+        ]);
+        setCities(cityData);
+        setCnaes(cnaeData);
+      } finally {
+        setOptionsLoading(false);
+      }
+    }
 
-  const priorityCity = summary?.priorityCity ?? "Bastos";
-  const pMetrics = summary?.priorityMetrics ?? {
-    territorialScore: 91,
-    criticalCount: 12,
-    qualifiedCount: 34,
-    distanceGarcaKm: 48,
-    cnaeFocusDescription: "Alta concentração de CNAEs estratégicos",
+    void loadOptions();
+  }, []);
+
+  const filteredCities = useMemo(
+    () => cities.filter((item) => uf === "Todos" || item.uf === uf),
+    [cities, uf],
+  );
+
+  const portfolioSegments = useMemo(() => buildPortfolioSegments(summary), [summary]);
+  const portfolioData = useMemo(
+    () => filterSegments(portfolioSegments, selectedPortfolioKeys),
+    [portfolioSegments, selectedPortfolioKeys],
+  );
+
+  const positivationComparisonSegments = useMemo(
+    () => buildPositivationComparisonSegments(summary),
+    [summary],
+  );
+  const positivationData = useMemo(
+    () => filterSegments(positivationComparisonSegments, selectedPositivationKeys),
+    [positivationComparisonSegments, selectedPositivationKeys],
+  );
+
+  const activeFilters = useMemo(() => {
+    const filters: { label: string; value: string; clear: () => void }[] = [];
+    if (period !== "current_month") {
+      filters.push({
+        label: "Período",
+        value:
+          period === "selected_month"
+            ? `${MONTH_OPTIONS[month - 1]}/${year}`
+            : (PERIOD_OPTIONS.find((item) => item.value === period)?.label ?? period),
+        clear: () => setPeriod("current_month"),
+      });
+    }
+    if (uf !== "Todos") filters.push({ label: "UF", value: uf, clear: () => setUf("Todos") });
+    if (city !== "Todas")
+      filters.push({ label: "Cidade", value: city, clear: () => setCity("Todas") });
+    if (cnae !== "Todos") {
+      filters.push({ label: "CNAE", value: formatCnae(cnae), clear: () => setCnae("Todos") });
+    }
+    if (assignedToId !== "Todos") {
+      const responsible = summary?.filters.responsibles.find((item) => item.id === assignedToId);
+      filters.push({
+        label: "Responsável",
+        value: responsible?.name ?? "Selecionado",
+        clear: () => setAssignedToId("Todos"),
+      });
+    }
+    if (selectedPortfolioKeys.length > 0) {
+      filters.push({
+        label: "Carteira",
+        value: selectedPortfolioKeys
+          .map(
+            (key) => portfolioSegments.find((item) => item.key === key)?.name ?? key,
+          )
+          .join(", "),
+        clear: () => setSelectedPortfolioKeys([]),
+      });
+    }
+    if (selectedPositivationKeys.length > 0) {
+      filters.push({
+        label: "Positivação",
+        value: selectedPositivationKeys
+          .map(
+            (key) =>
+              positivationComparisonSegments.find((item) => item.key === key)?.name ?? key,
+          )
+          .join(", "),
+        clear: () => setSelectedPositivationKeys([]),
+      });
+    }
+    return filters;
+  }, [
+    assignedToId,
+    city,
+    cnae,
+    month,
+    period,
+    portfolioSegments,
+    positivationComparisonSegments,
+    selectedPortfolioKeys,
+    selectedPositivationKeys,
+    summary,
+    uf,
+    year,
+  ]);
+
+  function clearFilters() {
+    setPeriod("current_month");
+    setMonth(today.getMonth() + 1);
+    setYear(today.getFullYear());
+    setUf("Todos");
+    setCity("Todas");
+    setCnae("Todos");
+    setAssignedToId("Todos");
+    setSelectedPortfolioKeys([]);
+    setSelectedPositivationKeys([]);
+  }
+
+  const leadSearchBase = {
+    uf: uf !== "Todos" ? uf : undefined,
+    city: city !== "Todas" ? city : undefined,
+    cnae: cnae !== "Todos" ? cnae : undefined,
   };
 
-  const topRegions = summary?.topRegions ?? [
-    { rank: 1, city: "Bastos", territorialScore: 91, criticalCount: 12, qualifiedCount: 34, totalCompanies: 40, distanceGarcaKm: 48, cnaeFocusDescription: "Alta concentração" },
-    { rank: 2, city: "Tupã", territorialScore: 84, criticalCount: 8, qualifiedCount: 28, totalCompanies: 32, distanceGarcaKm: 85, cnaeFocusDescription: "Alta concentração" },
-    { rank: 3, city: "Marília", territorialScore: 78, criticalCount: 5, qualifiedCount: 22, totalCompanies: 28, distanceGarcaKm: 25, cnaeFocusDescription: "Alta concentração" },
-  ];
-
-  const recommendedActions = [
-    {
-      icon: AlertTriangle,
-      title: `${pMetrics.criticalCount} leads de alta prioridade sem responsável em ${priorityCity}`,
-      description: "Leads com score >= 80 aguardando primeira abordagem da equipe.",
-      actionText: "Atribuir responsáveis →",
-      to: "/leads-b2b" as const,
-      search: { city: priorityCity, potentialLevel: "CRITICAL" },
-      primary: true,
-    },
-    {
-      icon: Building2,
-      title: `Região de ${priorityCity} concentra ${pMetrics.qualifiedCount} pontos de venda`,
-      description: "Visualização territorial de adensamento comercial para rotas.",
-      actionText: "Visualizar no mapa →",
-      to: "/mapa-oportunidades" as const,
-      search: { city: priorityCity },
-      primary: false,
-    },
-    {
-      icon: MessageSquare,
-      title: `${(summary?.potentialClients ?? 410).toLocaleString("pt-BR")} leads na etapa inicial sem contato`,
-      description: "Primeira abordagem para avanço nas etapas do funil comercial.",
-      actionText: "Acompanhar funil →",
-      to: "/funil-comercial" as const,
-      search: { search: "", uf: "Todos", city: priorityCity, cnae: "Todos" },
-      primary: false,
-    },
-  ];
-
-  const statusPieData = summary?.statusDistribution ?? [
-    { name: "Novos Leads", count: summary?.potentialClients ?? 410 },
-    { name: "Convertidos", count: summary?.activeClients ?? 12 },
-    { name: "Inativos", count: summary?.inactiveClients ?? 8 },
-  ];
-
-  const cityBarData = summary?.cityDistribution ?? [
-    { city: "Bastos", total: 180 },
-    { city: "Tupã", total: 95 },
-    { city: "Presidente Prudente", total: 60 },
-    { city: "Gália", total: 40 },
-    { city: "Ribeirão Preto", total: 25 },
-    { city: "Bauru", total: 11 },
-  ];
-
-  const trendLineData = summary?.monthlyTrend ?? [
-    { mes: "Mai", novosLeads: 160, convertidos: 5 },
-    { mes: "Jun", novosLeads: 260, convertidos: 12 },
-    { mes: "Jul", novosLeads: 350, convertidos: 20 },
-    { mes: "Ago", novosLeads: summary?.potentialClients ?? 410, convertidos: summary?.activeClients ?? 12 },
-  ];
+  const mapSearchBase = {
+    uf: uf !== "Todos" ? uf : undefined,
+    city: city !== "Todas" ? city : undefined,
+  };
 
   return (
-    <div className="space-y-6">
-      {/* ── Page Header ── */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="space-y-5">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="text-[11px] font-bold uppercase tracking-widest text-[#1061AF]">
-            Dashboard Executive & Analytics
+            Comercial
           </p>
           <h1 className="mt-0.5 text-2xl font-bold tracking-tight text-[#0B1F33]">
             Central Comercial
           </h1>
           <p className="mt-0.5 text-sm text-[#64748B]">
-            Visão rápida das principais oportunidades de expansão B2B da Deusa Alimentos.
+            Carteira, positivação, cobertura e expansão territorial da Deusa Alimentos.
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <select
-            value={uf}
-            onChange={(e) => setUf(e.target.value)}
-            className="h-9 rounded-lg border border-[#DDE5EF] bg-white px-3 text-xs font-bold text-[#0B1F33] outline-none focus:border-[#1061AF]"
-          >
-            <option value="Todos">Todos (UF)</option>
-            {ESTADOS_UF.map((estado) => (
-              <option key={estado} value={estado}>
-                {estado}
-              </option>
-            ))}
-          </select>
+        <div className="flex flex-wrap items-center gap-2">
           <Link
             to="/leads-b2b"
-            search={{ potentialLevel: "CRITICAL" }}
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#DDE5EF] bg-white px-3.5 text-sm font-bold text-[#0B1F33] transition hover:border-[#1061AF] hover:text-[#1061AF]"
+            search={{ ...leadSearchBase, status: "CONVERTED" }}
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#DDE5EF] bg-white px-3 text-xs font-bold text-[#0B1F33] transition hover:border-[#1061AF]"
           >
-            <Building2 className="h-4 w-4" />
-            Ver leads
+            <Building2 className="h-3.5 w-3.5 text-[#1061AF]" />
+            Ver clientes
+          </Link>
+          <Link
+            to="/mapa-oportunidades"
+            search={mapSearchBase}
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#0B1F33] px-3 text-xs font-bold text-white transition hover:bg-[#1061AF]"
+          >
+            <MapPinned className="h-3.5 w-3.5 text-[#FFF200]" />
+            Mapa de oportunidades
           </Link>
         </div>
       </div>
 
-      {/* ── Error Banner ── */}
+      <section className="rounded-lg border border-[#DDE5EF] bg-white p-4 shadow-sm">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+          <FilterSelect
+            label="Período"
+            value={period}
+            onChange={(value) => setPeriod(value as DashboardPeriod)}
+          >
+            {PERIOD_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </FilterSelect>
+
+          <FilterSelect
+            label="Mês"
+            value={String(month)}
+            onChange={(value) => {
+              setMonth(Number(value));
+              setPeriod("selected_month");
+            }}
+          >
+            {MONTH_OPTIONS.map((label, index) => (
+              <option key={label} value={index + 1}>
+                {label}
+              </option>
+            ))}
+          </FilterSelect>
+
+          <FilterSelect
+            label="Ano"
+            value={String(year)}
+            onChange={(value) => {
+              setYear(Number(value));
+              setPeriod("selected_month");
+            }}
+          >
+            {buildYearOptions(today.getFullYear()).map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </FilterSelect>
+
+          <FilterSelect label="Cidade" value={city} onChange={setCity} disabled={optionsLoading}>
+            <option value="Todas">Todas</option>
+            {filteredCities.map((item) => (
+              <option key={item.id} value={item.name}>
+                {item.name}
+              </option>
+            ))}
+          </FilterSelect>
+
+          <FilterSelect
+            label="Responsável"
+            value={assignedToId}
+            onChange={setAssignedToId}
+            disabled={!summary?.filters.responsibles.length}
+          >
+            <option value="Todos">Todos</option>
+            {(summary?.filters.responsibles ?? []).map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </FilterSelect>
+
+          <FilterSelect label="CNAE" value={cnae} onChange={setCnae} disabled={optionsLoading}>
+            <option value="Todos">Todos</option>
+            {cnaes.map((item) => (
+              <option key={item.id} value={item.code}>
+                {formatCnae(item.code)}
+              </option>
+            ))}
+          </FilterSelect>
+        </div>
+
+        <div className="mt-3 flex flex-col gap-2 border-t border-[#EEF2F7] pt-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-bold text-[#0B1F33]">
+              {summary?.period.label ?? "Período atual"}
+            </span>
+            {activeFilters.map((item) => (
+              <button
+                key={`${item.label}-${item.value}`}
+                type="button"
+                onClick={item.clear}
+                className="inline-flex h-7 items-center gap-1 rounded-md border border-[#DDE5EF] bg-[#F8FAFC] px-2 text-[11px] font-semibold text-[#0B1F33] transition hover:border-[#1061AF]"
+              >
+                <span className="text-[#64748B]">{item.label}:</span>
+                {item.value}
+                <X className="h-3 w-3 text-[#94A3B8]" />
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="inline-flex h-8 w-fit items-center gap-1.5 rounded-md border border-[#DDE5EF] bg-white px-3 text-xs font-bold text-[#0B1F33] transition hover:border-[#1061AF]"
+          >
+            <RotateCcw className="h-3.5 w-3.5 text-[#1061AF]" />
+            Limpar filtros
+          </button>
+        </div>
+      </section>
+
       {error && (
         <div className="flex flex-col gap-2 rounded-lg border border-[#FCA5A5] bg-[#FEF2F2] px-4 py-3 text-sm text-[#7F1D1D] sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
@@ -229,517 +423,779 @@ function Dashboard() {
             <span>{error}</span>
           </div>
           <button
-            onClick={loadSummary}
-            className="h-7 w-fit rounded-md bg-[#0B1F33] px-3 text-xs font-bold text-white"
+            onClick={() => void loadSummary()}
+            className="h-8 w-fit rounded-md bg-[#0B1F33] px-3 text-xs font-bold text-white"
           >
             Tentar novamente
           </button>
         </div>
       )}
 
-      {/* ── Metric Cards ── */}
       {loading ? (
         <SkeletonMetricCards count={4} />
-      ) : (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {summaryCards.map((card, idx) => {
-            const Icon = card.icon;
-            const topBorders = [
-              "border-t-4 border-[#1061AF]",
-              "border-t-4 border-emerald-500",
-              "border-t-4 border-slate-300",
-              "border-t-4 border-[#ED1C24]",
-            ];
-            return (
-              <div
-                key={card.label}
-                className={`relative flex min-h-[116px] flex-col justify-between overflow-hidden rounded-xl border bg-white p-4 shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
-                  topBorders[idx % topBorders.length]
-                } ${card.alert ? "border-red-200/80 bg-red-50/10" : "border-[#DDE5EF]"}`}
-              >
-                <div className="flex items-center justify-between">
-                  <div
-                    className={`text-[2.1rem] font-black leading-none tabular-nums tracking-tight ${card.valueColor}`}
-                  >
-                    {card.value.toLocaleString("pt-BR")}
-                  </div>
-                  {card.alert && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-700">
-                      <span className="h-1.5 w-1.5 rounded-full bg-red-600 animate-pulse" />
-                      Urgente
-                    </span>
-                  )}
-                </div>
+      ) : summary ? (
+        <>
+          <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <MetricCard
+              label="Carteira de clientes"
+              value={summary.portfolio.totalClients}
+              description={`${formatNumber(summary.portfolio.activeClients)} ativos na base atual`}
+              icon={UserCheck}
+              accent={BRAND.blue}
+            />
+            <MetricCard
+              label="Positivados no período"
+              value={summary.positivation.total}
+              description={`${formatPercent(summary.positivation.portfolioPercentage)} da carteira ativa`}
+              icon={CheckCircle2}
+              accent="#16A34A"
+            />
+            <MetricCard
+              label="Cobertura comercial"
+              value={formatPercent(summary.coverage.percentage)}
+              description={`${formatNumber(summary.coverage.clients)} clientes de ${formatNumber(summary.coverage.totalMarket)} pontos mapeados`}
+              icon={Target}
+              accent={BRAND.navy}
+            />
+            <MetricCard
+              label="Espaço de expansão"
+              value={formatPercent(summary.coverage.expansionPercentage)}
+              description={`${formatNumber(summary.coverage.opportunities)} oportunidades ainda não atendidas`}
+              icon={TrendingUp}
+              accent="#F59E0B"
+            />
+          </section>
 
-                <div className="mt-3 flex items-end justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="truncate text-[12.5px] font-bold leading-tight text-[#0B1F33]">
-                      {card.label}
-                    </div>
-                    <div className="mt-0.5 text-[11px] font-medium leading-snug text-slate-400">
-                      {card.description}
-                    </div>
-                  </div>
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-50 border border-slate-100 shrink-0">
-                    <Icon className={`h-4 w-4 ${card.iconColor}`} />
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* ── Priority + Ranking Discreto + Actions ── */}
-      <div className="grid gap-3 xl:grid-cols-[1fr_340px]">
-        {/* Banner Principal de Prioridade */}
-        <div className="flex flex-col overflow-hidden rounded-xl border border-[#DDE5EF] bg-white shadow-xs transition-all hover:shadow-md">
-          {/* Header Band */}
-          <div className="border-b border-[#DDE5EF] bg-[#F8FAFC] px-4 py-3">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-[#1061AF]">
-                Prioridade Territorial da Semana
-              </span>
-              <button
-                onClick={() => setShowMetricHelpModal(true)}
-                className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-400 hover:text-[#1061AF] transition-colors cursor-pointer"
-                title="Como é calculada esta prioridade?"
-              >
-                <HelpCircle className="h-3.5 w-3.5" />
-                <span>Como é calculada?</span>
-              </button>
-            </div>
-
-            <div className="mt-1 flex items-baseline gap-2">
-              <h2 className="text-xl font-bold tracking-tight text-[#0B1F33]">
-                {priorityCity}
-              </h2>
-              <span className="text-[11px] font-medium text-slate-400">
-                Score {pMetrics.territorialScore}/100
-              </span>
-            </div>
-
-            <p className="mt-0.5 text-xs text-[#64748B] font-normal">
-              {pMetrics.criticalCount} oportunidades críticas em {priorityCity} · {pMetrics.qualifiedCount} qualificadas · {pMetrics.distanceGarcaKm} km da base
-            </p>
-          </div>
-
-          {/* Table / Preview list of Top Opportunities in Priority City */}
-          <div className="p-4 space-y-2 flex-1 bg-white">
-            <div className="text-xs font-bold text-[#0B1F33]">
-              Principais oportunidades em {priorityCity}
-            </div>
-
-            <div className="divide-y divide-slate-100">
-              <div className="flex items-center justify-between py-1.5 hover:bg-[#F8FAFC] px-1 rounded transition-colors">
-                <div className="min-w-0 flex-1 flex items-baseline gap-2">
-                  <span className="text-xs font-semibold text-[#0B1F33] truncate">Conveniência Talismã</span>
-                  <span className="text-[11px] text-slate-400 font-normal truncate hidden sm:inline">CNAE 4712-1/00 · Novo lead</span>
-                </div>
-                <div className="flex items-center gap-3 shrink-0 ml-3">
-                  <ScoreBreakdownTooltip
-                    score={95}
-                    variant="subtle"
-                    breakdown={{
-                      perfilPts: 30,
-                      potencialPts: 25,
-                      logisticaPts: 17,
-                      dadosPts: 10,
-                      prontidaoPts: 8,
-                      territorioPts: 5,
-                      distanceKm: pMetrics.distanceGarcaKm,
-                    }}
-                  />
-                  <Link to="/leads-b2b" search={{ city: priorityCity }} className="text-xs font-medium text-[#1061AF] hover:underline flex items-center gap-0.5">
-                    Ver <ChevronRight className="h-3 w-3" />
-                  </Link>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between py-1.5 hover:bg-[#F8FAFC] px-1 rounded transition-colors">
-                <div className="min-w-0 flex-1 flex items-baseline gap-2">
-                  <span className="text-xs font-semibold text-[#0B1F33] truncate">Mini Mercearia São Francisco</span>
-                  <span className="text-[11px] text-slate-400 font-normal truncate hidden sm:inline">CNAE 4712-1/00 · Novo lead</span>
-                </div>
-                <div className="flex items-center gap-3 shrink-0 ml-3">
-                  <ScoreBreakdownTooltip
-                    score={90}
-                    variant="subtle"
-                    breakdown={{
-                      perfilPts: 30,
-                      potencialPts: 21,
-                      logisticaPts: 17,
-                      dadosPts: 9,
-                      prontidaoPts: 8,
-                      territorioPts: 5,
-                      distanceKm: pMetrics.distanceGarcaKm,
-                    }}
-                  />
-                  <Link to="/leads-b2b" search={{ city: priorityCity }} className="text-xs font-medium text-[#1061AF] hover:underline flex items-center gap-0.5">
-                    Ver <ChevronRight className="h-3 w-3" />
-                  </Link>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Ranking Territorial das Próximas Regiões (Lista integrada limpa) */}
-          <div className="border-t border-[#DDE5EF] bg-[#F8FAFC]/50 px-4 py-2.5">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-xs font-bold text-[#0B1F33]">
-                Ranking territorial
-              </span>
-              <span className="text-[11px] text-slate-400 font-medium">Prioridade comercial ponderada</span>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
-              {topRegions.slice(0, 3).map((reg, idx) => {
-                const isSelected = reg.city === priorityCity || idx === 0;
-                return (
-                  <Link
-                    key={reg.city}
-                    to="/leads-b2b"
-                    search={{ city: reg.city }}
-                    className={`inline-flex items-center gap-1 transition-colors hover:text-[#1061AF] ${
-                      isSelected
-                        ? "font-bold text-[#1061AF]"
-                        : "font-normal text-slate-600"
-                    }`}
-                  >
-                    <span>{idx + 1}. {reg.city}</span>
-                    <span className="font-medium tabular-nums text-slate-400">({reg.territorialScore})</span>
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* CTA button (Único) */}
-          <div className="border-t border-[#DDE5EF] bg-white px-4 py-2.5">
-            <Link
-              to="/leads-b2b"
-              search={{ city: priorityCity, potentialLevel: "CRITICAL" }}
-              className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#1061AF] px-3 text-xs font-medium text-white transition-colors hover:bg-[#0E467D]"
+          <section className="grid gap-4 xl:grid-cols-3">
+            <ChartCard
+              eyebrow="Carteira de clientes"
+              action={<PeriodLabel>{formatPeriodHeading(summary.period)}</PeriodLabel>}
             >
-              Ver oportunidades de {priorityCity}
-            </Link>
+              <DonutChart
+                data={portfolioData}
+                total={sumSegments(portfolioData)}
+                colors={PORTFOLIO_COLORS}
+                centerValue={sumSegments(portfolioData)}
+                centerLabel="Clientes"
+                emptyLabel="Sem carteira para os filtros atuais"
+              />
+              <SegmentLegend
+                items={portfolioSegments}
+                colors={PORTFOLIO_COLORS}
+                selectedKeys={selectedPortfolioKeys}
+                onToggle={(key) => toggleIsolatingSelection(key, setSelectedPortfolioKeys)}
+              />
+              <DetailLink
+                to="/leads-b2b"
+                search={{ ...leadSearchBase, status: "CONVERTED" }}
+                label={`Detalhar carteira`}
+              />
+            </ChartCard>
+
+            <ChartCard
+              eyebrow="Positivação"
+              action={<PeriodLabel>{formatPeriodHeading(summary.period)}</PeriodLabel>}
+            >
+              <DonutChart
+                data={positivationData}
+                total={sumSegments(positivationData)}
+                colors={POSITIVATION_COLORS}
+                centerValue={
+                  selectedPositivationKeys.length > 0
+                    ? sumSegments(positivationData)
+                    : summary.positivation.total
+                }
+                centerLabel={
+                  selectedPositivationKeys.length > 0 ? "Clientes filtrados" : "Clientes positivados"
+                }
+                emptyMessage="Nenhum cliente foi positivado neste mês"
+                emptyLabel="Sem positivação registrada no período"
+              />
+              <SegmentLegend
+                items={positivationComparisonSegments}
+                colors={POSITIVATION_COLORS}
+                selectedKeys={selectedPositivationKeys}
+                onToggle={(key) => toggleIsolatingSelection(key, setSelectedPositivationKeys)}
+              />
+              <div className="mt-3 flex items-center justify-between gap-3">
+                <PositivationDelta summary={summary} />
+                <DetailLink
+                  to="/leads-b2b"
+                  search={leadSearchBase}
+                  label="Detalhar positivação"
+                  compact
+                />
+              </div>
+            </ChartCard>
+
+            <ChartCard
+              eyebrow="Cobertura de mercado"
+              title="Clientes Deusa x oportunidades"
+              action={
+                <Link
+                  to="/mapa-oportunidades"
+                  search={mapSearchBase}
+                  className="inline-flex items-center gap-1 text-xs font-bold text-[#1061AF] hover:underline"
+                >
+                  Ver oportunidades
+                  <ArrowRight className="h-3 w-3" />
+                </Link>
+              }
+            >
+              <CoveragePanel summary={summary} />
+            </ChartCard>
+          </section>
+
+          <section className="grid gap-4 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.25fr)]">
+            <ChartCard
+              eyebrow="Potencial por município"
+              title="Maior espaço comercial disponível"
+              action={
+                city !== "Todas" ? (
+                  <button
+                    type="button"
+                    onClick={() => setCity("Todas")}
+                    className="text-xs font-bold text-[#1061AF] hover:underline"
+                  >
+                    Remover cidade
+                  </button>
+                ) : null
+              }
+            >
+              <ExpansionBars
+                items={summary.expansionByCity}
+                selectedCity={city}
+                onSelectCity={(nextCity) => setCity(nextCity)}
+                uf={uf}
+              />
+            </ChartCard>
+
+            <ChartCard
+              eyebrow="Evolução comercial"
+              title="Séries mensais disponíveis"
+              action={
+                <SeriesLegend
+                  active={activeEvolutionSeries}
+                  onToggle={(key) =>
+                    setActiveEvolutionSeries((current) =>
+                      current.includes(key)
+                        ? current.filter((item) => item !== key)
+                        : [...current, key],
+                    )
+                  }
+                />
+              }
+            >
+              <EvolutionChart
+                data={summary.monthlyEvolution}
+                activeSeries={activeEvolutionSeries}
+              />
+            </ChartCard>
+          </section>
+
+          {summary.filters.unsupported.length > 0 && (
+            <section className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
+              <div className="font-bold text-[#0B1F33]">Dependências de dados comerciais</div>
+              <div className="mt-1 grid gap-1 md:grid-cols-3">
+                {summary.filters.unsupported.map((item) => (
+                  <span key={item}>{item}</span>
+                ))}
+              </div>
+            </section>
+          )}
+        </>
+      ) : (
+        <section className="rounded-lg border border-dashed border-[#CBD5E1] bg-white p-8 text-center text-sm font-semibold text-[#64748B]">
+          Central Comercial indisponível para os filtros atuais.
+        </section>
+      )}
+    </div>
+  );
+}
+
+function FilterSelect(props: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  children: ReactNode;
+  disabled?: boolean;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-[11px] font-bold uppercase text-[#64748B]">
+        {props.label}
+      </span>
+      <select
+        value={props.value}
+        disabled={props.disabled}
+        onChange={(event) => props.onChange(event.target.value)}
+        className="h-10 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-sm font-semibold text-[#0B1F33] outline-none transition focus:border-[#1061AF] disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        {props.children}
+      </select>
+    </label>
+  );
+}
+
+function MetricCard(props: {
+  label: string;
+  value: number | string;
+  description: string;
+  icon: LucideIcon;
+  accent: string;
+}) {
+  const Icon = props.icon;
+  return (
+    <div className="min-h-[116px] rounded-lg border border-[#DDE5EF] bg-white p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-[11px] font-bold uppercase tracking-wide text-[#64748B]">
+            {props.label}
+          </div>
+          <div className="mt-2 text-3xl font-black leading-none tracking-tight text-[#0B1F33]">
+            {typeof props.value === "number" ? formatNumber(props.value) : props.value}
           </div>
         </div>
+        <div
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border"
+          style={{ borderColor: `${props.accent}33`, backgroundColor: `${props.accent}12` }}
+        >
+          <Icon className="h-4 w-4" style={{ color: props.accent }} />
+        </div>
+      </div>
+      <div className="mt-3 text-xs font-medium leading-snug text-[#64748B]">
+        {props.description}
+      </div>
+    </div>
+  );
+}
 
-        {/* Recommended Actions */}
-        <div className="overflow-hidden rounded-xl border border-[#DDE5EF] bg-white shadow-xs">
-          <div className="flex items-center gap-2 border-b border-[#DDE5EF] bg-[#F8FAFC] px-4 py-2.5">
-            <Sparkles className="h-3 w-3 text-[#1061AF]" />
-            <span className="text-[10px] font-bold uppercase tracking-widest text-[#1061AF]">
-              Ações recomendadas
-            </span>
+function ChartCard(props: {
+  eyebrow: string;
+  title?: string;
+  children: ReactNode;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="rounded-lg border border-[#DDE5EF] bg-white p-4 shadow-sm">
+      <div className="mb-3 flex min-h-9 items-start justify-between gap-3">
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-widest text-[#1061AF]">
+            {props.eyebrow}
           </div>
+          {props.title ? (
+            <h2 className="mt-0.5 text-sm font-bold text-[#0B1F33]">{props.title}</h2>
+          ) : null}
+        </div>
+        {props.action && <div className="shrink-0 pt-1">{props.action}</div>}
+      </div>
+      {props.children}
+    </div>
+  );
+}
 
-          <div className="divide-y divide-[#F1F5F9]">
-            {recommendedActions.map((action) => {
-              const Icon = action.icon;
-              return (
-                <Link
-                  key={action.title}
-                  to={action.to}
-                  search={action.search}
-                  className={`group relative flex items-center gap-3 px-4 py-3 transition-colors hover:bg-[#F8FAFC] ${
-                    action.primary ? "bg-[#F8FAFC]" : ""
-                  }`}
-                >
-                  {action.primary && (
-                    <span className="absolute inset-y-0 left-0 w-[3px] rounded-r-full bg-[#1061AF]" />
-                  )}
+function PeriodLabel({ children }: { children: ReactNode }) {
+  return (
+    <span className="text-[11px] font-extrabold uppercase tracking-wider text-[#64748B]">
+      {children}
+    </span>
+  );
+}
 
-                  <div
-                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
-                      action.primary
-                        ? "bg-[#1061AF] text-white"
-                        : "bg-[#F1F5F9] text-[#64748B] group-hover:bg-[#EEF2F7]"
-                    }`}
-                  >
-                    <Icon className="h-4 w-4" />
-                  </div>
+function DetailLink(props: {
+  to: "/leads-b2b";
+  search: Record<string, unknown>;
+  label: string;
+  compact?: boolean;
+}) {
+  return (
+    <Link
+      to={props.to}
+      search={props.search}
+      className={`inline-flex items-center justify-center gap-2 font-extrabold text-[#2E2478] transition hover:text-[#1061AF] ${
+        props.compact ? "text-xs" : "mt-4 w-full border-t border-[#EEF2F7] pt-3 text-sm"
+      }`}
+    >
+      <BarChart3 className="h-4 w-4" />
+      {props.label}
+    </Link>
+  );
+}
 
-                  <div className="min-w-0 flex-1">
-                    <div
-                      className={`truncate text-xs leading-tight ${
-                        action.primary ? "font-bold text-[#0B1F33]" : "font-semibold text-[#0B1F33]"
-                      }`}
-                    >
-                      {action.title}
-                    </div>
-                    <div className="mt-0.5 text-[11px] leading-snug text-[#64748B]">
-                      {action.description}
-                    </div>
-                  </div>
+function PositivationDelta({ summary }: { summary: DashboardSummary }) {
+  if (!summary.positivation.comparisonAvailable) {
+    return <span className="text-xs font-semibold text-[#94A3B8]">Sem base anterior</span>;
+  }
 
-                  <span className="text-xs font-semibold text-[#1061AF] group-hover:underline shrink-0 flex items-center gap-0.5">
-                    {action.actionText}
-                  </span>
-                </Link>
-              );
-            })}
+  const delta = summary.positivation.deltaPercentage;
+  if (delta === null) {
+    return <span className="text-xs font-semibold text-[#94A3B8]">Sem base anterior</span>;
+  }
+
+  return (
+    <span className={`text-xs font-bold ${delta >= 0 ? "text-emerald-700" : "text-red-700"}`}>
+      {delta > 0 ? "+" : ""}
+      {formatPercent(delta)} vs. período anterior
+    </span>
+  );
+}
+
+function renderDonutPercentLabel(props: PieLabelRenderProps) {
+  const percent = typeof props.percent === "number" ? props.percent : 0;
+  if (percent <= 0) return null;
+
+  const cx = toNumber(props.cx);
+  const cy = toNumber(props.cy);
+  const outerRadius = toNumber(props.outerRadius);
+  const midAngle = typeof props.midAngle === "number" ? props.midAngle : 0;
+  const radius = outerRadius + 27;
+  const x = cx + radius * Math.cos(-midAngle * RADIAN);
+  const y = cy + radius * Math.sin(-midAngle * RADIAN);
+
+  return (
+    <text
+      x={x}
+      y={y}
+      fill="#334155"
+      textAnchor={x > cx ? "start" : "end"}
+      dominantBaseline="central"
+      className="text-sm font-extrabold"
+    >
+      {formatPercent(percent * 100)}
+    </text>
+  );
+}
+
+function DonutChart(props: {
+  data: DashboardSegment[];
+  total: number;
+  colors: Record<string, string>;
+  centerValue: number;
+  centerLabel: string;
+  emptyLabel: string;
+  emptyMessage?: string;
+}) {
+  const chartData = props.data.filter((item) => item.count > 0);
+  if (chartData.length === 0) {
+    return (
+      <div className="flex h-[280px] flex-col items-center justify-center rounded-lg bg-white text-center">
+        <div className="text-5xl font-light leading-none text-[#334155]">
+          {formatNumber(props.centerValue)}
+        </div>
+        <div className="mt-3 max-w-[180px] text-2xl font-light leading-tight text-[#94A3B8]">
+          {props.centerLabel}
+        </div>
+        {props.emptyMessage ? (
+          <div className="mt-12 text-sm font-semibold text-[#64748B]">{props.emptyMessage}</div>
+        ) : (
+          <div className="mt-8 text-sm font-semibold text-[#64748B]">{props.emptyLabel}</div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative h-[280px]">
+      <ResponsiveContainer width="100%" height="100%">
+        <PieChart>
+          <Pie
+            data={chartData}
+            cx="50%"
+            cy="50%"
+            innerRadius={78}
+            outerRadius={106}
+            paddingAngle={2}
+            dataKey="count"
+            nameKey="name"
+            stroke="#FFFFFF"
+            strokeWidth={3}
+            labelLine={{ stroke: "#CBD5E1", strokeWidth: 1.5 }}
+            label={renderDonutPercentLabel}
+          >
+            {chartData.map((entry) => (
+              <Cell key={entry.key} fill={props.colors[entry.key] ?? BRAND.blue} />
+            ))}
+          </Pie>
+          <RechartsTooltip
+            formatter={(value: number, _name, item) => {
+              const segment = item.payload as DashboardSegment;
+              return [
+                `${formatNumber(value)} (${formatPercent(segment.percentage)})`,
+                segment.name,
+              ];
+            }}
+            contentStyle={{
+              backgroundColor: BRAND.navy,
+              border: "none",
+              borderRadius: 8,
+              color: "#FFFFFF",
+              fontSize: 12,
+            }}
+            itemStyle={{ color: "#FFFFFF" }}
+          />
+        </PieChart>
+      </ResponsiveContainer>
+      <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+        <span className="text-5xl font-light leading-none text-[#334155]">
+          {formatNumber(props.centerValue)}
+        </span>
+        <span className="mt-2 max-w-[150px] text-center text-2xl font-light leading-tight text-[#94A3B8]">
+          {props.centerLabel}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function SegmentLegend(props: {
+  items: DashboardSegment[];
+  colors: Record<string, string>;
+  selectedKeys: string[];
+  onToggle: (key: string) => void;
+}) {
+  if (props.items.length === 0) return null;
+
+  return (
+    <div className="mt-2 grid gap-x-5 gap-y-3 sm:grid-cols-2">
+      {props.items.map((item) => {
+        const isMuted = props.selectedKeys.length > 0 && !props.selectedKeys.includes(item.key);
+        const isEmpty = item.count === 0;
+        return (
+          <button
+            key={item.key}
+            type="button"
+            disabled={isEmpty}
+            onClick={() => props.onToggle(item.key)}
+            className={`grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-md px-1 py-1 text-left transition ${
+              isMuted
+                ? "bg-white opacity-45"
+                : "bg-white hover:bg-[#F8FAFC]"
+            }`}
+          >
+            <span className="flex min-w-0 items-center gap-2">
+              <span
+                className="h-3.5 w-3.5 shrink-0 rounded-full"
+                style={{ backgroundColor: props.colors[item.key] ?? BRAND.blue }}
+              />
+              <span
+                className={`truncate text-sm font-semibold ${
+                  isEmpty ? "text-[#CBD5E1]" : "text-[#334155]"
+                }`}
+              >
+                {formatNumber(item.count)} {item.name.toLowerCase()}
+              </span>
+            </span>
+            <span
+              className={`text-xs font-bold tabular-nums ${
+                isEmpty ? "text-[#CBD5E1]" : "text-[#64748B]"
+              }`}
+            >
+              {formatPercent(item.percentage)}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function CoveragePanel({ summary }: { summary: DashboardSummary }) {
+  const clientWidth = clampBarWidth(summary.coverage.percentage, summary.coverage.clients);
+  const opportunityWidth = Math.max(0, 100 - clientWidth);
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <div className="text-xs font-bold uppercase text-[#64748B]">Cobertura comercial</div>
+            <div className="mt-1 text-4xl font-black leading-none text-[#0B1F33]">
+              {formatPercent(summary.coverage.percentage)}
+            </div>
+          </div>
+          <div className="text-right text-xs font-semibold text-[#64748B]">
+            {formatNumber(summary.coverage.totalMarket)} pontos mapeados
+          </div>
+        </div>
+        <div className="mt-4 h-4 overflow-hidden rounded-full bg-[#EAF0F7]">
+          <div className="flex h-full w-full">
+            <div style={{ width: `${clientWidth}%`, backgroundColor: BRAND.blue }} />
+            <div style={{ width: `${opportunityWidth}%`, backgroundColor: "#F59E0B" }} />
           </div>
         </div>
       </div>
 
-      {/* ── SEÇÃO DE GRÁFICOS & RECOMENDAÇÕES COMERCIAIS ── */}
-      <section className="space-y-4 pt-2">
-        <div className="flex items-center justify-between border-b border-[#DDE5EF] pb-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <BarChart3 className="h-5 w-5 text-[#1061AF]" />
-              <h2 className="text-lg font-bold text-[#0B1F33]">
-                Painel Analítico
-              </h2>
-            </div>
-            <p className="text-xs text-[#64748B] mt-0.5">
-              Visão por município, distribuição por etapa e evolução de qualificação.
-            </p>
-          </div>
-        </div>
-
-        {/* ── Grid de Gráficos ── */}
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {/* Gráfico 1: Colunas / Barras (Concentração por Município) */}
-          <div className="rounded-xl border border-[#DDE5EF] bg-white p-4 shadow-xs">
-            <div className="flex items-center gap-2 mb-3">
-              <BarChart3 className="h-4 w-4 text-[#1061AF]" />
-              <h3 className="text-xs font-bold text-[#0B1F33]">Leads por Município Foco</h3>
-            </div>
-            <div className="h-56 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={cityBarData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <XAxis dataKey="city" tick={{ fontSize: 11, fill: "#64748B" }} interval={0} angle={-15} textAnchor="end" />
-                  <YAxis tick={{ fontSize: 11, fill: "#64748B" }} />
-                  <RechartsTooltip
-                    contentStyle={{ backgroundColor: "#0B1F33", borderRadius: "8px", border: "none", color: "#fff", fontSize: "12px" }}
-                  />
-                  <Bar dataKey="total" fill="#1061AF" radius={[6, 6, 0, 0]} name="Oportunidades" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-            <p className="mt-2 text-[11px] font-medium text-slate-500 text-center">
-              Volume absoluto de estabelecimentos mapeados por cidade
-            </p>
-          </div>
-
-          {/* Gráfico 2: Barras / Distribuição Comparativa do Funil */}
-          <div className="rounded-xl border border-[#DDE5EF] bg-white p-4 shadow-xs flex flex-col justify-between">
-            <div className="flex items-center gap-2 mb-3">
-              <PieChartIcon className="h-4 w-4 text-[#1061AF]" />
-              <h3 className="text-xs font-bold text-[#0B1F33]">Distribuição do Funil</h3>
-            </div>
-            <div className="py-2 space-y-4 my-auto">
-              {statusPieData.map((item, idx) => {
-                const total = statusPieData.reduce((acc, curr) => acc + curr.count, 0) || 1;
-                const pct = Math.round((item.count / total) * 100);
-                const barColors = ["bg-[#1061AF]", "bg-[#16A34A]", "bg-[#94A3B8]"];
-                return (
-                  <div key={item.name} className="space-y-1.5">
-                    <div className="flex items-center justify-between text-xs font-semibold text-[#0B1F33]">
-                      <span>{item.name}</span>
-                      <span className="tabular-nums font-bold text-slate-600">
-                        {item.count.toLocaleString("pt-BR")} ({pct}%)
-                      </span>
-                    </div>
-                    <div className="h-2 w-full rounded-full bg-slate-100 overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-300 ${barColors[idx % barColors.length]}`}
-                        style={{ width: `${Math.max(pct, item.count > 0 ? 4 : 0)}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            <p className="mt-2 text-[11px] font-medium text-slate-500 text-center">
-              Proporção de leads por etapa comercial (Novos x Contatados x Convertidos)
-            </p>
-          </div>
-
-          {/* Gráfico 3: Linhas (Tendência e Projeção Comercial) */}
-          <div className="rounded-xl border border-[#DDE5EF] bg-white p-4 shadow-xs md:col-span-2 xl:col-span-1">
-            <div className="flex items-center gap-2 mb-3">
-              <LineChartIcon className="h-4 w-4 text-[#16A34A]" />
-              <h3 className="text-xs font-bold text-[#0B1F33]">Tendência de Qualificação</h3>
-            </div>
-            <div className="h-56 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={trendLineData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
-                  <XAxis dataKey="mes" tick={{ fontSize: 11, fill: "#64748B" }} />
-                  <YAxis tick={{ fontSize: 11, fill: "#64748B" }} />
-                  <RechartsTooltip
-                    contentStyle={{ backgroundColor: "#0B1F33", borderRadius: "8px", border: "none", color: "#fff", fontSize: "12px" }}
-                  />
-                  <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "6px" }} />
-                  <Line type="monotone" dataKey="novosLeads" stroke="#1061AF" strokeWidth={2.5} dot={{ r: 4 }} name="Leads Mapeados" />
-                  <Line type="monotone" dataKey="convertidos" stroke="#16A34A" strokeWidth={2.5} dot={{ r: 4 }} name="Convertidos" />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-            <p className="mt-2 text-[11px] font-medium text-slate-500 text-center">
-              Evolução mensal de prospecção (Leads Mapeados vs Convertidos)
-            </p>
-          </div>
-        </div>
-
-        {/* ── Componente de Recomendações Comerciais ── */}
-        <div className="overflow-hidden rounded-xl border border-[#DDE5EF] bg-white shadow-xs">
-          <div className="flex items-center gap-2 border-b border-[#DDE5EF] bg-[#F8FAFC] px-4 py-2.5">
-            <TrendingUp className="h-4 w-4 text-[#1061AF]" />
-            <h3 className="text-xs font-bold text-[#0B1F33]">
-              Recomendações comerciais
-            </h3>
-          </div>
-
-          <div className="divide-y divide-slate-100">
-            {/* Item 1 */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-4 py-2.5 hover:bg-[#F8FAFC] transition-colors">
-              <div className="min-w-0 flex-1">
-                <div className="text-xs font-bold text-[#0B1F33]">Alocação de equipe</div>
-                <div className="mt-0.5 text-xs text-[#64748B] font-normal">
-                  <strong className="font-semibold text-slate-800">{priorityCity}</strong> e <strong className="font-semibold text-slate-800">{topRegions[1]?.city ?? "Tupã"}</strong> concentram mais de 60% dos leads de maior score.
-                </div>
-              </div>
-              <Link
-                to="/leads-b2b"
-                search={{ city: priorityCity }}
-                className="inline-flex items-center gap-1 text-xs font-semibold text-[#1061AF] hover:underline shrink-0"
-              >
-                Ver cidades <ChevronRight className="h-3.5 w-3.5" />
-              </Link>
-            </div>
-
-            {/* Item 2 */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-4 py-2.5 hover:bg-[#F8FAFC] transition-colors">
-              <div className="min-w-0 flex-1">
-                <div className="text-xs font-bold text-[#0B1F33]">Foco de produto</div>
-                <div className="mt-0.5 text-xs text-[#64748B] font-normal">
-                  CNAE <strong className="font-semibold text-slate-800">4712-1/00 (Minimercados)</strong> possui a maior concentração de oportunidades.
-                </div>
-              </div>
-              <Link
-                to="/leads-b2b"
-                search={{ cnae: "4712-1/00" }}
-                className="inline-flex items-center gap-1 text-xs font-semibold text-[#1061AF] hover:underline shrink-0"
-              >
-                Ver oportunidades <ChevronRight className="h-3.5 w-3.5" />
-              </Link>
-            </div>
-
-            {/* Item 3 */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-4 py-2.5 hover:bg-[#F8FAFC] transition-colors">
-              <div className="min-w-0 flex-1">
-                <div className="text-xs font-bold text-[#0B1F33]">Aceleração do funil</div>
-                <div className="mt-0.5 text-xs text-[#64748B] font-normal">
-                  <strong className="font-semibold text-slate-800">{(summary?.potentialClients ?? 410).toLocaleString("pt-BR")} leads</strong> aguardam primeira abordagem.
-                </div>
-              </div>
-              <Link
-                to="/funil-comercial"
-                search={{ search: "", uf: "Todos", city: priorityCity, cnae: "Todos" }}
-                className="inline-flex items-center gap-1 text-xs font-semibold text-[#1061AF] hover:underline shrink-0"
-              >
-                Ver funil <ChevronRight className="h-3.5 w-3.5" />
-              </Link>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── MODAL EXPLICATIVO: "Como é calculada?" ── */}
-      <Dialog open={showMetricHelpModal} onOpenChange={setShowMetricHelpModal}>
-        <DialogContent className="border border-slate-200/80 bg-white p-6 sm:max-w-[620px] overflow-hidden rounded-2xl shadow-2xl text-slate-800">
-          <DialogHeader className="border-b border-slate-100 pb-3 mb-4">
-            <DialogTitle className="flex items-center gap-2 text-lg font-bold text-[#0B1F33]">
-              <Target className="h-5 w-5 text-[#1061AF]" />
-              Metodologia de Cálculo de Scores e Priorização
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="space-y-5 max-h-[70vh] overflow-y-auto pr-1">
-            {/* Bloco 1: Score de Oportunidade Individual */}
-            <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-4 space-y-2">
-              <h3 className="text-sm font-black text-[#0B1F33] flex items-center gap-1.5">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#1061AF] text-white text-[10px]">1</span>
-                Score de Oportunidade do Comércio (0 a 100)
-              </h3>
-              <p className="text-xs text-slate-600 leading-relaxed">
-                Cada estabelecimento recebe uma pontuação única, explicável e reproduzível calculada pela soma ponderada de 6 pilares normalizados:
-              </p>
-
-              <div className="grid grid-cols-2 gap-2 text-xs pt-1">
-                <div className="rounded-lg bg-white p-2.5 border border-slate-200/60">
-                  <strong className="text-[#1061AF]">30% — Perfil / CNAE:</strong>
-                  <div className="text-[11px] text-slate-500 mt-0.5">Minimercados (4712-1/00) e Supermercados (4711-3/02) pontuam máximo (30 pts).</div>
-                </div>
-
-                <div className="rounded-lg bg-white p-2.5 border border-slate-200/60">
-                  <strong className="text-[#1061AF]">25% — Potencial Comercial:</strong>
-                  <div className="text-[11px] text-slate-500 mt-0.5">Porte da empresa (EPP = 25 pts, ME = 20 pts, Matriz Ativa = 15 pts).</div>
-                </div>
-
-                <div className="rounded-lg bg-white p-2.5 border border-slate-200/60">
-                  <strong className="text-[#1061AF]">20% — Proximidade Logística:</strong>
-                  <div className="text-[11px] text-slate-500 mt-0.5">Distância até Garça/SP (sede Deusa). Até 30 km = 20 pts, decrescendo por raio.</div>
-                </div>
-
-                <div className="rounded-lg bg-white p-2.5 border border-slate-200/60">
-                  <strong className="text-[#1061AF]">10% — Qualidade dos Dados:</strong>
-                  <div className="text-[11px] text-slate-500 mt-0.5">CNPJ válido, endereço completo, telefone e localização geocodificada.</div>
-                </div>
-
-                <div className="rounded-lg bg-white p-2.5 border border-slate-200/60">
-                  <strong className="text-[#1061AF]">10% — Prontidão Comercial:</strong>
-                  <div className="text-[11px] text-slate-500 mt-0.5">Empresas com situação ATIVA e prontas para primeira abordagem comercial.</div>
-                </div>
-
-                <div className="rounded-lg bg-white p-2.5 border border-slate-200/60">
-                  <strong className="text-[#1061AF]">5% — Atratividade Territorial:</strong>
-                  <div className="text-[11px] text-slate-500 mt-0.5">Localização em municípios polo/monitorados de alta densidade B2B.</div>
-                </div>
-              </div>
-
-              <div className="mt-2 text-[11px] font-semibold text-slate-600 bg-white p-2 rounded-lg border border-slate-200">
-                Classificação: <span className="text-red-600 font-bold">80-100 (Crítica)</span> | <span className="text-amber-600 font-bold">65-79 (Alta)</span> | <span className="text-blue-600 font-bold">45-64 (Média)</span> | <span className="text-slate-500 font-bold">0-44 (Baixa)</span>
-              </div>
-            </div>
-
-            {/* Bloco 2: Prioridade Territorial da Cidade */}
-            <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-4 space-y-2">
-              <h3 className="text-sm font-black text-[#0B1F33] flex items-center gap-1.5">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#0B1F33] text-white text-[10px]">2</span>
-                Prioridade Territorial da Semana (Score da Cidade 0 a 100)
-              </h3>
-              <p className="text-xs text-slate-600 leading-relaxed">
-                A cidade campeã não é escolhida por quantidade bruta, mas sim pela qualidade e eficiência da região:
-              </p>
-              <ul className="list-disc pl-4 text-xs space-y-1 text-slate-700">
-                <li><strong>35% Média de Qualidade dos Comércios</strong>: Média dos scores individuais dos estabelecimentos da cidade.</li>
-                <li><strong>20% Proximidade Logística de Garça/SP</strong>: Eficiência nas entregas e custo de transporte.</li>
-                <li><strong>15% Concentração de CNAEs Estratégicos</strong>: Densidade de pontos de venda com alto giro.</li>
-                <li><strong>15% Volume de Oportunidades Qualificadas</strong>: Cidades com maior concentração de scores &gt;= 65.</li>
-                <li><strong>15% Qualidade Cadastral da Região</strong>: Precisão nos dados para abordagem sem desperdício.</li>
-              </ul>
-              <div className="text-[11px] text-slate-500 italic bg-amber-50 p-2 rounded-lg border border-amber-200 text-amber-900 mt-2">
-                Uma cidade com 15 oportunidades de score 85 terá prioridade maior que uma cidade com 70 comércios de score 35.
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-4 border-t border-slate-100 pt-3 flex justify-end">
-            <button
-              onClick={() => setShowMetricHelpModal(false)}
-              className="h-9 rounded-xl bg-[#0B1F33] px-5 text-xs font-bold text-white transition hover:bg-[#1061AF]"
-            >
-              Entendido
-            </button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <div className="grid gap-2">
+        <CoverageRow
+          label="Clientes Deusa"
+          value={summary.coverage.clients}
+          percentage={summary.coverage.percentage}
+          color={BRAND.blue}
+        />
+        <CoverageRow
+          label="Oportunidades"
+          value={summary.coverage.opportunities}
+          percentage={summary.coverage.expansionPercentage}
+          color="#F59E0B"
+        />
+      </div>
     </div>
   );
+}
+
+function CoverageRow(props: { label: string; value: number; percentage: number; color: string }) {
+  return (
+    <div className="flex items-center justify-between rounded-md border border-[#EEF2F7] bg-[#F8FAFC] px-3 py-2">
+      <div className="flex items-center gap-2 text-xs font-bold text-[#0B1F33]">
+        <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: props.color }} />
+        {props.label}
+      </div>
+      <div className="text-xs font-bold tabular-nums text-[#64748B]">
+        {formatNumber(props.value)} · {formatPercent(props.percentage)}
+      </div>
+    </div>
+  );
+}
+
+function ExpansionBars(props: {
+  items: DashboardSummary["expansionByCity"];
+  selectedCity: string;
+  onSelectCity: (city: string) => void;
+  uf: string;
+}) {
+  if (props.items.length === 0) {
+    return (
+      <NoData icon={BarChart3} label="Sem municípios com mercado mapeado nos filtros atuais" />
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {props.items.map((item) => {
+        const selected = props.selectedCity === item.city;
+        return (
+          <div key={item.city} className="grid gap-1">
+            <button
+              type="button"
+              onClick={() => props.onSelectCity(item.city)}
+              className={`grid grid-cols-[150px_minmax(0,1fr)_56px] items-center gap-3 rounded-md border px-3 py-2 text-left transition ${
+                selected
+                  ? "border-[#1061AF] bg-blue-50"
+                  : "border-[#EEF2F7] bg-white hover:border-[#1061AF]"
+              }`}
+            >
+              <span className="truncate text-xs font-bold text-[#0B1F33]">{item.city}</span>
+              <span className="h-2.5 overflow-hidden rounded-full bg-[#EAF0F7]">
+                <span
+                  className="block h-full rounded-full bg-[#1061AF]"
+                  style={{
+                    width: `${Math.max(item.expansionPercentage, item.opportunities > 0 ? 4 : 0)}%`,
+                  }}
+                />
+              </span>
+              <span className="text-right text-xs font-black tabular-nums text-[#0B1F33]">
+                {formatPercent(item.expansionPercentage)}
+              </span>
+            </button>
+            <div className="flex items-center justify-between px-1 text-[11px] font-medium text-[#64748B]">
+              <span>
+                {formatNumber(item.opportunities)} oportunidades · {formatNumber(item.clients)}{" "}
+                clientes
+              </span>
+              <Link
+                to="/mapa-oportunidades"
+                search={{
+                  uf: props.uf !== "Todos" ? props.uf : undefined,
+                  city: item.city,
+                }}
+                className="font-bold text-[#1061AF] hover:underline"
+              >
+                Abrir mapa
+              </Link>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function EvolutionChart(props: {
+  data: MonthlyEvolutionPoint[];
+  activeSeries: EvolutionSeriesKey[];
+}) {
+  if (props.data.length === 0) {
+    return <NoData icon={LineChartIcon} label="Sem evolução mensal para os filtros atuais" />;
+  }
+
+  return (
+    <div className="h-[324px] w-full">
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={props.data} margin={{ top: 12, right: 16, left: -16, bottom: 4 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#EEF2F7" />
+          <XAxis
+            dataKey="month"
+            tick={{ fontSize: 11, fill: BRAND.muted, fontWeight: 600 }}
+            tickLine={false}
+            axisLine={{ stroke: "#E2E8F0" }}
+          />
+          <YAxis
+            allowDecimals={false}
+            tick={{ fontSize: 11, fill: BRAND.muted, fontWeight: 600 }}
+            tickLine={false}
+            axisLine={false}
+          />
+          <RechartsTooltip
+            formatter={(value: number, name: string) => [formatNumber(value), name]}
+            labelFormatter={(label, payload) => {
+              const point = payload?.[0]?.payload as MonthlyEvolutionPoint | undefined;
+              return point ? `${label}/${point.year}` : label;
+            }}
+            contentStyle={{
+              backgroundColor: BRAND.navy,
+              border: "none",
+              borderRadius: 8,
+              color: "#FFFFFF",
+              fontSize: 12,
+            }}
+            itemStyle={{ color: "#FFFFFF" }}
+          />
+          {EVOLUTION_SERIES.map((series) =>
+            props.activeSeries.includes(series.key) ? (
+              <Line
+                key={series.key}
+                type="monotone"
+                dataKey={series.key}
+                name={series.name}
+                stroke={series.color}
+                strokeWidth={2.5}
+                dot={{ r: 3 }}
+                activeDot={{ r: 5 }}
+              />
+            ) : null,
+          )}
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function SeriesLegend(props: {
+  active: EvolutionSeriesKey[];
+  onToggle: (key: EvolutionSeriesKey) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      {EVOLUTION_SERIES.map((item) => {
+        const active = props.active.includes(item.key);
+        return (
+          <button
+            key={item.key}
+            type="button"
+            onClick={() => props.onToggle(item.key)}
+            className={`inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-[11px] font-bold transition ${
+              active
+                ? "border-[#DDE5EF] bg-[#F8FAFC] text-[#0B1F33]"
+                : "border-[#EEF2F7] bg-white text-[#94A3B8]"
+            }`}
+          >
+            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: item.color }} />
+            {item.name}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function NoData(props: { icon: LucideIcon; label: string }) {
+  const Icon = props.icon;
+  return (
+    <div className="flex min-h-56 flex-col items-center justify-center rounded-lg border border-dashed border-[#CBD5E1] bg-[#F8FAFC] p-5 text-center">
+      <Icon className="h-5 w-5 text-[#94A3B8]" />
+      <div className="mt-2 text-xs font-bold text-[#64748B]">{props.label}</div>
+    </div>
+  );
+}
+
+function toggleIsolatingSelection(key: string, setValue: Dispatch<SetStateAction<string[]>>) {
+  setValue((current) => {
+    if (current.length === 0) return [key];
+    if (current.includes(key)) return current.filter((item) => item !== key);
+    return [...current, key];
+  });
+}
+
+function filterSegments(items: DashboardSegment[], selectedKeys: string[]) {
+  return selectedKeys.length > 0 ? items.filter((item) => selectedKeys.includes(item.key)) : items;
+}
+
+function buildPortfolioSegments(summary: DashboardSummary | null): DashboardSegment[] {
+  if (!summary) return [];
+  const total = summary.portfolio.activeClients + summary.portfolio.inactiveClients;
+  return [
+    makeSegment("active", "Ativos", summary.portfolio.activeClients, total),
+    makeSegment("inactive", "Inativos", summary.portfolio.inactiveClients, total),
+  ];
+}
+
+function buildPositivationComparisonSegments(summary: DashboardSummary | null): DashboardSegment[] {
+  if (!summary) return [];
+  const inactiveClients = summary.portfolio.inactiveClients;
+  const positivatedClients = summary.positivation.total;
+  const total = positivatedClients + inactiveClients;
+
+  return [
+    makeSegment("positivated", "Positivados", positivatedClients, total),
+    makeSegment("inactive", "Inativos", inactiveClients, total),
+  ];
+}
+
+function makeSegment(key: string, name: string, count: number, total: number): DashboardSegment {
+  return {
+    key,
+    name,
+    count,
+    percentage: pct(count, total),
+  };
+}
+
+function sumSegments(items: DashboardSegment[]) {
+  return items.reduce((total, item) => total + item.count, 0);
+}
+
+function formatNumber(value: number) {
+  return value.toLocaleString("pt-BR");
+}
+
+function formatPercent(value: number) {
+  return `${value.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;
+}
+
+function pct(part: number, total: number) {
+  if (total <= 0) return 0;
+  return Math.round((part / total) * 1000) / 10;
+}
+
+function toNumber(value: string | number | undefined) {
+  if (typeof value === "number") return value;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatPeriodHeading(period: DashboardSummary["period"]) {
+  const start = new Date(period.start);
+  if (period.key === "current_month" || period.key === "selected_month") {
+    return `${MONTH_OPTIONS[start.getUTCMonth()]} de ${start.getUTCFullYear()}`.toUpperCase();
+  }
+  return period.label.toUpperCase();
+}
+
+function clampBarWidth(value: number, count: number) {
+  if (count <= 0) return 0;
+  return Math.max(4, Math.min(100, value));
+}
+
+function buildYearOptions(currentYear: number) {
+  return Array.from({ length: 6 }, (_, index) => currentYear - index);
 }

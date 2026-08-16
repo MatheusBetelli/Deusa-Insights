@@ -10,7 +10,11 @@ export class ApiError extends Error {
   }
 }
 
-const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:3001";
+const API_URL = (import.meta && import.meta.env && import.meta.env.VITE_API_URL) || "http://127.0.0.1:3001";
+
+if (!import.meta?.env?.VITE_API_URL && import.meta?.env?.PROD) {
+  console.warn("[Deusa Analytics] ⚠️ VITE_API_URL não configurada em produção. Usando fallback localhost.");
+}
 
 function buildUrl(path: string, query?: Record<string, string | number | undefined | null>) {
   const url = new URL(path.startsWith("http") ? path : `${API_URL}${path}`);

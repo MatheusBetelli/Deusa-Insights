@@ -1,7 +1,11 @@
 const AUTH_TOKEN_KEY = "deusa_auth_token";
 const USER_DATA_KEY = "deusa_user_data";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:3001";
+const API_URL = (import.meta && import.meta.env && import.meta.env.VITE_API_URL) || "http://127.0.0.1:3001";
+
+if (!import.meta?.env?.VITE_API_URL && import.meta?.env?.PROD) {
+  console.warn("[Deusa Analytics] ⚠️ VITE_API_URL não configurada em produção. Usando fallback localhost.");
+}
 
 function hasBrowserStorage() {
   return typeof window !== "undefined" && typeof window.localStorage !== "undefined";

@@ -46,6 +46,8 @@ export type Company = {
   pontuacaoOportunidade?: number;
   nivelOportunidade?: string | null; // "alta" | "media" | "baixa"
   motivoPontuacao?: string[] | null;
+  telefoneEncontrado?: string | null;
+  details?: { telefone?: string | null; email?: string | null } | null;
 };
 
 export type CompanyQuery = {
