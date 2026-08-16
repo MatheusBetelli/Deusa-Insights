@@ -498,28 +498,21 @@ function Dashboard() {
       )}
 
       {loading ? (
-        <SkeletonMetricCards count={4} />
+        <SkeletonMetricCards count={3} />
       ) : summary ? (
         <>
-          <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <MetricCard
-              label="Carteira de clientes"
-              value={summary.portfolio.totalClients}
-              description={`${formatNumber(summary.portfolio.activeClients)} ativos na base atual`}
-              icon={UserCheck}
-              accent={BRAND.blue}
-            />
+          <section className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
             <MetricCard
               label="Positivados no período"
               value={summary.positivation.total}
-              description={`${formatPercent(summary.positivation.portfolioPercentage)} da carteira ativa`}
+              description={`${formatNumber(summary.portfolio.activeClients)} clientes ativos na base (${formatPercent(summary.positivation.portfolioPercentage)} da carteira)`}
               icon={CheckCircle2}
               accent="#16A34A"
             />
             <MetricCard
               label="Cobertura comercial"
               value={formatPercent(summary.coverage.percentage)}
-              description={`${formatNumber(summary.coverage.clients)} clientes de ${formatNumber(summary.coverage.totalMarket)} pontos mapeados`}
+              description={`${formatNumber(summary.coverage.clients)} clientes de ${formatNumber(summary.coverage.totalMarket)} pontos cadastrados`}
               icon={Target}
               accent={BRAND.navy}
             />

@@ -10,4 +10,4 @@
 ## 2. Escopo Comercial Rígido (Público-Alvo Deusa Alimentos)
 - **Apenas compradores de Farinha e Farofa:** A plataforma deve conter EXCLUSIVAMENTE estabelecimentos com perfil de compra de farinha de mandioca, farinha de milho, farofa e produtos alimentícios.
 - **Categorias Permitidas:** Supermercados, Hipermercados, Minimercados, Mercearias e Açougues.
-- **Categorias Desqualificadas (Ignorar):** Lojas de roupas, calçados, informática/celulares, oficinas/auto peças, farmácias, salões/estética, bares/casas noturnas, restaurantes, escritórios, pet shops, lojas de 1 real/variedades e serviços não-alimentícios.
+- **Categorias Desqualificadas (Ignorar):** Lojas de roupas, calçados, informática/celulares, oficinas/auto peças, farmácias, salões/estética, bares/casas noturnas, restaurantes, escritórios, pet shops, lojas de 1 real/variedades e serviços não-alimentícios.![alt text](image.png)
