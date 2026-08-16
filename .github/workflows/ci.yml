@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [ main, master ]
 
+permissions:
+  contents: read
+
 jobs:
   build-and-test:
     name: Build, Typecheck & Test
@@ -23,9 +26,9 @@ jobs:
 
       - name: Instalar dependências do Monorepo
         run: |
-          npm install
-          cd backend && npm install
-          cd ../frontend && npm install
+          npm ci
+          cd backend && npm ci
+          cd ../frontend && npm ci
 
       - name: Executar Typecheck do Frontend
         run: npm run typecheck

@@ -39,18 +39,43 @@ enum ImportStatus {
   ERROR
 }
 
+// ── Tabela Legada de Usuários (Mantida intacta durante transição) ─────────────
 model User {
-  id            String            @id @default(cuid())
+  id                      String            @id @default(cuid())
+  name                    String
+  email                   String            @unique
+  passwordHash            String
+  role                    UserRole          @default(SALES)
+  createdAt               DateTime          @default(now())
+  updatedAt               DateTime          @updatedAt
+  assignedLeadsLegacy     Lead[]            @relation("LeadAssigneeLegacy")
+  interactionsLegacy      LeadInteraction[] @relation("InteractionUserLegacy")
+
+  @@map("users")
+}
+
+// ── Mapeamento Persistente CUID -> UUID (Idempotente) ────────────────────────
+model UserMapping {
+  cuid       String   @id
+  uuid       String   @unique @db.Uuid
+  email      String
+  migratedAt DateTime @default(now())
+
+  @@map("user_mappings")
+}
+
+// ── Perfis do Supabase Auth (Vinculado a auth.users via UUID) ─────────────────
+model Profile {
+  id            String            @id @db.Uuid
   name          String
   email         String            @unique
-  passwordHash  String
   role          UserRole          @default(SALES)
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
-  assignedLeads Lead[]            @relation("LeadAssignee")
-  interactions  LeadInteraction[]
+  assignedLeads Lead[]            @relation("LeadAssigneeProfile")
+  interactions  LeadInteraction[] @relation("InteractionUserProfile")
 
-  @@map("users")
+  @@map("profiles")
 }
 
 model City {
@@ -79,78 +104,63 @@ model Cnae {
 }
 
 model Company {
-  id                String        @id @default(cuid())
-  cnpj              String        @unique
-  razaoSocial       String
-  nomeFantasia      String?
-  situacaoCadastral String
-  porte             String?
-  matrizFilial      String?
-  dataAbertura      DateTime?
-  cnaePrincipal     String?
-  uf                String
-  cidade            String
-  bairro            String?
-  cep               String?
-  logradouro        String?
-  numero            String?
-  complemento       String?
-  latitude          Float?
-  longitude         Float?
-  source            String        @default("manual")
-  lastSyncAt        DateTime?
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
+  id                        String          @id @default(cuid())
+  cnpj                      String?         @unique
+  externalId                String?
+  placeId                   String?
+  source                    String          @default("receita_federal")
+  
+  razaoSocial               String
+  nomeFantasia              String?
+  situacaoCadastral         String
+  porte                     String?
+  matrizFilial              String?
+  dataAbertura              DateTime?
+  cnaePrincipal             String?
+  uf                        String
+  cidade                    String
+  bairro                    String?
+  cep                       String?
+  logradouro                String?
+  numero                    String?
+  complemento               String?
+  latitude                  Float?
+  longitude                 Float?
+  lastSyncAt                DateTime?
+  createdAt                 DateTime        @default(now())
+  updatedAt                 DateTime        @updatedAt
 
   // ─── Rastreabilidade de Coordenadas ───────────────────────────────────────
-  // origemCoordenada: "municipio_centroide_jitter" | "municipio_centroide" |
-  //                   "cep" | "geocodificado" | "estabelecimento" | "sem_coordenada"
-  // IMPORTANTE: coordenadas com origem "centroide" ou "jitter" são apenas visuais
-  // e NÃO representam o endereço físico exato do estabelecimento.
-  origemCoordenada      String?
-
-  // statusVerificacaoEndereco: "aproximado" | "nao_verificado" |
-  //                            "confiavel_cadastralmente" | "verificado" |
-  //                            "divergente" | "nao_encontrado"
-  // ATENÇÃO: "confiavel_cadastralmente" indica dados cadastrais completos,
-  // NÃO que o endereço foi validado fisicamente.
+  origemCoordenada          String?
   statusVerificacaoEndereco String?
-
-  // Pontuação de confiança dos dados cadastrais (0–100)
-  confiancaVerificacao  Int?
+  confiancaVerificacao      Int?
 
   // ─── Qualidade Cadastral ──────────────────────────────────────────────────
-  enderecoCompleto      Boolean   @default(false)
-  pendenteValidacao     Boolean   @default(false)
-  motivosPendencia      Json?     // String[] — lista de motivos de pendência
+  enderecoCompleto          Boolean         @default(false)
+  pendenteValidacao         Boolean         @default(false)
+  motivosPendencia          Json?
 
   // ─── Pontuação Comercial ──────────────────────────────────────────────────
-  pontuacaoOportunidade Int       @default(0)
-  nivelOportunidade     String?   // "alta" | "media" | "baixa"
-  motivoPontuacao       Json?     // String[] — lista de razões da pontuação
+  pontuacaoOportunidade     Int             @default(0)
+  nivelOportunidade         String?
+  motivoPontuacao           Json?
 
-  // ─── Geocodificação Futura (Google Maps / outras APIs) ───────────────────
-  // Estes campos serão preenchidos quando GOOGLE_MAPS_API_KEY for configurado.
-  // Nunca usar esses campos como fonte primária de coordenadas na ausência da chave.
-  latitudeVerificada    Float?
-  longitudeVerificada   Float?
-  enderecoVerificado    String?
-  fonteGeocodificacao   String?
-  dataVerificacaoGeo    DateTime?
+  // ─── Geocodificação Futura ────────────────────────────────────────────────
+  latitudeVerificada        Float?
+  longitudeVerificada       Float?
+  enderecoVerificado        String?
+  fonteGeocodificacao       String?
+  dataVerificacaoGeo        DateTime?
 
   // ─── Validação Manual de Localização & Evidências ─────────────────────────
-  validadoManualmente       Boolean   @default(false)
+  validadoManualmente       Boolean         @default(false)
   dataUltimaValidacao       DateTime?
   usuarioValidacaoId        String?
   observacaoValidacao       String?
-  // statusValidacao: "aguardando_validacao" | "confirmado" | "provavel" |
-  //                  "nao_encontrado" | "endereco_invalido" |
-  //                  "resultado_incompativel" | "fechado" | "rejeitado" | "revisao_manual"
-  statusValidacao           String?   @default("aguardando_validacao")
+  statusValidacao           String?         @default("aguardando_validacao")
 
   fonteConsultada           String?
   urlEvidencia              String?
-  placeId                   String?
   nomeEncontrado            String?
   enderecoEncontrado        String?
   telefoneEncontrado        String?
@@ -162,13 +172,17 @@ model Company {
   dataVisita                DateTime?
   evidenciaVisita           String?
 
-  cnaes             CompanyCnae[]
-  lead              Lead?
-  details           CompanyDetails?
+  cnaes                     CompanyCnae[]
+  lead                      Lead?
+  details                   CompanyDetails?
+  clientAccounts            ClientAccount[]
 
+  @@unique([source, externalId])
   @@index([cidade, uf])
   @@index([cnaePrincipal])
   @@index([situacaoCadastral])
+  @@index([source])
+  @@index([placeId])
   @@map("companies")
 }
 
@@ -184,22 +198,58 @@ model CompanyCnae {
   @@map("company_cnaes")
 }
 
+// ── Base Comercial Privada da Deusa (Clientes Excel & Cruzamento) ──────────────
+model ClientAccount {
+  id                 String   @id @default(uuid())
+  codigoClienteDeusa String?  @unique
+  cnpj               String?
+  razaoSocial        String
+  nomeFantasia       String?
+  isCurrentClient    Boolean  @default(true)
+  grupoEconomico     String?
+  segmentoAtuacao    String?
+  cidade             String?
+  uf                 String?
+  
+  companyId          String?
+  importedFromExcel  Boolean  @default(true)
+  lastImportAt       DateTime @default(now())
+  metadata           Json?
+
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  company            Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
+  @@index([cnpj])
+  @@index([companyId])
+  @@index([isCurrentClient])
+  @@map("client_accounts")
+}
+
 model Lead {
-  id             String            @id @default(cuid())
-  companyId      String            @unique
-  status         LeadStatus         @default(NEW)
-  score             Int               @default(0)
-  potentialLevel    PotentialLevel    @default(LOW)
-  pendenteValidacao Boolean           @default(false)
-  assignedToId      String?
-  notes             String?
-  lastContactAt  DateTime?
-  nextActionAt   DateTime?
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
-  company        Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  assignedTo     User?             @relation("LeadAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
-  interactions   LeadInteraction[]
+  id                  String            @id @default(cuid())
+  companyId           String            @unique
+  status              LeadStatus        @default(NEW)
+  score               Int               @default(0)
+  potentialLevel      PotentialLevel    @default(LOW)
+  pendenteValidacao   Boolean           @default(false)
+  
+  // Coluna UUID apontando para Profiles
+  assignedToId        String?           @db.Uuid
+  // Coluna Legada mantida durante transição
+  assignedToId_legacy String?
+  
+  notes               String?
+  lastContactAt       DateTime?
+  nextActionAt        DateTime?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  
+  company             Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  assignedTo          Profile?          @relation("LeadAssigneeProfile", fields: [assignedToId], references: [id], onDelete: SetNull)
+  assignedToLegacy    User?             @relation("LeadAssigneeLegacy", fields: [assignedToId_legacy], references: [id], onDelete: SetNull)
+  interactions        LeadInteraction[]
 
   @@index([status])
   @@index([potentialLevel])
@@ -208,14 +258,21 @@ model Lead {
 }
 
 model LeadInteraction {
-  id          String   @id @default(cuid())
-  leadId      String
-  userId      String
-  type        String
-  description String
-  createdAt   DateTime @default(now())
-  lead        Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id             String   @id @default(cuid())
+  leadId         String
+  
+  // Coluna UUID apontando para Profiles
+  userId         String?  @db.Uuid
+  // Coluna Legada mantida durante transição
+  userId_legacy  String?
+
+  type           String
+  description    String
+  createdAt      DateTime @default(now())
+
+  lead           Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  user           Profile? @relation("InteractionUserProfile", fields: [userId], references: [id], onDelete: Cascade)
+  userLegacy     User?    @relation("InteractionUserLegacy", fields: [userId_legacy], references: [id], onDelete: Cascade)
 
   @@index([leadId])
   @@index([userId])

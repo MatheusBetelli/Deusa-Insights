@@ -36,6 +36,9 @@ dist-ssr
 .env.*
 !.env.example
 !.env.production.example
+**/ex.env
+**/*.pem
+**/*.key
 
 # Large data files
 dadosCNAE/K3241.K03200Y1.D60613.ESTABELE

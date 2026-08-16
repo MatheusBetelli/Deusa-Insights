@@ -3,10 +3,22 @@ import { PrismaClient, UserRole } from "@prisma/client";
 import * as bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
+const isProduction = process.env.NODE_ENV === "production";
+
+function getRequiredPassword(envVar: string, fallback: string): string {
+  const value = process.env[envVar];
+  if (value) return value;
+  if (isProduction) {
+    console.error(`❌ SEGURANÇA: ${envVar} é obrigatória em produção. Defina antes de executar o seed.`);
+    process.exit(1);
+  }
+  console.warn(`⚠️  ${envVar} não definida. Usando senha padrão de desenvolvimento.`);
+  return fallback;
+}
 
 async function main() {
-  const adminPassword = await bcrypt.hash("admin123", 10);
-  const salesPassword = await bcrypt.hash("deusa123", 10);
+  const adminPassword = await bcrypt.hash(getRequiredPassword("SEED_ADMIN_PASSWORD", "admin123"), 12);
+  const salesPassword = await bcrypt.hash(getRequiredPassword("SEED_SALES_PASSWORD", "deusa123"), 12);
 
   const admin = await prisma.user.upsert({
     where: { email: "admin@deusa.com.br" },
@@ -111,17 +123,18 @@ async function main() {
     });
   }
 
-  const cnaes = [
-    { code: "4711302", description: "Supermercados", category: "Varejo alimentar", isTarget: true },
-    { code: "4712100", description: "Minimercados, mercearias e armazéns", category: "Varejo alimentar (Pequeno porte)", isTarget: true },
-    { code: "4722901", description: "Comércio varejista de carnes - Açougues", category: "Varejo alimentar (Pequeno porte)", isTarget: true },
-    { code: "4724500", description: "Comércio varejista de hortifrutigranjeiros", category: "Varejo alimentar (Pequeno porte)", isTarget: true },
-    { code: "4721102", description: "Padarias e confeitarias com predominância de revenda", category: "Varejo alimentar (Pequeno porte)", isTarget: true },
-    { code: "4729699", description: "Comércio varejista de produtos alimentícios em geral", category: "Varejo alimentar (Pequeno porte)", isTarget: true },
-    { code: "4723700", description: "Comércio varejista de peixes e frutos do mar - Peixarias", category: "Varejo alimentar (Pequeno porte)", isTarget: true },
-    { code: "4639701", description: "Comércio atacadista de produtos alimentícios em geral", category: "Atacado alimentar", isTarget: true },
-    { code: "5611203", description: "Lanchonetes, casas de chá, de sucos e similares", category: "Food service", isTarget: false },
-  ];
+    const cnaes = [
+      { code: "4711301", description: "Hipermercados", category: "Hipermercados", isTarget: true },
+      { code: "4711302", description: "Supermercados", category: "Supermercados", isTarget: true },
+      { code: "4712100", description: "Minimercados, mercearias e armazéns", category: "Minimercados e Mercearias", isTarget: true },
+      { code: "4722901", description: "Comércio varejista de carnes - Açougues", category: "Açougues", isTarget: true },
+      { code: "4724500", description: "Comércio varejista de hortifrutigranjeiros", category: "Varejo alimentar (Pequeno porte)", isTarget: false },
+      { code: "4721102", description: "Padarias e confeitarias com predominância de revenda", category: "Varejo alimentar (Pequeno porte)", isTarget: false },
+      { code: "4729699", description: "Comércio varejista de produtos alimentícios em geral", category: "Varejo alimentar (Pequeno porte)", isTarget: false },
+      { code: "4723700", description: "Comércio varejista de peixes e frutos do mar - Peixarias", category: "Varejo alimentar (Pequeno porte)", isTarget: false },
+      { code: "4639701", description: "Comércio atacadista de produtos alimentícios em geral", category: "Atacado alimentar", isTarget: false },
+      { code: "5611203", description: "Lanchonetes, casas de chá, de sucos e similares", category: "Food service", isTarget: false },
+    ];
 
   for (const cnae of cnaes) {
     await prisma.cnae.upsert({
