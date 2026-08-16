@@ -4,6 +4,17 @@ import { test } from "node:test";
 const BACKEND_URL = "http://localhost:3001";
 const FRONTEND_URL = "http://localhost:8080";
 
+async function getAdminToken() {
+  const loginRes = await fetch(`${BACKEND_URL}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: "admin@deusa.com.br", password: "admin123" }),
+  });
+  assert.strictEqual(loginRes.status, 201);
+  const { accessToken } = await loginRes.json();
+  return accessToken as string;
+}
+
 test("E2E: Backend Health Check responde com status ok", async () => {
   const res = await fetch(`${BACKEND_URL}/health`);
   assert.strictEqual(res.status, 200);
@@ -86,7 +97,10 @@ test("E2E: Endpoint do Funil Comercial (/pipeline)", async () => {
 });
 
 test("E2E: Endpoint de Cidades Monitoradas (/cities)", async () => {
-  const res = await fetch(`${BACKEND_URL}/cities`);
+  const accessToken = await getAdminToken();
+  const res = await fetch(`${BACKEND_URL}/cities`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
   assert.strictEqual(res.status, 200);
   const cities = await res.json();
   assert.ok(Array.isArray(cities));
@@ -95,7 +109,10 @@ test("E2E: Endpoint de Cidades Monitoradas (/cities)", async () => {
 });
 
 test("E2E: Endpoint de CNAEs Monitorados (/cnaes)", async () => {
-  const res = await fetch(`${BACKEND_URL}/cnaes`);
+  const accessToken = await getAdminToken();
+  const res = await fetch(`${BACKEND_URL}/cnaes`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
   assert.strictEqual(res.status, 200);
   const cnaes = await res.json();
   assert.ok(Array.isArray(cnaes));
