@@ -1,3 +1,4 @@
+import 'reflect-metadata';
 import assert from "node:assert";
 import { test } from "node:test";
 import { plainToInstance } from "class-transformer";

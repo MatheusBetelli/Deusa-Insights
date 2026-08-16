@@ -1,3 +1,5 @@
+import { isNonFoodBusiness } from "./non-food-filter";
+
 /**
  * Regra centralizada de qualificação de Oportunidades Comerciais (Deusa Insights)
  *
@@ -205,8 +207,13 @@ export function isValidOpportunity(company: {
     return false;
   }
 
-  // 3. Não pode ser propriedade rural (fazenda, sítio, estância, etc.)
+  // 3. Não pode ser propriedade rural (fazenda, sítio, estância, etc.) nem comércio alheio (roupas, calçados, oficinas, suplementos, etc.)
   if (isRuralOrNonCommercialLocation(company)) {
+    return false;
+  }
+
+  const name = [company.nomeFantasia, company.razaoSocial].filter(Boolean).join(" ");
+  if (isNonFoodBusiness(name)) {
     return false;
   }
 

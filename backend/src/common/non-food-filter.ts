@@ -10,7 +10,9 @@ export const NON_FOOD_KEYWORDS = [
   'vidraçaria', 'vidracaria', 'imóveis', 'imoveis', 'corretor', 'mecanica', 'mecânica',
   'lava jato', 'pneus', 'auto center', 'oficina', 'cris park', 'hospital', 'perdizes',
   'brasilândia', 'brasilandia', 'são camilo', 'sao camilo', 'postagem', 'grafica', 'gráfica',
-  'fotografia', 'joalheria', 'relojoaria', 'lingerie', 'armarinho', 'enxovais', 'brinquedos'
+  'fotografia', 'joalheria', 'relojoaria', 'lingerie', 'armarinho', 'enxovais', 'brinquedos',
+  'boutique', 'boate', 'casa noturna', 'escritorio', 'escritório', 'advocacia', 'contabilidade',
+  'consultoria', 'estofaria', 'funilaria', 'suplemento', 'suplementos'
 ];
 
 export function isNonFoodBusiness(name: string, cnaeDescription?: string): boolean {
