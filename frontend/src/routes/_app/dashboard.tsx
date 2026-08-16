@@ -45,7 +45,6 @@ import type {
   DashboardSummary,
   MonthlyEvolutionPoint,
 } from "@/types/dashboard";
-import { DashboardMapWidget } from "@/components/dashboard/DashboardMapWidget";
 
 export const Route = createFileRoute("/_app/dashboard")({
   component: Dashboard,
@@ -465,11 +464,6 @@ function Dashboard() {
               icon={TrendingUp}
               accent="#F59E0B"
             />
-          </section>
-
-          {/* Painel do Mapa de Oportunidades & Comércios Mapeados */}
-          <section>
-            <DashboardMapWidget selectedCity={city} selectedCnae={cnae} uf={uf} />
           </section>
 
           <section className="grid gap-4 xl:grid-cols-3">

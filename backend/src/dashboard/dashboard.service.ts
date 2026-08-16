@@ -164,8 +164,22 @@ export class DashboardService {
       topCnae,
       responsibles,
     ] = await Promise.all([
-      this.prisma.clientAccount.count({ where: { ...clientBaseWhere, isCurrentClient: true } }),
-      this.prisma.clientAccount.count({ where: { ...clientBaseWhere, isCurrentClient: false } }),
+      this.prisma.company.count({
+        where: {
+          ...companyBaseWhere,
+          createdAt: { lt: period.end },
+          OR: [
+            { lead: { status: LeadStatus.CONVERTED, ...(assignedToId ? { assignedToId } : {}) } },
+            { clientAccounts: { some: { isCurrentClient: true } } },
+          ],
+        },
+      }),
+      this.prisma.lead.count({
+        where: {
+          ...leadBaseWhere,
+          OR: [{ status: LeadStatus.INACTIVE }, { status: LeadStatus.NOT_INTERESTED }],
+        },
+      }),
       this.prisma.clientAccount.count({
         where: {
           ...clientBaseWhere,
@@ -177,7 +191,10 @@ export class DashboardService {
         where: {
           ...companyBaseWhere,
           createdAt: { lt: period.end },
-          clientAccounts: { none: { isCurrentClient: true } },
+          AND: [
+            { OR: [{ lead: { is: null } }, { lead: { status: { not: LeadStatus.CONVERTED } } }] },
+            { clientAccounts: { none: { isCurrentClient: true } } },
+          ],
           ...(assignedToId ? { lead: { assignedToId } } : {}),
         },
       }),
@@ -185,8 +202,11 @@ export class DashboardService {
         where: {
           ...leadBaseWhere,
           status: { in: POSITIVATION_STATUSES },
-          lastContactAt: periodWhere(period.start, period.end),
-          company: { ...companyBaseWhere, clientAccounts: { some: { isCurrentClient: true } } },
+          OR: [
+            { status: LeadStatus.CONVERTED },
+            { lastContactAt: periodWhere(period.start, period.end) },
+            { company: { clientAccounts: { some: { isCurrentClient: true } } } },
+          ],
         },
       }),
       this.prisma.lead.count({
@@ -194,7 +214,6 @@ export class DashboardService {
           ...leadBaseWhere,
           status: { in: POSITIVATION_STATUSES },
           lastContactAt: periodWhere(period.previousStart, period.previousEnd),
-          company: { ...companyBaseWhere, clientAccounts: { some: { isCurrentClient: true } } },
         },
       }),
       this.prisma.lead.count({
@@ -394,9 +413,16 @@ export class DashboardService {
     const { companyBaseWhere, clientBaseWhere, assignedToId, periodEnd } = args;
 
     const [clientsByCity, opportunitiesByCity] = await Promise.all([
-      this.prisma.clientAccount.groupBy({
+      this.prisma.company.groupBy({
         by: ["cidade"],
-        where: { ...clientBaseWhere, isCurrentClient: true },
+        where: {
+          ...companyBaseWhere,
+          createdAt: { lt: periodEnd },
+          OR: [
+            { lead: { status: LeadStatus.CONVERTED, ...(assignedToId ? { assignedToId } : {}) } },
+            { clientAccounts: { some: { isCurrentClient: true } } },
+          ],
+        },
         _count: { id: true },
       }),
       this.prisma.company.groupBy({
@@ -404,7 +430,10 @@ export class DashboardService {
         where: {
           ...companyBaseWhere,
           createdAt: { lt: periodEnd },
-          clientAccounts: { none: { isCurrentClient: true } },
+          AND: [
+            { OR: [{ lead: { is: null } }, { lead: { status: { not: LeadStatus.CONVERTED } } }] },
+            { clientAccounts: { none: { isCurrentClient: true } } },
+          ],
           ...(assignedToId ? { lead: { assignedToId } } : {}),
         },
         _count: { id: true },
