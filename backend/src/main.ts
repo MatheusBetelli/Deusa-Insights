@@ -165,8 +165,8 @@ async function bootstrap() {
     logger.log(`📖 Swagger UI disponível em: http://localhost:${port}/api-docs`);
   }
 
-  await app.listen(port);
-  logger.log(`🚀 Backend Deusa Analytics ativo em: http://localhost:${port}`);
+  await app.listen(port, "0.0.0.0");
+  logger.log(`🚀 Backend Deusa Analytics ativo em: http://0.0.0.0:${port} (porta ${port})`);
   logger.log(`🩺 Endpoint de Saúde: http://localhost:${port}/health`);
   logger.log(`🌍 Ambiente: ${nodeEnv.toUpperCase()}`);
   logger.log(`🛡️ Helmet ativado — Headers de segurança HTTP configurados`);

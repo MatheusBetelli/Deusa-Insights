@@ -49,5 +49,5 @@ EXPOSE 3001
 
 ENV NODE_ENV=production
 
-# Executa migrations e depois inicia o servidor
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main.js"]
+# Inicializa a aplicação NestJS (migrations devem ser executadas no pre-deploy)
+CMD ["node", "dist/main.js"]
