@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { buildCnaeWhereInput } from "../common/opportunity-filter";
 import { PrismaService } from "../prisma/prisma.service";
 import { CnaeQueryDto } from "./dto/cnae-query.dto";
 import { CreateCnaeDto } from "./dto/create-cnae.dto";
@@ -43,9 +44,7 @@ export class CnaesService {
       cnaes.map(async (cnae) => ({
         ...cnae,
         companyCount: await this.prisma.company.count({
-          where: {
-            OR: [{ cnaePrincipal: cnae.code }, { cnaes: { some: { cnaeCode: cnae.code } } }],
-          },
+          where: buildCnaeWhereInput(cnae.code),
         }),
       })),
     );

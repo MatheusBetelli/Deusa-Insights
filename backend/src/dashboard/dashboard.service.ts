@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { LeadStatus, Prisma } from "@prisma/client";
-import { TARGET_OPPORTUNITY_CNAES } from "../common/opportunity-filter";
+import { buildCnaeWhereInput, getCnaeVariants } from "../common/opportunity-filter";
 import { PrismaService } from "../prisma/prisma.service";
 import { DashboardPeriod, DashboardQueryDto } from "./dto/dashboard-query.dto";
 
@@ -114,7 +114,7 @@ export class DashboardService {
 
   async summary(query: DashboardQueryDto = {}) {
     const period = resolvePeriod(query);
-    const cnae = normalizeCnae(query.cnae);
+    const cnaeVariants = getCnaeVariants(query.cnae);
     const uf = query.uf?.toUpperCase();
     const city = query.city?.trim();
     const assignedToId = query.assignedToId?.trim();
@@ -123,19 +123,20 @@ export class DashboardService {
       situacaoCadastral: "ATIVA",
       ...(uf ? { uf } : {}),
       ...(city ? { cidade: { equals: city, mode: "insensitive" } } : {}),
-      ...(cnae
-        ? { OR: [{ cnaePrincipal: cnae }, { cnaes: { some: { cnaeCode: cnae } } }] }
-        : { cnaePrincipal: { in: Array.from(TARGET_OPPORTUNITY_CNAES) } }),
+      ...buildCnaeWhereInput(query.cnae),
     };
 
     const clientBaseWhere: Prisma.ClientAccountWhereInput = {
       ...(uf ? { uf } : {}),
       ...(city ? { cidade: { equals: city, mode: "insensitive" } } : {}),
       ...(assignedToId ? { company: { lead: { assignedToId } } } : {}),
-      ...(cnae
+      ...(cnaeVariants.length > 0
         ? {
             company: {
-              OR: [{ cnaePrincipal: cnae }, { cnaes: { some: { cnaeCode: cnae } } }],
+              OR: [
+                { cnaePrincipal: { in: cnaeVariants } },
+                { cnaes: { some: { cnaeCode: { in: cnaeVariants } } } },
+              ],
             },
           }
         : {}),

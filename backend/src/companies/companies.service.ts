@@ -1,6 +1,7 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { normalizeCnpj } from "../common/cnpj";
+import { getCnaeVariants } from "../common/opportunity-filter";
 import {
   CNPJ_PROVIDER,
   CnpjProvider,
@@ -118,10 +119,15 @@ export class CompaniesService {
     if (query.situacaoCadastral)
       where.situacaoCadastral = { equals: query.situacaoCadastral, mode: "insensitive" };
     if (query.cnae) {
-      const cnae = normalizeCnae(query.cnae);
-      and.push({
-        OR: [{ cnaePrincipal: cnae }, { cnaes: { some: { cnaeCode: cnae } } }],
-      });
+      const cnaeVariants = getCnaeVariants(query.cnae);
+      if (cnaeVariants.length > 0) {
+        and.push({
+          OR: [
+            { cnaePrincipal: { in: cnaeVariants } },
+            { cnaes: { some: { cnaeCode: { in: cnaeVariants } } } },
+          ],
+        });
+      }
     }
     if (query.search) {
       and.push({

@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { LeadStatus, Prisma } from "@prisma/client";
 import { calculateLeadScore, getPotentialLevel, calculateOpportunityScoreDetails } from "../common/scoring";
-import { isValidOpportunity, TARGET_OPPORTUNITY_CNAES } from "../common/opportunity-filter";
+import { buildCnaeWhereInput, isValidOpportunity } from "../common/opportunity-filter";
 import { PrismaService } from "../prisma/prisma.service";
 import { CreateLeadDto } from "./dto/create-lead.dto";
 import { LeadQueryDto } from "./dto/lead-query.dto";
@@ -49,7 +49,7 @@ export class LeadsService {
       this.prisma.company.findMany({
         where: {
           situacaoCadastral: "ATIVA",
-          cnaePrincipal: { in: Array.from(TARGET_OPPORTUNITY_CNAES) },
+          ...buildCnaeWhereInput(),
         },
         select: { id: true, cidade: true, bairro: true, latitude: true, longitude: true },
       }),
@@ -111,7 +111,7 @@ export class LeadsService {
       this.prisma.company.findMany({
         where: {
           situacaoCadastral: "ATIVA",
-          cnaePrincipal: { in: Array.from(TARGET_OPPORTUNITY_CNAES) },
+          ...buildCnaeWhereInput(),
         },
         select: { id: true, cidade: true, bairro: true, latitude: true, longitude: true },
       }),
@@ -215,13 +215,8 @@ export class LeadsService {
     const where: Prisma.LeadWhereInput = {};
     const and: Prisma.LeadWhereInput[] = [
       { company: { situacaoCadastral: "ATIVA" } },
+      { company: buildCnaeWhereInput(query.cnae) },
     ];
-
-    if (!query.cnae) {
-      and.push({
-        company: { cnaePrincipal: { in: Array.from(TARGET_OPPORTUNITY_CNAES) } },
-      });
-    }
 
     if (query.status) where.status = query.status;
     if (query.potentialLevel) where.potentialLevel = query.potentialLevel;
@@ -231,14 +226,6 @@ export class LeadsService {
     }
     if (query.city) and.push({ company: { cidade: { equals: query.city, mode: "insensitive" } } });
     if (query.uf) and.push({ company: { uf: query.uf.toUpperCase() } });
-    if (query.cnae) {
-      const cnae = normalizeCnae(query.cnae);
-      and.push({
-        company: {
-          OR: [{ cnaePrincipal: cnae }, { cnaes: { some: { cnaeCode: cnae } } }],
-        },
-      });
-    }
     if (query.search?.trim()) {
       const searchTerm = query.search.trim();
       const digitsOnly = searchTerm.replace(/\D/g, "");

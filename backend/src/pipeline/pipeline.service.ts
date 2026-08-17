@@ -3,7 +3,7 @@ import { LeadStatus, Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { PipelineQueryDto } from "./dto/pipeline-query.dto";
 import { calculateOpportunityScoreDetails } from "../common/scoring";
-import { isValidOpportunity, TARGET_OPPORTUNITY_CNAES } from "../common/opportunity-filter";
+import { buildCnaeWhereInput, isValidOpportunity } from "../common/opportunity-filter";
 
 const pipelineStatuses = [
   LeadStatus.NEW,
@@ -118,27 +118,14 @@ export class PipelineService {
     const and: Prisma.LeadWhereInput[] = [
       { status },
       { company: { situacaoCadastral: "ATIVA" } },
+      { company: buildCnaeWhereInput(query.cnae) },
     ];
-
-    if (!query.cnae || query.cnae === "Todos") {
-      and.push({
-        company: { cnaePrincipal: { in: Array.from(TARGET_OPPORTUNITY_CNAES) } },
-      });
-    }
 
     if (query.uf && query.uf !== "Todos") {
       and.push({ company: { uf: query.uf.toUpperCase() } });
     }
     if (query.city && query.city !== "Todas") {
       and.push({ company: { cidade: { equals: query.city, mode: "insensitive" } } });
-    }
-    if (query.cnae && query.cnae !== "Todos") {
-      const cnae = normalizeCnae(query.cnae);
-      and.push({
-        company: {
-          OR: [{ cnaePrincipal: cnae }, { cnaes: { some: { cnaeCode: cnae } } }],
-        },
-      });
     }
     if (query.search?.trim()) {
       const searchTerm = query.search.trim();

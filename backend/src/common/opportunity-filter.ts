@@ -95,6 +95,62 @@ export function normalizeCnaeCode(code?: string | null): string {
 }
 
 /**
+ * Formata um código CNAE de 7 dígitos para a máscara XXXX-X/XX
+ */
+export function formatCnaeCode(code?: string | null): string {
+  const digits = normalizeCnaeCode(code);
+  if (digits.length !== 7) return code ?? "";
+  return digits.replace(/^(\d{4})(\d)(\d{2})$/, "$1-$2/$3");
+}
+
+/**
+ * Retorna as variantes numéricas (ex: 4711302) e formatadas (ex: 4711-3/02) de um código CNAE
+ */
+export function getCnaeVariants(code?: string | null): string[] {
+  if (!code || code === "Todos") return [];
+  const digits = normalizeCnaeCode(code);
+  if (!digits) return [];
+  const formatted = formatCnaeCode(digits);
+  const set = new Set<string>([digits]);
+  if (formatted) set.add(formatted);
+  return Array.from(set);
+}
+
+/**
+ * Retorna todas as variantes numéricas e formatadas dos CNAEs de oportunidade da Deusa Alimentos
+ */
+export function getAllTargetCnaeVariants(): string[] {
+  const set = new Set<string>();
+  for (const cnae of TARGET_OPPORTUNITY_CNAES) {
+    const digits = normalizeCnaeCode(cnae);
+    if (digits) {
+      set.add(digits);
+      const formatted = formatCnaeCode(digits);
+      if (formatted) set.add(formatted);
+    }
+  }
+  return Array.from(set);
+}
+
+/**
+ * Constrói a cláusula `where` do Prisma para empresas com suporte a filtro CNAE flexível
+ */
+export function buildCnaeWhereInput(code?: string | null) {
+  const variants = getCnaeVariants(code);
+  if (variants.length > 0) {
+    return {
+      OR: [
+        { cnaePrincipal: { in: variants } },
+        { cnaes: { some: { cnaeCode: { in: variants } } } },
+      ],
+    };
+  }
+  return {
+    cnaePrincipal: { in: getAllTargetCnaeVariants() },
+  };
+}
+
+/**
  * Verifica se um código CNAE pertence às categorias de oportunidade comercial autorizadas
  */
 export function isValidOpportunityCnae(code?: string | null): boolean {
