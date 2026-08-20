@@ -28,6 +28,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { DeusaLogo } from "./Logo";
 import { AuthService, type User as AuthUser } from "@/lib/auth";
 import { formatRelativeTime } from "@/lib/commercial-formatters";
 import { notificationsService, type AppNotification } from "@/services/notificationsService";
@@ -275,8 +276,8 @@ export function Topbar({ onOpenMobile }: TopbarProps = {}) {
                     <ChevronDown className="h-3 w-3 text-slate-400 transition-transform group-hover:text-slate-600 group-data-[state=open]:rotate-180" />
                   </div>
                 </div>
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#0B1F33] text-xs font-bold text-[#FFF200] ring-2 ring-white border border-slate-200">
-                  {userInitials}
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white p-1 ring-2 ring-slate-100 border border-slate-200 shadow-xs overflow-hidden">
+                  <DeusaLogo className="h-6 w-auto object-contain" />
                 </div>
               </button>
             </DropdownMenuTrigger>
@@ -319,8 +320,8 @@ export function Topbar({ onOpenMobile }: TopbarProps = {}) {
             </div>
           ) : (
             <div className="flex flex-col items-center text-center space-y-4 pt-2">
-              <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[#0B1F33] text-2xl font-black text-[#FFF200] shadow-md border-2 border-slate-200">
-                {getUserInitials(profile?.name || user?.name)}
+              <div className="flex h-20 w-20 items-center justify-center rounded-full bg-white p-3.5 shadow-md border-2 border-slate-200 overflow-hidden ring-4 ring-slate-50">
+                <DeusaLogo className="h-12 w-auto object-contain" />
               </div>
 
               <div>

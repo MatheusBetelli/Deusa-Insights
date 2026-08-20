@@ -18,7 +18,7 @@
  *   Prisma, eliminando a dependência do arquivo CSV em produção.
  */
 
-import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
+import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from "@nestjs/common";
 import * as fs from "fs";
 import * as path from "path";
 import * as readline from "readline";
@@ -29,6 +29,7 @@ import {
 } from "../../common/cadastral-quality";
 import { isValidCnpj } from "../../common/cnpj-validator";
 import { normalizeCnpj } from "../../common/cnpj";
+import { TARGET_OPPORTUNITY_CNAES } from "../../common/opportunity-filter";
 import { CnpjProvider, CnpjSearchPayload, ExternalCompany } from "./cnpj-provider.interface";
 
 // ─── Mapeamento Cidade → Código TOM da Receita Federal (26 Cidades Monitoradas) ─
@@ -134,25 +135,54 @@ const CITY_COORDS: Record<string, { lat: number; lng: number }> = {
   "Franca": { lat: -20.5386, lng: -47.4008 },
 };
 
-// ─── CNAEs alvo do produto (PRIMARY: 4711302, 4712100, 4729699 | SECONDARY: 4639701, 4721102) ─
-const TARGET_CNAES = ["4711302", "4712100", "4729699", "4639701", "4721102"];
+// ─── CNAEs estritamente autorizados pelo escopo comercial central ─────────────
+const TARGET_CNAES = Array.from(TARGET_OPPORTUNITY_CNAES);
 const PRIORITY_CITIES = Object.values(TOM_CITY_MAP);
+const MONITORED_TOM_CODES = new Set(Object.keys(TOM_CITY_MAP));
+
+export function parseSemicolonCsvLine(line: string): string[] {
+  const fields: string[] = [];
+  let current = "";
+  let quoted = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index];
+    if (character === '"') {
+      if (quoted && line[index + 1] === '"') {
+        current += '"';
+        index += 1;
+      } else {
+        quoted = !quoted;
+      }
+    } else if (character === ";" && !quoted) {
+      fields.push(current.trim());
+      current = "";
+    } else {
+      current += character;
+    }
+  }
+  fields.push(current.trim());
+  return fields;
+}
 
 @Injectable()
-export class ReceitaFederalProvider implements CnpjProvider, OnModuleDestroy {
+export class ReceitaFederalProvider implements CnpjProvider, OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(ReceitaFederalProvider.name);
 
   /**
    * Cache em memória indexado por código TOM.
    * Chave: código TOM (ex: "7201"). Valor: array de linhas CSV já parseadas.
-   *
-   * MVP: este cache mantém os dados em RAM para evitar releitura do CSV.
-   * Evolução recomendada: importar os dados para o PostgreSQL e consultar via
-   * Prisma, removendo a dependência do arquivo CSV em produção.
    */
   private readonly cache = new Map<string, string[][]>();
   private cacheLoaded = false;
   private cacheLoading: Promise<void> | null = null;
+
+  async onModuleInit() {
+    this.logger.log("⚡ Pré-carregando índice da Receita Federal em segundo plano...");
+    void this.ensureCache().catch((err) => {
+      this.logger.warn(`Falha no pré-carregamento do CSV da Receita Federal: ${err.message}`);
+    });
+  }
 
   private getCsvPath(): string {
     const candidates = [
@@ -192,7 +222,7 @@ export class ReceitaFederalProvider implements CnpjProvider, OnModuleDestroy {
         if (!line.trim()) continue;
         const row = this.parseCsvLine(line);
         const tomCode = row[20];
-        if (!tomCode) continue;
+        if (!tomCode || !MONITORED_TOM_CODES.has(tomCode)) continue;
 
         if (!this.cache.has(tomCode)) this.cache.set(tomCode, []);
         this.cache.get(tomCode)!.push(row);
@@ -201,7 +231,11 @@ export class ReceitaFederalProvider implements CnpjProvider, OnModuleDestroy {
 
       this.cacheLoaded = true;
       this.logger.log(`Cache carregado: ${total} registros em ${this.cache.size} municípios.`);
-    })();
+    })().catch((error) => {
+      this.cache.clear();
+      this.cacheLoading = null;
+      throw error;
+    });
 
     return this.cacheLoading;
   }
@@ -211,7 +245,7 @@ export class ReceitaFederalProvider implements CnpjProvider, OnModuleDestroy {
   }
 
   private parseCsvLine(line: string): string[] {
-    return line.split(";").map((field) => field.replace(/^"|"$/g, "").trim());
+    return parseSemicolonCsvLine(line);
   }
 
   /**

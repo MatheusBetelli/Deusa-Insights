@@ -1,12 +1,15 @@
 // TODO: As recomendações dinâmicas integradas via API ficam para uma versão futura.
 // Esta tela está temporariamente removida do fluxo principal do MVP e preservada aqui para referência.
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { useState } from "react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PriorityBadge } from "@/components/common/PriorityBadge";
 import { ArrowLeft, Sparkles, Plus, CheckCircle2, Download, AlertOctagon, MapPin } from "lucide-react";
 
 export const Route = createFileRoute("/_app/recomendacoes")({
+  beforeLoad: () => {
+    throw redirect({ to: "/leads-b2b" });
+  },
   component: Reco,
 });
 

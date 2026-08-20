@@ -106,7 +106,7 @@ function importRows(db, kind, rows, sourceFile) {
   return counters;
 }
 
-export function importData() {
+export async function importData() {
   const db = openDatabase();
   resetImportedTables(db);
 
@@ -122,7 +122,7 @@ export function importData() {
   if (files.length === 0) {
     console.log("Nenhum arquivo encontrado para importação em data/imports.");
   } else {
-    files.forEach((filePath) => {
+    for (const filePath of files) {
       const sourceFile = path.basename(filePath);
       const kind = inferFileKind(filePath);
 
@@ -135,11 +135,11 @@ export function importData() {
           error: "Nome do arquivo nao indica tipo. Use clientes*, externos*/estabelecimentos* ou vendas*.",
         });
         report.totals.failedFiles += 1;
-        return;
+        continue;
       }
 
       try {
-        const rows = readRowsFromFile(filePath);
+        const rows = await readRowsFromFile(filePath);
         const counters = importRows(db, kind, rows, sourceFile);
         report.files.push({ file: sourceFile, kind, rows: rows.length, ...counters });
         report.totals.imported += counters.imported;
@@ -154,7 +154,7 @@ export function importData() {
         });
         report.totals.failedFiles += 1;
       }
-    });
+    }
   }
 
   writeJson(path.join(PROCESSED_DIR, "import-report.json"), report);
@@ -163,6 +163,6 @@ export function importData() {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const report = importData();
+  const report = await importData();
   console.log(JSON.stringify(report, null, 2));
 }

@@ -4,7 +4,7 @@ Data de consolidacao: 2026-07-05
 
 Este arquivo e a fonte de verdade dos contratos entre o frontend atual em React, o futuro frontend Angular e o backend NestJS. Qualquer migracao React -> Angular deve consumir estes contratos sem alterar semantica, nomes de campos ou comportamento esperado.
 
-Base URL atual do frontend: `VITE_API_URL`, com fallback para `http://127.0.0.1:3001`.
+Base URL atual do frontend: `VITE_API_URL`; o fallback para `http://127.0.0.1:3001` existe somente em desenvolvimento.
 
 Cliente React atual: `frontend/src/services/api.ts`.
 
@@ -21,8 +21,8 @@ Cliente React atual: `frontend/src/services/api.ts`.
 - Respostas `2xx` sao parseadas como JSON, exceto `204`.
 - Erros HTTP retornam `ApiError` com `message` do payload quando existir.
 - Erros de rede retornam mensagem amigavel de API indisponivel.
-- O React atual nao envia `Authorization`; ele usa `localStorage` mockado para sessao visual.
-- O Angular deve usar o backend real de auth: `POST /auth/login` e `GET /auth/me`.
+- O React envia o JWT real como `Authorization: Bearer <token>` e valida a sessao com `GET /auth/me`.
+- Clientes futuros devem usar o mesmo backend de auth: `POST /auth/login` e `GET /auth/me`.
 
 ## Tipos centrais
 
@@ -176,8 +176,8 @@ Body:
 
 ```json
 {
-  "email": "rafael.mendes@deusa.com.br",
-  "password": "deusa123"
+  "email": "<email-configurado>",
+  "password": "<senha-configurada>"
 }
 ```
 
@@ -437,7 +437,25 @@ Observacoes:
 - Faz upsert de empresa.
 - Retorna `404` quando o CNPJ nao existe no provider configurado.
 
+#### POST `/companies/:id/location-candidates`
+
+Rota restrita a `ADMIN` e `MANAGER`. Como a operação pode gerar custo no Google Places, o corpo deve autorizar explicitamente uma única consulta:
+
+```json
+{
+  "confirmPaidRequest": true
+}
+```
+
+Sem a confirmação, o backend retorna `400` antes de chamar o provedor externo.
+
+#### PATCH `/companies/:id/commercial-profile`
+
+Atualiza os campos cadastrais editáveis e os contatos (`telefone` e `email`) em uma única transação. Esse contrato evita persistência parcial quando uma das duas gravações falha.
+
 ### Imports
+
+O upload de clientes aceita somente `.xlsx` (OOXML) e `.csv`. O formato binário legado `.xls` foi removido porque dependia de um parser sem correção disponível para vulnerabilidades conhecidas. Arquivos XLSX têm limites de tamanho compactado, quantidade de entradas e tamanho descompactado antes do processamento.
 
 #### POST `/imports/cnpj`
 

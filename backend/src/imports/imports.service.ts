@@ -1,10 +1,96 @@
-import { Inject, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  InternalServerErrorException,
+  NotFoundException,
+} from "@nestjs/common";
 import { ImportStatus } from "@prisma/client";
+import { isValidCnpj } from "../common/cnpj-validator";
 import { CompaniesService } from "../companies/companies.service";
 import { LeadsService } from "../leads/leads.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { ImportCnpjDto } from "./dto/import-cnpj.dto";
 import { CNPJ_PROVIDER, CnpjProvider } from "./providers/cnpj-provider.interface";
+import { readSheet } from "read-excel-file/node";
+import { Open } from "unzipper-esm";
+
+const MAX_XLSX_UNCOMPRESSED_BYTES = 25 * 1024 * 1024;
+const MAX_XLSX_ARCHIVE_ENTRIES = 200;
+
+function parseDelimitedRows(text: string): string[][] {
+  const firstLine = text.split(/\r?\n/, 1)[0] ?? "";
+  const delimiter = (firstLine.match(/;/g)?.length ?? 0) > (firstLine.match(/,/g)?.length ?? 0)
+    ? ";"
+    : ",";
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let current = "";
+  let inQuotes = false;
+
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index];
+    const next = text[index + 1];
+    if (character === '"' && inQuotes && next === '"') {
+      current += '"';
+      index += 1;
+    } else if (character === '"') {
+      inQuotes = !inQuotes;
+    } else if (character === delimiter && !inQuotes) {
+      row.push(current.trim());
+      current = "";
+    } else if ((character === "\n" || character === "\r") && !inQuotes) {
+      if (character === "\r" && next === "\n") index += 1;
+      row.push(current.trim());
+      if (row.some((cell) => cell !== "")) rows.push(row);
+      row = [];
+      current = "";
+    } else {
+      current += character;
+    }
+  }
+
+  row.push(current.trim());
+  if (row.some((cell) => cell !== "")) rows.push(row);
+  return rows;
+}
+
+function rowsToObjects(rows: unknown[][]): Record<string, unknown>[] {
+  if (rows.length === 0) return [];
+  const headers = rows[0].map(
+    (header, index) => String(header ?? "").replace(/^\uFEFF/, "").trim() || `coluna_${index + 1}`,
+  );
+  return rows.slice(1).map((values) =>
+    headers.reduce<Record<string, unknown>>((record, header, index) => {
+      const value = values[index];
+      record[header] = value instanceof Date ? value.toISOString() : value ?? "";
+      return record;
+    }, {}),
+  );
+}
+
+async function assertSafeXlsxArchive(fileBuffer: Buffer): Promise<void> {
+  let directory;
+  try {
+    directory = await Open.buffer(fileBuffer);
+  } catch {
+    throw new BadRequestException("Planilha XLSX inválida ou corrompida.");
+  }
+
+  if (directory.files.length > MAX_XLSX_ARCHIVE_ENTRIES) {
+    throw new BadRequestException("Planilha XLSX possui arquivos internos em excesso.");
+  }
+  const uncompressedBytes = directory.files.reduce(
+    (total, entry) => total + Math.max(0, entry.uncompressedSize),
+    0,
+  );
+  if (
+    uncompressedBytes > MAX_XLSX_UNCOMPRESSED_BYTES ||
+    uncompressedBytes > Math.max(fileBuffer.length * 100, 1)
+  ) {
+    throw new BadRequestException("Planilha XLSX excede o limite seguro após descompressão.");
+  }
+}
 
 @Injectable()
 export class ImportsService {
@@ -46,21 +132,20 @@ export class ImportsService {
         limit: dto.limit,
       });
 
-      let totalSaved = 0;
-      const savedCompanies = [];
-
-      for (const companyData of companies) {
-        const company = await this.companiesService.upsertCompany({
-          ...companyData,
-          uf: dto.uf.toUpperCase(),
-          cidade: companyData.cidade || dto.cityName,
-          cnaePrincipal: companyData.cnaePrincipal || dto.cnaeCode,
-          cnaes: companyData.cnaes?.length ? companyData.cnaes : [dto.cnaeCode],
-        });
-        await this.leadsService.upsertLeadForCompany(company.id);
-        totalSaved += 1;
-        savedCompanies.push(company);
-      }
+      const savedCompanies = await Promise.all(
+        companies.map(async (companyData) => {
+          const company = await this.companiesService.upsertCompany({
+            ...companyData,
+            uf: dto.uf.toUpperCase(),
+            cidade: companyData.cidade || dto.cityName,
+            cnaePrincipal: companyData.cnaePrincipal,
+            cnaes: companyData.cnaes?.length ? companyData.cnaes : [dto.cnaeCode],
+          });
+          await this.leadsService.upsertLeadForCompany(company.id);
+          return company;
+        }),
+      );
+      const totalSaved = savedCompanies.length;
 
       const updatedJob = await this.prisma.importJob.update({
         where: { id: job.id },
@@ -74,7 +159,7 @@ export class ImportsService {
 
       return { job: updatedJob, companies: savedCompanies };
     } catch (error) {
-      const updatedJob = await this.prisma.importJob.update({
+      await this.prisma.importJob.update({
         where: { id: job.id },
         data: {
           status: ImportStatus.ERROR,
@@ -82,23 +167,44 @@ export class ImportsService {
           finishedAt: new Date(),
         },
       });
-      return { job: updatedJob, companies: [] };
+      throw new InternalServerErrorException({
+        message: "A importação falhou. Consulte o histórico para verificar o erro registrado.",
+        jobId: job.id,
+      });
     }
   }
 
-  async importClientsFromExcelBuffer(fileBuffer: Buffer) {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const XLSX = require("xlsx");
-    const workbook = XLSX.read(fileBuffer, { type: "buffer" });
-    const sheetName = workbook.SheetNames[0];
-    if (!sheetName) throw new Error("Planilha vazia ou inválida.");
-
-    const sheet = workbook.Sheets[sheetName];
-    const rawData = XLSX.utils.sheet_to_json(sheet) as Record<string, any>[];
+  async importClientsFromExcelBuffer(fileBuffer: Buffer, originalName = "clientes.xlsx") {
+    const normalizedName = originalName.toLowerCase();
+    let rawData: Record<string, unknown>[];
+    try {
+      if (normalizedName.endsWith(".csv")) {
+        rawData = rowsToObjects(parseDelimitedRows(fileBuffer.toString("utf8")));
+      } else if (normalizedName.endsWith(".xlsx")) {
+        await assertSafeXlsxArchive(fileBuffer);
+        rawData = rowsToObjects(await readSheet(fileBuffer));
+      } else {
+        throw new BadRequestException("Formato não suportado. Envie .xlsx ou .csv.");
+      }
+    } catch (error) {
+      if (error instanceof BadRequestException) throw error;
+      throw new BadRequestException("Planilha inválida ou corrompida.");
+    }
+    if (rawData.length === 0) throw new BadRequestException("Planilha vazia ou inválida.");
+    if (rawData.length > 5000) {
+      throw new BadRequestException("A planilha excede o limite de 5.000 linhas por importação.");
+    }
 
     let matchedCount = 0;
     let createdCount = 0;
-    const processedCompanies = [];
+    let unmatchedCount = 0;
+    let ignoredCount = 0;
+    const ignoredReasons: Record<string, number> = {};
+
+    const ignore = (reason: string) => {
+      ignoredCount += 1;
+      ignoredReasons[reason] = (ignoredReasons[reason] ?? 0) + 1;
+    };
 
     for (const row of rawData) {
       // Normaliza chaves da linha para facilitar busca
@@ -119,102 +225,89 @@ export class ImportsService {
         normalizedRow.nomefantasia ||
         normalizedRow.cliente ||
         normalizedRow.mercado ||
-        "Cliente Excel";
+        "";
       const cidade =
         normalizedRow.cidade ||
         normalizedRow.municipio ||
         normalizedRow.cidadeuf ||
-        "Ribeirão Preto";
-      const uf = (normalizedRow.uf || normalizedRow.estado || "SP").toUpperCase();
-      const logradouro = normalizedRow.endereco || normalizedRow.logradouro || "";
-      const numero = normalizedRow.numero || "";
-      const bairro = normalizedRow.bairro || "";
-      const cep = (normalizedRow.cep || "").replace(/\D/g, "");
+        "";
+      const uf = (normalizedRow.uf || normalizedRow.estado || "").toUpperCase() || null;
+      const explicitClientCode =
+        normalizedRow.codigo || normalizedRow.codigocliente || normalizedRow.cod || "";
 
-      let company = null;
-
-      // 1. Busca por CNPJ
-      if (cnpj.length === 14) {
-        company = await this.prisma.company.findFirst({
-          where: { cnpj: { contains: cnpj } },
-        });
+      if (!nome) {
+        ignore("nome_ausente");
+        continue;
+      }
+      if (cnpj && !isValidCnpj(cnpj)) {
+        ignore("cnpj_invalido");
+        continue;
+      }
+      if (!explicitClientCode && !cnpj) {
+        ignore("identificador_ausente");
+        continue;
       }
 
-      // 2. Busca por Nome + Cidade se CNPJ não encontrou
-      if (!company && nome && cidade) {
-        company = await this.prisma.company.findFirst({
-          where: {
-            cidade: { equals: cidade, mode: "insensitive" },
-            OR: [
-              { razaoSocial: { contains: nome, mode: "insensitive" } },
-              { nomeFantasia: { contains: nome, mode: "insensitive" } },
-            ],
+      const clientCode = explicitClientCode || `CNPJ-${cnpj}`;
+      const [company, existingAccount] = await Promise.all([
+        cnpj ? this.prisma.company.findUnique({ where: { cnpj }, select: { id: true } }) : null,
+        this.prisma.clientAccount.findUnique({
+          where: { codigoClienteDeusa: clientCode },
+          select: { id: true, companyId: true, cnpj: true },
+        }),
+      ]);
+      const existingCnpj = existingAccount?.cnpj?.replace(/\D/g, "") || null;
+      if (
+        (existingAccount?.companyId && company?.id && existingAccount.companyId !== company.id) ||
+        (existingCnpj && cnpj && existingCnpj !== cnpj)
+      ) {
+        ignore("codigo_cliente_conflitante");
+        continue;
+      }
+      const companyId = company?.id ?? existingAccount?.companyId ?? null;
+      const importedAt = new Date();
+
+      await this.prisma.$transaction(async (transaction) => {
+        if (companyId) {
+          await transaction.lead.upsert({
+            where: { companyId },
+            update: { status: "CONVERTED" },
+            create: {
+              companyId,
+              status: "CONVERTED",
+            },
+          });
+        }
+
+        await transaction.clientAccount.upsert({
+          where: { codigoClienteDeusa: clientCode },
+          update: {
+            cnpj: cnpj || null,
+            razaoSocial: nome,
+            nomeFantasia: nome,
+            cidade: cidade || null,
+            uf,
+            companyId,
+            isCurrentClient: true,
+            lastImportAt: importedAt,
+          },
+          create: {
+            codigoClienteDeusa: clientCode,
+            cnpj: cnpj || null,
+            razaoSocial: nome,
+            nomeFantasia: nome,
+            cidade: cidade || null,
+            uf,
+            companyId,
+            isCurrentClient: true,
+            lastImportAt: importedAt,
           },
         });
-      }
+      });
 
-      if (company) {
-        // Marca lead existente como CONVERTED (Cliente)
-        await this.prisma.lead.upsert({
-          where: { companyId: company.id },
-          update: { status: "CONVERTED" },
-          create: { companyId: company.id, status: "CONVERTED", score: 100, potentialLevel: "HIGH" },
-        });
-        matchedCount++;
-        processedCompanies.push(company);
-      } else {
-        // Cria nova empresa como Cliente (CONVERTED)
-        const fakeCnpj = cnpj.length === 14 ? cnpj : `CLIENTE-EXCEL-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-        const newCompany = await this.companiesService.upsertCompany({
-          cnpj: fakeCnpj,
-          razaoSocial: nome,
-          nomeFantasia: nome,
-          situacaoCadastral: "ATIVA",
-          cidade,
-          uf,
-          logradouro,
-          numero,
-          bairro,
-          cep,
-          source: "excel_client_import",
-        });
-
-        await this.prisma.lead.upsert({
-          where: { companyId: newCompany.id },
-          update: { status: "CONVERTED" },
-          create: { companyId: newCompany.id, status: "CONVERTED", score: 100, potentialLevel: "HIGH" },
-        });
-        createdCount++;
-        processedCompanies.push(newCompany);
-        company = newCompany;
-      }
-
-      // Persiste na base comercial privada client_accounts
-      const codCliente = normalizedRow.codigo || normalizedRow.codigocliente || normalizedRow.cod || `EXCEL-${cnpj || Date.now()}`;
-      await this.prisma.clientAccount.upsert({
-        where: { codigoClienteDeusa: codCliente },
-        update: {
-          cnpj: cnpj.length === 14 ? cnpj : null,
-          razaoSocial: nome,
-          nomeFantasia: nome,
-          cidade,
-          uf,
-          companyId: company?.id || null,
-          isCurrentClient: true,
-          lastImportAt: new Date(),
-        },
-        create: {
-          codigoClienteDeusa: codCliente,
-          cnpj: cnpj.length === 14 ? cnpj : null,
-          razaoSocial: nome,
-          nomeFantasia: nome,
-          cidade,
-          uf,
-          companyId: company?.id || null,
-          isCurrentClient: true,
-          lastImportAt: new Date(),
-        },
-      }).catch(() => null);
+      if (companyId) matchedCount += 1;
+      else unmatchedCount += 1;
+      if (!existingAccount) createdCount += 1;
     }
 
     // Calcula resumo de Abate para a região (Ribeirão Preto & Franca)
@@ -252,6 +345,9 @@ export class ImportsService {
       totalLinhasProcessadas: rawData.length,
       clientesMatcheados: matchedCount,
       novosClientesCriados: createdCount,
+      clientesSemEmpresaCorrespondente: unmatchedCount,
+      linhasIgnoradas: ignoredCount,
+      motivosIgnoracao: ignoredReasons,
       resumoAbateRegional: abateSummary,
     };
   }

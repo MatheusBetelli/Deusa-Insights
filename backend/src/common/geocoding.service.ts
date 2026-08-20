@@ -48,8 +48,7 @@ export class GeocodingService implements OnModuleInit {
   onModuleInit() {
     this.apiKey = process.env.GOOGLE_MAPS_API_KEY?.trim();
     if (this.isAvailable()) {
-      const masked = this.getMaskedKey();
-      this.logger.log(`[Google Maps API] 🚀 Chave detectada e ativa! Key: ${masked}. Geocodificação de precisão HABILITADA.`);
+      this.logger.log("Google Maps configurado. Operações individuais autorizadas estão disponíveis.");
     } else {
       this.logger.warn(`[Google Maps API] ℹ️ Chave GOOGLE_MAPS_API_KEY não configurada no backend/.env. O sistema operará no modo estático/centroide.`);
     }
@@ -80,18 +79,14 @@ export class GeocodingService implements OnModuleInit {
       return null;
     }
 
-    const addressParts = [
-      input.logradouro,
-      input.numero,
-      input.bairro,
-      input.cep,
-      input.cidade,
-      input.uf || "SP",
-      "Brasil",
-    ].filter(Boolean);
-
-    if (addressParts.length < 2) {
-      this.logger.warn(`Endereço muito incompleto para geocodificar: ${JSON.stringify(input)}`);
+    const hasSearchIdentity = Boolean(
+      input.nomeFantasia?.trim() ||
+        input.razaoSocial?.trim() ||
+        input.logradouro?.trim() ||
+        input.cep?.trim(),
+    );
+    if (!hasSearchIdentity || !input.cidade?.trim()) {
+      this.logger.warn("Endereço insuficiente para executar a consulta individual de geocodificação.");
       return null;
     }
 
@@ -103,10 +98,11 @@ export class GeocodingService implements OnModuleInit {
       // 1. Tenta Places API (New) para encontrar o estabelecimento comercial
       const placesNewRes = await fetch("https://places.googleapis.com/v1/places:searchText", {
         method: "POST",
+        signal: AbortSignal.timeout(10_000),
         headers: {
           "Content-Type": "application/json",
           "X-Goog-Api-Key": this.apiKey,
-          "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.location,places.nationalPhoneNumber,places.businessStatus",
+          "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.location,places.nationalPhoneNumber,places.businessStatus,places.primaryType",
         },
         body: JSON.stringify({
           textQuery: searchTerms,
@@ -114,22 +110,26 @@ export class GeocodingService implements OnModuleInit {
         }),
       });
 
+      if (!placesNewRes.ok) {
+        this.logger.warn(`Google Places indisponível (HTTP ${placesNewRes.status}); consulta interrompida sem fallback adicional.`);
+        return null;
+      }
+
       let placeResult: any = null;
-      if (placesNewRes.ok) {
-        const placesNewData = (await placesNewRes.json()) as any;
-        if (placesNewData.places && placesNewData.places.length > 0) {
-          placeResult = placesNewData.places[0];
-        }
+      const placesNewData = (await placesNewRes.json()) as any;
+      if (placesNewData.places && placesNewData.places.length > 0) {
+        placeResult = placesNewData.places[0];
       }
 
       // Se não encontrou pelo nome + endereço, tenta buscar só pelo endereço no Places API (New)
       if (!placeResult) {
         const addressRes = await fetch("https://places.googleapis.com/v1/places:searchText", {
           method: "POST",
+          signal: AbortSignal.timeout(10_000),
           headers: {
             "Content-Type": "application/json",
             "X-Goog-Api-Key": this.apiKey,
-            "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.location,places.nationalPhoneNumber",
+            "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.location,places.nationalPhoneNumber,places.primaryType",
           },
           body: JSON.stringify({
             textQuery: addressSearch,
@@ -137,11 +137,14 @@ export class GeocodingService implements OnModuleInit {
           }),
         });
 
-        if (addressRes.ok) {
-          const addressData = (await addressRes.json()) as any;
-          if (addressData.places && addressData.places.length > 0) {
-            placeResult = addressData.places[0];
-          }
+        if (!addressRes.ok) {
+          this.logger.warn(`Google Places indisponível (HTTP ${addressRes.status}); consulta interrompida sem fallback adicional.`);
+          return null;
+        }
+
+        const addressData = (await addressRes.json()) as any;
+        if (addressData.places && addressData.places.length > 0) {
+          placeResult = addressData.places[0];
         }
       }
 
@@ -150,11 +153,25 @@ export class GeocodingService implements OnModuleInit {
         const geocodeUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(
           addressSearch
         )}&key=${this.apiKey}`;
-        const geoResponse = await fetch(geocodeUrl);
+        const geoResponse = await fetch(geocodeUrl, { signal: AbortSignal.timeout(10_000) });
+        if (!geoResponse.ok) {
+          this.logger.warn(`Google Geocoding indisponível (HTTP ${geoResponse.status}).`);
+          return null;
+        }
         const geoData = (await geoResponse.json()) as any;
 
         if (geoData.status === "OK" && geoData.results && geoData.results.length > 0) {
           const geoResult = geoData.results[0];
+          const returnedAddress = cleanString(geoResult.formatted_address || "");
+          const expectedCity = cleanString(input.cidade || "");
+          const expectedUf = cleanString(input.uf || "SP");
+          if (
+            (expectedCity && !returnedAddress.includes(expectedCity)) ||
+            (expectedUf && !returnedAddress.includes(expectedUf))
+          ) {
+            this.logger.warn("Google Geocoding retornou endereço fora da cidade ou UF solicitada; resultado descartado.");
+            return null;
+          }
           return {
             lat: geoResult.geometry.location.lat,
             lng: geoResult.geometry.location.lng,
@@ -165,7 +182,7 @@ export class GeocodingService implements OnModuleInit {
           };
         }
 
-        this.logger.warn(`Endereço não localizado no Google Places/Geocoding: ${searchTerms}`);
+        this.logger.warn("Endereço não localizado no Google Places/Geocoding.");
         return null;
       }
 
@@ -241,15 +258,11 @@ export class GeocodingService implements OnModuleInit {
       // Se o Google retornou um endereço em outro Estado (ex: CE ou SC para SP),
       // a resposta é totalmente incompatível.
       if (ufClean && !addressClean.includes(ufClean)) {
-        this.logger.warn(
-          `[Geocoding Divergente] Estado incompatível! Esperado: ${input.uf}, Retornado: "${formattedAddress}"`
-        );
-        confianca = 0;
+        this.logger.warn("Google Places retornou UF divergente; resultado descartado.");
+        return null;
       } else if (cidadeClean && !addressClean.includes(cidadeClean)) {
-        this.logger.warn(
-          `[Geocoding Divergente] Cidade incompatível! Esperada: ${input.cidade}, Retornada: "${formattedAddress}"`
-        );
-        confianca = Math.min(confianca, 30);
+        this.logger.warn("Google Places retornou cidade divergente; resultado descartado.");
+        return null;
       }
 
       const placeId = placeResult.id;
@@ -268,7 +281,7 @@ export class GeocodingService implements OnModuleInit {
         placeCategory,
       };
     } catch (error) {
-      this.logger.error(`Erro ao consultar as APIs do Google: ${error instanceof Error ? error.message : String(error)}`);
+      this.logger.error("Erro ao consultar as APIs do Google; nenhum resultado foi persistido.");
       return null;
     }
   }
@@ -284,7 +297,8 @@ export class GeocodingService implements OnModuleInit {
 
     try {
       const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${this.apiKey}`;
-      const res = await fetch(url);
+      const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+      if (!res.ok) return null;
       const data = (await res.json()) as any;
       if (data.status === "OK" && data.results && data.results.length > 0) {
         const result = data.results[0];
@@ -296,7 +310,7 @@ export class GeocodingService implements OnModuleInit {
       }
       return null;
     } catch (err) {
-      this.logger.error(`Erro na Geocoding API: ${err instanceof Error ? err.message : String(err)}`);
+      this.logger.error("Erro na Geocoding API; nenhum resultado foi persistido.");
       return null;
     }
   }
@@ -313,7 +327,7 @@ export class GeocodingService implements OnModuleInit {
     }
     if (!this.apiKey) return null;
 
-    const maxPages = options?.maxPages ?? 3;
+    const maxPages = 1;
     const allPlaces: any[] = [];
     let pageToken: string | undefined = undefined;
     let pageCount = 0;
@@ -335,6 +349,7 @@ export class GeocodingService implements OnModuleInit {
 
         const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
           method: "POST",
+          signal: AbortSignal.timeout(10_000),
           headers: {
             "Content-Type": "application/json",
             "X-Goog-Api-Key": this.apiKey,
@@ -345,8 +360,7 @@ export class GeocodingService implements OnModuleInit {
         });
 
         if (!res.ok) {
-          const errTxt = await res.text();
-          this.logger.warn(`searchPlace ("${query}") HTTP ${res.status}: ${errTxt}`);
+          this.logger.warn(`Google Places retornou HTTP ${res.status}; paginação interrompida.`);
           break;
         }
 
@@ -365,7 +379,7 @@ export class GeocodingService implements OnModuleInit {
 
       return allPlaces;
     } catch (err) {
-      this.logger.error(`Erro na Places API (New): ${err instanceof Error ? err.message : String(err)}`);
+      this.logger.error("Erro na Places API; paginação interrompida.");
       return allPlaces.length > 0 ? allPlaces : null;
     }
   }

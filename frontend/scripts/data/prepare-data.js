@@ -1,7 +1,7 @@
 import { compareData } from "./compare-data.js";
 import { importData } from "./import-data.js";
 
-const importReport = importData();
+const importReport = await importData();
 const comparisonReport = compareData();
 
 console.log(

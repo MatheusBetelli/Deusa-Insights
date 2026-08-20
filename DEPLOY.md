@@ -80,7 +80,8 @@ Cadastre os seguintes segredos no **Google Secret Manager**:
 - `DIRECT_URL`: Connection string direta (`:5432`).
 - `JWT_SECRET`: Segredo aleatório e forte (mínimo de 32 caracteres).
 - `ALLOWED_ORIGINS`: Domínio real do frontend (ex: `https://app.deusainsights.com.br`).
-- `FRONTEND_URL`: URL principal do frontend.
+- `FRONTEND_URL`: URL principal do frontend, usada nos links de recuperação de senha.
+- `RESEND_API_KEY` e `RESEND_FROM_EMAIL`: credenciais do serviço de e-mail de recuperação.
 
 ### B. Build do Container e Push para o Artifact Registry
 ```bash
@@ -108,7 +109,7 @@ gcloud run deploy deusa-backend \
   --region=southamerica-east1 \
   --allow-unauthenticated \
   --port=3001 \
-  --set-secrets="DATABASE_URL=DATABASE_URL:latest,DIRECT_URL=DIRECT_URL:latest,JWT_SECRET=JWT_SECRET:latest,ALLOWED_ORIGINS=ALLOWED_ORIGINS:latest" \
+  --set-secrets="DATABASE_URL=DATABASE_URL:latest,DIRECT_URL=DIRECT_URL:latest,JWT_SECRET=JWT_SECRET:latest,ALLOWED_ORIGINS=ALLOWED_ORIGINS:latest,FRONTEND_URL=FRONTEND_URL:latest,RESEND_API_KEY=RESEND_API_KEY:latest,RESEND_FROM_EMAIL=RESEND_FROM_EMAIL:latest" \
   --set-env-vars="NODE_ENV=production"
 ```
 

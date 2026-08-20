@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "@/components/common/InterfaceStates";
 import {
@@ -37,6 +37,7 @@ export const Route = createFileRoute("/_app/leads-b2b/$leadId")({
 });
 
 function LeadDetail() {
+  const leadRequestSequence = useRef(0);
   const { leadId } = Route.useParams();
   const [lead, setLead] = useState<Lead | null>(null);
   const [interactions, setInteractions] = useState<LeadInteraction[]>([]);
@@ -98,32 +99,29 @@ function LeadDetail() {
     if (!lead) return;
 
     try {
-      await Promise.all([
-        companiesService.upsertCompanyDetails(lead.company.id, {
-          telefone: editForm.telefone.trim() || undefined,
-          email: editForm.email.trim() || undefined,
-        }),
-        companiesService.updateCompany(lead.company.id, {
-          nomeFantasia: editForm.nomeFantasia.trim() || undefined,
-          razaoSocial: editForm.razaoSocial.trim() || undefined,
-          logradouro: editForm.logradouro.trim() || undefined,
-          numero: editForm.numero.trim() || undefined,
-          bairro: editForm.bairro.trim() || undefined,
-          cep: editForm.cep.trim() || undefined,
-          cidade: editForm.cidade.trim() || undefined,
-          uf: editForm.uf.trim() ? editForm.uf.trim().toUpperCase() : undefined,
-        }),
-      ]);
+      await companiesService.updateCommercialProfile(lead.company.id, {
+        telefone: editForm.telefone.trim() || undefined,
+        email: editForm.email.trim() || undefined,
+        nomeFantasia: editForm.nomeFantasia.trim() || undefined,
+        razaoSocial: editForm.razaoSocial.trim() || undefined,
+        logradouro: editForm.logradouro.trim() || undefined,
+        numero: editForm.numero.trim() || undefined,
+        bairro: editForm.bairro.trim() || undefined,
+        cep: editForm.cep.trim() || undefined,
+        cidade: editForm.cidade.trim() || undefined,
+        uf: editForm.uf.trim() ? editForm.uf.trim().toUpperCase() : undefined,
+      });
 
       toast.success("Cadastro e contatos do mercado atualizados com sucesso!");
       setShowEditModal(false);
-      loadLead();
+      await loadLead();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Falha ao atualizar cadastro.");
     }
   }
 
-  async function loadLead() {
+  const loadLead = useCallback(async () => {
+    const requestId = ++leadRequestSequence.current;
     setLoading(true);
     setError(null);
     try {
@@ -131,18 +129,25 @@ function LeadDetail() {
         leadsService.getLead(leadId),
         leadsService.getInteractions(leadId),
       ]);
+      if (requestId !== leadRequestSequence.current) return;
       setLead(leadData);
       setInteractions(interactionData);
     } catch (err) {
+      if (requestId !== leadRequestSequence.current) return;
       setError(err instanceof Error ? err.message : "Não foi possível carregar a oportunidade.");
     } finally {
-      setLoading(false);
+      if (requestId === leadRequestSequence.current) {
+        setLoading(false);
+      }
     }
-  }
+  }, [leadId]);
 
   useEffect(() => {
-    loadLead();
-  }, [leadId]);
+    void loadLead();
+    return () => {
+      leadRequestSequence.current += 1;
+    };
+  }, [loadLead]);
 
   async function handleSaveInteraction(e: React.FormEvent) {
     e.preventDefault();
@@ -191,7 +196,7 @@ function LeadDetail() {
       toast.success("Interação registrada e status comercial atualizado!");
       setShowInteractionModal(false);
       setInteractionForm({ type: "Ligação comercial", result: "CONTACTED", description: "", nextActionDate: "" });
-      loadLead();
+      await loadLead();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Falha ao registrar interação.");
     }
@@ -220,7 +225,7 @@ function LeadDetail() {
       toast.success("Visita presencial planejada e adicionada ao funil!");
       setShowVisitModal(false);
       setVisitForm({ date: "", notes: "" });
-      loadLead();
+      await loadLead();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Falha ao agendar visita.");
     }

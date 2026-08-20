@@ -1,6 +1,7 @@
-import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { normalizeCnpj } from "../common/cnpj";
+import { isValidCnpj } from "../common/cnpj-validator";
 import { getCnaeVariants } from "../common/opportunity-filter";
 import {
   CNPJ_PROVIDER,
@@ -15,6 +16,7 @@ import { CompanyDetailsDto } from "./dto/company-details.dto";
 import { ValidateLocationDto } from "./dto/validate-location.dto";
 import { GeocodingService } from "../common/geocoding.service";
 import { ClassificationService } from "../classification/classification.service";
+import { UpdateCommercialProfileDto } from "./dto/update-commercial-profile.dto";
 
 import { ConfigService } from "@nestjs/config";
 import { maskCpfInRazaoSocial } from "../common/lgpd.utils";
@@ -51,6 +53,12 @@ function checkAddressSimilarity(addr1: string, addr2: string): boolean {
   return a1.includes(a2) || a2.includes(a1);
 }
 
+function rejectPaidBatchOperation(): void {
+  throw new ForbiddenException(
+    "Geocodificação em lote desativada. Use somente correção individual explicitamente autorizada.",
+  );
+}
+
 const safeAssignedToSelect = {
   id: true,
   name: true,
@@ -68,17 +76,21 @@ export class CompaniesService {
     private readonly configService: ConfigService,
   ) {}
 
-  findAll(query: CompanyQueryDto) {
+  async findAll(query: CompanyQueryDto) {
     if (query.page !== undefined || query.pageSize !== undefined) {
       return this.findPage(query);
     }
 
-    return this.prisma.company.findMany({
+    const items = await this.prisma.company.findMany({
       where: this.buildWhere(query),
       include: { cnaes: true, lead: true },
       orderBy: { createdAt: "desc" },
       take: 200,
     });
+    return items.map((item) => ({
+      ...item,
+      razaoSocial: maskCpfInRazaoSocial(item.razaoSocial),
+    }));
   }
 
   async findPage(query: CompanyQueryDto) {
@@ -129,13 +141,18 @@ export class CompaniesService {
         });
       }
     }
-    if (query.search) {
+    if (query.search?.trim()) {
+      const searchTerm = query.search.trim();
+      const digitsOnly = normalizeCnpj(searchTerm);
+      const searchOr: Prisma.CompanyWhereInput[] = [
+        { razaoSocial: { contains: searchTerm, mode: "insensitive" } },
+        { nomeFantasia: { contains: searchTerm, mode: "insensitive" } },
+      ];
+      if (digitsOnly.length > 0) {
+        searchOr.push({ cnpj: { contains: digitsOnly } });
+      }
       and.push({
-        OR: [
-          { cnpj: { contains: normalizeCnpj(query.search) } },
-          { razaoSocial: { contains: query.search, mode: "insensitive" } },
-          { nomeFantasia: { contains: query.search, mode: "insensitive" } },
-        ],
+        OR: searchOr,
       });
     }
     if (and.length > 0) where.AND = and;
@@ -158,10 +175,19 @@ export class CompaniesService {
       include: { cnaes: true, lead: { include: { assignedTo: { select: safeAssignedToSelect } } } },
     });
     if (!company) throw new NotFoundException("Empresa não encontrada");
-    return company;
+    return {
+      ...company,
+      razaoSocial: maskCpfInRazaoSocial(company.razaoSocial),
+    };
   }
 
   create(dto: CreateCompanyDto) {
+    if (!isValidCnpj(dto.cnpj)) {
+      throw new BadRequestException("CNPJ inválido.");
+    }
+    if ((dto.latitude !== undefined) !== (dto.longitude !== undefined)) {
+      throw new BadRequestException("Latitude e longitude devem ser informadas em conjunto.");
+    }
     return this.upsertCompany({
       cnpj: dto.cnpj,
       razaoSocial: dto.razaoSocial,
@@ -186,6 +212,9 @@ export class CompaniesService {
   }
 
   async update(id: string, dto: UpdateCompanyDto) {
+    if ((dto.latitude !== undefined) !== (dto.longitude !== undefined)) {
+      throw new BadRequestException("Latitude e longitude devem ser informadas em conjunto.");
+    }
     const cnaes = dto.cnaes?.map((cnae) => normalizeCnae(cnae)).filter(Boolean) as
       | string[]
       | undefined;
@@ -210,7 +239,54 @@ export class CompaniesService {
     return company;
   }
 
+  async updateCommercialProfile(id: string, dto: UpdateCommercialProfileDto) {
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.company.findUnique({
+        where: { id },
+        select: { id: true },
+      });
+      if (!existing) throw new NotFoundException("Empresa não encontrada");
+
+      await tx.company.update({
+        where: { id },
+        data: {
+          razaoSocial: dto.razaoSocial,
+          nomeFantasia: dto.nomeFantasia,
+          logradouro: dto.logradouro,
+          numero: dto.numero,
+          bairro: dto.bairro,
+          cep: dto.cep,
+          cidade: dto.cidade,
+          uf: dto.uf?.toUpperCase(),
+        },
+      });
+
+      if (dto.telefone !== undefined || dto.email !== undefined) {
+        await tx.companyDetails.upsert({
+          where: { companyId: id },
+          create: {
+            companyId: id,
+            telefone: dto.telefone,
+            email: dto.email,
+          },
+          update: {
+            telefone: dto.telefone,
+            email: dto.email,
+          },
+        });
+      }
+
+      return tx.company.findUnique({
+        where: { id },
+        include: { cnaes: true, lead: true, details: true },
+      });
+    });
+  }
+
   async syncByCnpj(cnpj: string) {
+    if (!isValidCnpj(cnpj)) {
+      throw new BadRequestException("CNPJ inválido.");
+    }
     const external = await this.cnpjProvider.getCompanyByCnpj(cnpj);
     if (!external) throw new NotFoundException("CNPJ não encontrado no provider configurado");
     return this.upsertCompany(external);
@@ -218,6 +294,9 @@ export class CompaniesService {
 
   async upsertCompany(input: ExternalCompany) {
     const cnpj = normalizeCnpj(input.cnpj);
+    if (!isValidCnpj(cnpj)) {
+      throw new BadRequestException("CNPJ inválido recebido para sincronização.");
+    }
     const primaryCnae = normalizeCnae(input.cnaePrincipal);
     const cnaes = Array.from(
       new Set(
@@ -225,6 +304,23 @@ export class CompaniesService {
           .filter(Boolean)
           .map((cnae) => normalizeCnae(cnae)!),
       ),
+    );
+    const existing = await this.prisma.company.findUnique({
+      where: { cnpj },
+      select: {
+        validadoManualmente: true,
+        statusVerificacaoEndereco: true,
+        latitudeVerificada: true,
+        longitudeVerificada: true,
+      },
+    });
+    const preserveVerifiedLocation = Boolean(
+      existing?.validadoManualmente ||
+        existing?.latitudeVerificada != null ||
+        existing?.longitudeVerificada != null ||
+        ["verificado", "verificado_google", "confirmado"].includes(
+          existing?.statusVerificacaoEndereco ?? "",
+        ),
     );
 
     const company = await this.prisma.company.upsert({
@@ -278,72 +374,47 @@ export class CompaniesService {
         logradouro: input.logradouro,
         numero: input.numero,
         complemento: input.complemento,
-        latitude: input.latitude,
-        longitude: input.longitude,
+        ...(preserveVerifiedLocation
+          ? {}
+          : {
+              latitude: input.latitude,
+              longitude: input.longitude,
+              origemCoordenada: input.origemCoordenada,
+              statusVerificacaoEndereco: input.statusVerificacaoEndereco,
+              confiancaVerificacao: input.confiancaVerificacao,
+            }),
         source: input.source,
         lastSyncAt: new Date(),
-        // ─── Campos de qualidade cadastral ───────────────────────────────────
-        origemCoordenada: input.origemCoordenada,
-        statusVerificacaoEndereco: input.statusVerificacaoEndereco,
-        confiancaVerificacao: input.confiancaVerificacao,
-        enderecoCompleto: input.enderecoCompleto ?? false,
-        pendenteValidacao: input.pendenteValidacao ?? false,
-        motivosPendencia: input.motivosPendencia ?? [],
-        pontuacaoOportunidade: input.pontuacaoOportunidade ?? 0,
+        ...(input.enderecoCompleto !== undefined
+          ? { enderecoCompleto: input.enderecoCompleto }
+          : {}),
+        ...(input.pendenteValidacao !== undefined
+          ? { pendenteValidacao: input.pendenteValidacao }
+          : {}),
+        ...(input.motivosPendencia !== undefined
+          ? { motivosPendencia: input.motivosPendencia }
+          : {}),
+        ...(input.pontuacaoOportunidade !== undefined
+          ? { pontuacaoOportunidade: input.pontuacaoOportunidade }
+          : {}),
         nivelOportunidade: input.nivelOportunidade,
-        motivoPontuacao: input.motivoPontuacao ?? [],
-        cnaes: {
-          deleteMany: {},
-          create: cnaes.map((cnae) => ({ cnaeCode: cnae, isPrimary: cnae === primaryCnae })),
-        },
+        ...(input.motivoPontuacao !== undefined
+          ? { motivoPontuacao: input.motivoPontuacao }
+          : {}),
+        ...(cnaes.length > 0
+          ? {
+              cnaes: {
+                deleteMany: {},
+                create: cnaes.map((cnae) => ({
+                  cnaeCode: cnae,
+                  isPrimary: cnae === primaryCnae,
+                })),
+              },
+            }
+          : {}),
       },
       include: { cnaes: true, lead: true },
     });
-
-    if (
-      this.geocodingService.isAvailable() &&
-      (company.latitude === null || company.longitude === null || company.latitude === 0 || company.longitude === 0)
-    ) {
-      this.geocodingService
-        .geocodeAndVerify({
-          cnpj: company.cnpj,
-          razaoSocial: company.razaoSocial,
-          nomeFantasia: company.nomeFantasia,
-          logradouro: company.logradouro,
-          numero: company.numero,
-          bairro: company.bairro,
-          cep: company.cep,
-          cidade: company.cidade,
-          uf: company.uf,
-        })
-        .then(async (result) => {
-          if (result) {
-            const confianca = result.confianca;
-            const statusVerificacaoEndereco =
-              confianca >= 90 ? "verificado" : confianca >= 60 ? "provavel" : "divergente";
-            await this.prisma.company.update({
-              where: { id: company.id },
-              data: {
-                latitude: result.lat,
-                longitude: result.lng,
-                latitudeVerificada: result.lat,
-                longitudeVerificada: result.lng,
-                enderecoVerificado: result.enderecoRetornado,
-                fonteGeocodificacao: result.fonte,
-                confiancaVerificacao: result.confianca,
-                statusVerificacaoEndereco,
-                dataVerificacaoGeo: result.dataVerificacao,
-                origemCoordenada: "geocodificado",
-                placeId: result.placeId ?? undefined,
-                nomeEncontrado: result.placeName ?? undefined,
-                telefoneEncontrado: result.placePhone ?? undefined,
-                categoriaEncontrada: result.placeCategory ?? undefined,
-              },
-            });
-          }
-        })
-        .catch(() => null);
-    }
 
     return company;
   }
@@ -398,12 +469,12 @@ export class CompaniesService {
     });
 
     if (dryRun) {
-      const estimatedCost = companies.length * 0.054; // Pior cenário estimado
       return {
         dryRun: true,
         message: `Simulação de verificação concluída para ${companies.length} empresa(s).`,
         totalSelected: companies.length,
-        estimatedCostUsd: Number(estimatedCost.toFixed(3)),
+        estimatedCostUsd: null,
+        costNote: "Custo não estimado: varia conforme SKU e uso acumulado da conta.",
         companies: companies.map((c) => ({
           id: c.id,
           cnpj: c.cnpj,
@@ -415,6 +486,8 @@ export class CompaniesService {
         })),
       };
     }
+
+    rejectPaidBatchOperation();
 
     // Se não for dryRun, verifica se a API está disponível
     if (!this.geocodingService.isAvailable()) {
@@ -628,6 +701,11 @@ export class CompaniesService {
     if (!company) throw new NotFoundException("Empresa não encontrada");
 
     const statusValidacao = dto.statusValidacao;
+    const hasLatitude = dto.latitude !== undefined;
+    const hasLongitude = dto.longitude !== undefined;
+    if (hasLatitude !== hasLongitude) {
+      throw new BadRequestException("Latitude e longitude devem ser informadas em conjunto.");
+    }
 
     // ─── Nova Regra de Negócio Estrita (PARTE 3) ─────────────────────────────
     // Um registro SOMENTE poderá receber status 'confirmado' quando existir um ESTABELECIMENTO COMERCIAL verificado.
@@ -723,23 +801,31 @@ export class CompaniesService {
       updateData.enderecoVerificado = dto.enderecoVerificado;
     }
 
-    const updated = await this.prisma.company.update({
-      where: { id },
-      data: updateData,
-      include: { cnaes: true, lead: true, details: true },
-    });
-
-    if (company.lead) {
-      await this.prisma.lead.updateMany({
-        where: { companyId: id },
-        data: { pendenteValidacao },
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.company.update({
+        where: { id },
+        data: updateData,
+        include: { cnaes: true, lead: true, details: true },
       });
-    }
 
-    return updated;
+      if (company.lead) {
+        await tx.lead.updateMany({
+          where: { companyId: id },
+          data: { pendenteValidacao },
+        });
+      }
+
+      return updated;
+    });
   }
 
-  async getLocationCandidates(id: string) {
+  async getLocationCandidates(id: string, confirmPaidRequest: boolean) {
+    if (confirmPaidRequest !== true) {
+      throw new BadRequestException(
+        "Confirmação explícita obrigatória antes de consultar a Google Places API.",
+      );
+    }
+
     const company = await this.prisma.company.findUnique({
       where: { id },
       include: { details: true },
@@ -753,13 +839,8 @@ export class CompaniesService {
     const isConfigured = Boolean(apiKey && apiKey.trim().length > 0);
 
     const query1 = `${company.nomeFantasia || company.razaoSocial} ${company.logradouro || ""} ${company.numero || ""} ${company.cidade} ${company.uf}`.trim();
-    const query2 = `${company.razaoSocial} ${company.logradouro || ""} ${company.cidade} ${company.uf}`.trim();
-    const query3 = `${company.nomeFantasia || company.razaoSocial} ${company.bairro || ""} ${company.cidade} ${company.uf}`.trim();
     const phone = company.details?.telefone || "";
-    const query4 = phone ? `${company.nomeFantasia || company.razaoSocial} telefone ${phone} ${company.cidade}` : `${company.nomeFantasia || company.razaoSocial} ${company.cidade} SP`;
-    const query5 = `mercado próximo à ${company.logradouro || ""} ${company.numero || ""} ${company.cidade} ${company.uf}`.trim();
-
-    const queriesExecuted = [query1, query2, query3, query4, query5];
+    const queriesExecuted = [query1];
 
     const companyData = {
       id: company.id,
@@ -798,8 +879,10 @@ export class CompaniesService {
           "X-Goog-FieldMask": fieldMask,
         };
 
+        apiCallsCount++;
         const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
           method: "POST",
+          signal: AbortSignal.timeout(10_000),
           headers: reqHeaders,
           body: JSON.stringify({
             textQuery: queryStr,
@@ -809,8 +892,7 @@ export class CompaniesService {
         });
 
         if (!res.ok) {
-          const errText = await res.text();
-          apiErrors.push(`Consulta "${queryStr}" retornou HTTP ${res.status}: ${errText}`);
+          apiErrors.push(`Consulta ao provedor retornou HTTP ${res.status}.`);
           continue;
         }
 
@@ -835,7 +917,18 @@ export class CompaniesService {
           const enderecoCompativel = checkAddressSimilarity(company.logradouro || "", placeAddr);
           const telefoneCompativel = phone ? placePhone.replace(/\D/g, "").includes(phone.replace(/\D/g, "")) : false;
           const municipioCompativel = placeAddr.toLowerCase().includes(company.cidade.toLowerCase());
-          const categoriaCompativel = place.types?.some((t: string) => ["grocery_store", "supermarket", "store", "food"].includes(t)) ?? true;
+          const allowedPlaceTypes = new Set([
+            "supermarket",
+            "hypermarket",
+            "grocery_store",
+            "asian_grocery_store",
+            "japanese_grocery_store",
+            "butcher_shop",
+          ]);
+          const categoriaCompativel =
+            allowedPlaceTypes.has(place.primaryType || "") ||
+            (Array.isArray(place.types) &&
+              place.types.some((type: string) => allowedPlaceTypes.has(type)));
 
           let score = 0;
           const motivos: string[] = [];
@@ -843,7 +936,8 @@ export class CompaniesService {
 
           if (nomeCompativel) { score += 40; motivos.push("Nome comercial correspondente"); } else { alertas.push("Nome do estabelecimento diferente do cadastrado na Receita"); }
           if (enderecoCompativel) { score += 30; motivos.push("Logradouro compatível"); } else { alertas.push("Divergência de endereço/número"); }
-          if (municipioCompativel) { score += 15; motivos.push("Município Tupã verificado"); } else { alertas.push("Município divergente"); }
+          if (municipioCompativel) { score += 15; motivos.push(`Município ${company.cidade} verificado`); } else { alertas.push("Município divergente"); }
+          if (!categoriaCompativel) alertas.push("Categoria fora do escopo comercial autorizado");
           if (telefoneCompativel) { score += 15; motivos.push("Telefone correspondente"); }
 
           candidateMap.set(place.id, {
@@ -852,9 +946,9 @@ export class CompaniesService {
             formattedAddress: placeAddr,
             latitude: lat,
             longitude: lng,
-            primaryType: place.primaryType || "grocery_store",
+            primaryType: place.primaryType || null,
             types: place.types || [],
-            businessStatus: place.businessStatus || "OPERATIONAL",
+            businessStatus: place.businessStatus || null,
             nationalPhoneNumber: placePhone || null,
             websiteUri: place.websiteUri || null,
             googleMapsUri: place.googleMapsUri || `https://www.google.com/maps/place/?q=place_id:${place.id}`,
@@ -870,8 +964,8 @@ export class CompaniesService {
             alertas,
           });
         }
-      } catch (err: any) {
-        apiErrors.push(`Erro na consulta "${queryStr}": ${err.message}`);
+      } catch {
+        apiErrors.push("Falha de rede ou timeout ao consultar o provedor.");
       }
     }
 
@@ -940,14 +1034,16 @@ export class CompaniesService {
         cnae4712100Pending: pendingTargetCount,
       },
       freeTierQuota: {
-        monthlyLimit: "$200.00 USD (~28.500 requisições grátis por mês)",
+        monthlyLimit: "O limite gratuito varia por SKU e deve ser conferido na tabela oficial vigente.",
         estimatedCallsForPendingTarget: pendingTargetCount,
-        estimatedCost: "$0.00 USD (Dentro do limite gratuito mensal do Google Cloud)",
+        estimatedCost: "Não calculado: depende dos SKUs, da franquia e do uso acumulado da conta.",
       },
     };
   }
 
   async geocodeBatchCompanies(cnaeCode = "4712100", limit = 50, forceReverify = false) {
+    rejectPaidBatchOperation();
+
     if (!this.geocodingService.isAvailable()) {
       return {
         success: false,
@@ -1048,5 +1144,3 @@ export class CompaniesService {
     };
   }
 }
-
-

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post, Req, UseGuards } from "@nestjs/common";
 import { AuthGuard } from "../auth/auth.guard";
 import { CreateLeadInteractionDto } from "./dto/create-lead-interaction.dto";
 import { LeadInteractionsService } from "./lead-interactions.service";
@@ -14,7 +14,7 @@ export class LeadInteractionsController {
   }
 
   @Post()
-  create(@Param("id") leadId: string, @Body() dto: CreateLeadInteractionDto) {
-    return this.leadInteractionsService.create(leadId, dto);
+  create(@Param("id") leadId: string, @Body() dto: CreateLeadInteractionDto, @Req() request: any) {
+    return this.leadInteractionsService.create(leadId, dto, request.user.sub);
   }
 }

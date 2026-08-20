@@ -2,6 +2,7 @@ import type { LeadStatus, PotentialLevel } from "./lead";
 
 export type MapOpportunity = {
   id: string;
+  companyId?: string;
   companyName: string;
   cnpj: string;
   city: string;

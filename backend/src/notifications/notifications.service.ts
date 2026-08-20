@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
+import { buildCnaeWhereInput } from "../common/opportunity-filter";
 
 export type NotificationItem = {
   id: string;
@@ -18,16 +19,19 @@ export class NotificationsService {
   async getOperationalNotifications(): Promise<NotificationItem[]> {
     const items: NotificationItem[] = [];
 
-    // 1. Leads de alto potencial sem responsável
+    // 1. Leads de alto potencial sem responsável (apenas dentro do escopo comercial Deusa)
     const unassignedCount = await this.prisma.lead.count({
       where: {
         assignedToId: null,
         OR: [
           { potentialLevel: "CRITICAL" },
           { potentialLevel: "HIGH" },
-          { score: { gte: 65 } },
+          { score: { gte: 70 } },
         ],
-        company: { situacaoCadastral: "ATIVA" },
+        company: {
+          situacaoCadastral: "ATIVA",
+          ...buildCnaeWhereInput(),
+        },
       },
     });
 
@@ -38,9 +42,12 @@ export class NotificationsService {
           OR: [
             { potentialLevel: "CRITICAL" },
             { potentialLevel: "HIGH" },
-            { score: { gte: 65 } },
+            { score: { gte: 70 } },
           ],
-          company: { situacaoCadastral: "ATIVA" },
+          company: {
+            situacaoCadastral: "ATIVA",
+            ...buildCnaeWhereInput(),
+          },
         },
         orderBy: { createdAt: "desc" },
         select: { createdAt: true },
@@ -69,28 +76,42 @@ export class NotificationsService {
         id: `notif-import-${job.id}`,
         type: "IMPORT_COMPLETED",
         title: `Importação de ${job.cityName}/${job.uf} concluída`,
-        message: `${job.totalSaved} nova${job.totalSaved !== 1 ? "s" : ""} empresa${job.totalSaved !== 1 ? "s" : ""} adicionada${job.totalSaved !== 1 ? "s" : ""}`,
+        message: `${job.totalSaved} empresa${job.totalSaved !== 1 ? "s" : ""} processada${job.totalSaved !== 1 ? "s" : ""}`,
         createdAt: (job.finishedAt || job.createdAt).toISOString(),
         targetUrl: "/importar-cnpjs",
         category: "IMPORT",
       });
     }
 
-    // 3. Novas oportunidades aguardando primeira abordagem comercial
+    // 3. Novas oportunidades aguardando primeira abordagem comercial (apenas dentro do escopo comercial Deusa)
     const newLeadsCount = await this.prisma.lead.count({
       where: {
         status: "NEW",
-        company: { situacaoCadastral: "ATIVA" },
+        company: {
+          situacaoCadastral: "ATIVA",
+          ...buildCnaeWhereInput(),
+        },
       },
     });
 
     if (newLeadsCount > 0) {
+      const newestLead = await this.prisma.lead.findFirst({
+        where: {
+          status: "NEW",
+          company: {
+            situacaoCadastral: "ATIVA",
+            ...buildCnaeWhereInput(),
+          },
+        },
+        orderBy: { createdAt: "desc" },
+        select: { createdAt: true },
+      });
       items.push({
         id: "notif-action-new-leads",
         type: "ACTION_REQUIRED",
         title: `${newLeadsCount} oportunidade${newLeadsCount > 1 ? "s" : ""} aguardando primeira abordagem`,
         message: "Leads ativos prontos para contato inicial",
-        createdAt: new Date().toISOString(),
+        createdAt: (newestLead?.createdAt ?? new Date(0)).toISOString(),
         targetUrl: "/leads-b2b",
         category: "ACTION",
       });

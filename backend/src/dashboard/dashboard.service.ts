@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, OnModuleInit } from "@nestjs/common";
 import { LeadStatus, Prisma } from "@prisma/client";
 import { buildCnaeWhereInput, getCnaeVariants } from "../common/opportunity-filter";
 import { PrismaService } from "../prisma/prisma.service";
@@ -50,10 +50,6 @@ function addMonths(date: Date, amount: number) {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + amount, 1));
 }
 
-function daysBetween(start: Date, end: Date) {
-  return Math.max(1, Math.round((end.getTime() - start.getTime()) / 86_400_000));
-}
-
 function pct(part: number, total: number) {
   if (total <= 0) return 0;
   return Math.round((part / total) * 1000) / 10;
@@ -64,7 +60,7 @@ function pctDelta(current: number, previous: number) {
   return Math.round(((current - previous) / previous) * 1000) / 10;
 }
 
-function resolvePeriod(query: DashboardQueryDto) {
+export function resolvePeriod(query: DashboardQueryDto) {
   const now = new Date();
   const period: DashboardPeriod = query.period ?? "current_month";
   const currentMonthStart = startOfMonth(now);
@@ -85,10 +81,8 @@ function resolvePeriod(query: DashboardQueryDto) {
     months = 1;
   }
 
-  const durationDays = daysBetween(start, end);
   const previousEnd = start;
-  const previousStart = new Date(previousEnd);
-  previousStart.setUTCDate(previousStart.getUTCDate() - durationDays);
+  const previousStart = addMonths(previousEnd, -months);
 
   return {
     key: period,
@@ -109,37 +103,54 @@ function periodWhere(start: Date, end: Date): Prisma.DateTimeFilter {
 }
 
 @Injectable()
-export class DashboardService {
+export class DashboardService implements OnModuleInit {
+  private summaryCache = new Map<string, { data: any; expiresAt: number }>();
+
   constructor(private readonly prisma: PrismaService) {}
+
+  async onModuleInit() {
+    // Pré-aquecer o cache do dashboard na inicialização do backend
+    setTimeout(() => {
+      void this.summary({}).catch(() => {});
+    }, 1000);
+  }
 
   async summary(query: DashboardQueryDto = {}) {
     const period = resolvePeriod(query);
+    const cacheKey = `${period.key}_${period.start.getTime()}_${period.end.getTime()}_${query.uf || "all"}_${query.city || "all"}_${query.cnae || "all"}_${query.assignedToId || "all"}`;
+    const cached = this.summaryCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.data;
+    }
+
     const cnaeVariants = getCnaeVariants(query.cnae);
     const uf = query.uf?.toUpperCase();
     const city = query.city?.trim();
     const assignedToId = query.assignedToId?.trim();
 
-    const companyBaseWhere: Prisma.CompanyWhereInput = {
-      situacaoCadastral: "ATIVA",
-      ...(uf ? { uf } : {}),
-      ...(city ? { cidade: { equals: city, mode: "insensitive" } } : {}),
-      ...buildCnaeWhereInput(query.cnae),
-    };
+    const companyFilters: Prisma.CompanyWhereInput[] = [
+      { situacaoCadastral: "ATIVA" },
+      buildCnaeWhereInput(query.cnae),
+    ];
+    if (uf) companyFilters.push({ uf });
+    if (city) companyFilters.push({ cidade: { equals: city, mode: "insensitive" } });
+    const companyBaseWhere: Prisma.CompanyWhereInput = { AND: companyFilters };
+
+    const clientCompanyFilters: Prisma.CompanyWhereInput[] = [];
+    if (assignedToId) clientCompanyFilters.push({ lead: { assignedToId } });
+    if (cnaeVariants.length > 0) {
+      clientCompanyFilters.push({
+        OR: [
+          { cnaePrincipal: { in: cnaeVariants } },
+          { cnaes: { some: { cnaeCode: { in: cnaeVariants } } } },
+        ],
+      });
+    }
 
     const clientBaseWhere: Prisma.ClientAccountWhereInput = {
       ...(uf ? { uf } : {}),
       ...(city ? { cidade: { equals: city, mode: "insensitive" } } : {}),
-      ...(assignedToId ? { company: { lead: { assignedToId } } } : {}),
-      ...(cnaeVariants.length > 0
-        ? {
-            company: {
-              OR: [
-                { cnaePrincipal: { in: cnaeVariants } },
-                { cnaes: { some: { cnaeCode: { in: cnaeVariants } } } },
-              ],
-            },
-          }
-        : {}),
+      ...(clientCompanyFilters.length > 0 ? { company: { AND: clientCompanyFilters } } : {}),
       createdAt: { lt: period.end },
     };
 
@@ -179,6 +190,10 @@ export class DashboardService {
         where: {
           ...leadBaseWhere,
           OR: [{ status: LeadStatus.INACTIVE }, { status: LeadStatus.NOT_INTERESTED }],
+          company: {
+            ...companyBaseWhere,
+            clientAccounts: { none: { isCurrentClient: true } },
+          },
         },
       }),
       this.prisma.clientAccount.count({
@@ -190,22 +205,26 @@ export class DashboardService {
       }),
       this.prisma.company.count({
         where: {
-          ...companyBaseWhere,
-          createdAt: { lt: period.end },
           AND: [
+            companyBaseWhere,
+            { createdAt: { lt: period.end } },
             { OR: [{ lead: { is: null } }, { lead: { status: { not: LeadStatus.CONVERTED } } }] },
             { clientAccounts: { none: { isCurrentClient: true } } },
+            ...(assignedToId ? [{ lead: { assignedToId } }] : []),
           ],
-          ...(assignedToId ? { lead: { assignedToId } } : {}),
         },
       }),
       this.prisma.lead.count({
         where: {
           ...leadBaseWhere,
           status: { in: POSITIVATION_STATUSES },
+          lastContactAt: periodWhere(period.start, period.end),
+          company: {
+            ...companyBaseWhere,
+            createdAt: { lt: period.end },
+          },
           OR: [
             { status: LeadStatus.CONVERTED },
-            { lastContactAt: periodWhere(period.start, period.end) },
             { company: { clientAccounts: { some: { isCurrentClient: true } } } },
           ],
         },
@@ -215,6 +234,14 @@ export class DashboardService {
           ...leadBaseWhere,
           status: { in: POSITIVATION_STATUSES },
           lastContactAt: periodWhere(period.previousStart, period.previousEnd),
+          company: {
+            ...companyBaseWhere,
+            createdAt: { lt: period.previousEnd },
+          },
+          OR: [
+            { status: LeadStatus.CONVERTED },
+            { company: { clientAccounts: { some: { isCurrentClient: true } } } },
+          ],
         },
       }),
       this.prisma.lead.count({
@@ -234,7 +261,15 @@ export class DashboardService {
       }),
       this.prisma.lead.groupBy({
         by: ["potentialLevel"],
-        where: leadBaseWhere,
+        where: {
+          ...leadBaseWhere,
+          status: { notIn: [LeadStatus.CONVERTED, LeadStatus.INACTIVE, LeadStatus.NOT_INTERESTED] },
+          company: {
+            ...companyBaseWhere,
+            clientAccounts: { none: { isCurrentClient: true } },
+            createdAt: { lt: period.end },
+          },
+        },
         _count: { id: true },
       }),
       this.prisma.company.groupBy({
@@ -268,7 +303,7 @@ export class DashboardService {
     const portfolioDistribution = [
       { key: "active", name: "Ativos", count: currentClients },
       ...(inactiveClients > 0
-        ? [{ key: "inactive", name: "Inativos sem recência comercial", count: inactiveClients }]
+        ? [{ key: "inactive", name: "Inativos", count: inactiveClients }]
         : []),
     ].map((item) => ({ ...item, percentage: pct(item.count, currentClients + inactiveClients) }));
 
@@ -288,8 +323,10 @@ export class DashboardService {
       periodEnd: period.end,
     });
 
+    const evolutionStart = period.months === 1 ? addMonths(period.start, -5) : period.start;
+
     const monthlyEvolution = await this.getMonthlyEvolution({
-      periodStart: period.start,
+      periodStart: evolutionStart,
       periodEnd: period.end,
       companyBaseWhere,
       clientBaseWhere,
@@ -316,7 +353,7 @@ export class DashboardService {
 
     const priorityCityInfo = cityExpansion[0] ?? null;
 
-    return {
+    const result = {
       period: {
         key: period.key,
         label: period.label,
@@ -399,10 +436,13 @@ export class DashboardService {
       })),
       monthlyTrend: monthlyEvolution.map((item) => ({
         mes: item.month,
-        novosLeads: item.positivatedClients,
+        novosLeads: item.newLeads,
         convertidos: item.activeClients,
       })),
     };
+
+    this.summaryCache.set(cacheKey, { data: result, expiresAt: Date.now() + 30000 });
+    return result;
   }
 
   private async getCityExpansion(args: {
@@ -429,13 +469,13 @@ export class DashboardService {
       this.prisma.company.groupBy({
         by: ["cidade"],
         where: {
-          ...companyBaseWhere,
-          createdAt: { lt: periodEnd },
           AND: [
+            companyBaseWhere,
+            { createdAt: { lt: periodEnd } },
             { OR: [{ lead: { is: null } }, { lead: { status: { not: LeadStatus.CONVERTED } } }] },
             { clientAccounts: { none: { isCurrentClient: true } } },
+            ...(assignedToId ? [{ lead: { assignedToId } }] : []),
           ],
-          ...(assignedToId ? { lead: { assignedToId } } : {}),
         },
         _count: { id: true },
       }),
@@ -493,7 +533,7 @@ export class DashboardService {
       const next = addMonths(cursor, 1);
       const monthEnd = next < periodEnd ? next : periodEnd;
 
-      const [activeClients, positivatedClients] = await Promise.all([
+      const [activeClients, positivatedClients, negotiationsCount, newLeads] = await Promise.all([
         this.prisma.clientAccount.count({
           where: { ...clientBaseWhere, isCurrentClient: true, createdAt: { lt: monthEnd } },
         }),
@@ -502,7 +542,26 @@ export class DashboardService {
             ...leadBaseWhere,
             status: { in: POSITIVATION_STATUSES },
             lastContactAt: periodWhere(cursor, monthEnd),
-            company: { ...companyBaseWhere, clientAccounts: { some: { isCurrentClient: true } } },
+            company: companyBaseWhere,
+            OR: [
+              { status: LeadStatus.CONVERTED },
+              { company: { clientAccounts: { some: { isCurrentClient: true } } } },
+            ],
+          },
+        }),
+        this.prisma.lead.count({
+          where: {
+            ...leadBaseWhere,
+            status: LeadStatus.NEGOTIATION,
+            lastContactAt: periodWhere(cursor, monthEnd),
+            company: companyBaseWhere,
+          },
+        }),
+        this.prisma.lead.count({
+          where: {
+            ...leadBaseWhere,
+            createdAt: periodWhere(cursor, monthEnd),
+            company: companyBaseWhere,
           },
         }),
       ]);
@@ -512,6 +571,8 @@ export class DashboardService {
         year: cursor.getUTCFullYear(),
         activeClients,
         positivatedClients,
+        negotiationsCount,
+        newLeads,
       });
     }
 

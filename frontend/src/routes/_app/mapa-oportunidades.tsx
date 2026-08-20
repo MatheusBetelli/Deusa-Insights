@@ -17,6 +17,7 @@ import { AlertTriangle, Building2, FileUp, Filter, Layers, RotateCcw, MapPin, Lo
 export type MapSearch = {
   uf?: string;
   city?: string;
+  companyId?: string;
   category?: string;
   type?: string;
   precision?: string;
@@ -47,6 +48,7 @@ export const Route = createFileRoute("/_app/mapa-oportunidades")({
   validateSearch: (search: Record<string, unknown>): MapSearch => ({
     uf: typeof search.uf === "string" ? search.uf : "SP",
     city: typeof search.city === "string" ? search.city : "Todas",
+    companyId: typeof search.companyId === "string" ? search.companyId : undefined,
     category: typeof search.category === "string" ? search.category : undefined,
     type: typeof search.type === "string" ? search.type : undefined,
     precision: typeof search.precision === "string" ? search.precision : undefined,
@@ -167,6 +169,7 @@ function OpportunityMap() {
   const [clustersOn, setClustersOn] = useState(routeSearch.clusters ?? storedFilters.clusters ?? true);
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [isDiscovering, setIsDiscovering] = useState(false);
+  const [selectedOpportunity, setSelectedOpportunity] = useState<MapOpportunity | null>(null);
 
   useEffect(() => {
     const params: MapSearch = {
@@ -202,7 +205,7 @@ function OpportunityMap() {
     try {
       const response = await mapService.optimizeLocations({
         limit: 50,
-        dryRun: false,
+        dryRun: true,
       });
       if (response.error) throw new Error(response.message || "Erro desconhecido");
 
@@ -273,8 +276,20 @@ function OpportunityMap() {
   useEffect(() => {
     setSelectedUf(routeSearch.uf ?? storedFilters.uf ?? "SP");
     setSelectedCity(routeSearch.city ?? storedFilters.city ?? "Todas");
+    if (routeSearch.companyId) {
+      setSelectedCategory("Todas");
+      setSelectedEstablishmentType("Todos");
+      setSelectedPrecision("Todas");
+      setSearchQuery("");
+    }
     hasFittedRef.current = false;
-  }, [routeSearch.uf, routeSearch.city, storedFilters.uf, storedFilters.city]);
+  }, [
+    routeSearch.uf,
+    routeSearch.city,
+    routeSearch.companyId,
+    storedFilters.uf,
+    storedFilters.city,
+  ]);
 
   const filtered = useMemo(
     () => {
@@ -403,6 +418,7 @@ function OpportunityMap() {
     if (mapStatus !== "ready" || !mapRef.current) return;
 
     const map = mapRef.current;
+    let cancelled = false;
 
     if (clusterRef.current) {
       try {
@@ -423,6 +439,7 @@ function OpportunityMap() {
     (async () => {
       const LeafletModule = await import("leaflet");
       const Leaflet = LeafletModule.default || LeafletModule;
+      if (cancelled || !mapRef.current) return;
       (window as any).L = Leaflet;
 
       let group: any;
@@ -430,6 +447,7 @@ function OpportunityMap() {
       if (clustersOn) {
         try {
           await import("leaflet.markercluster");
+          if (cancelled || !mapRef.current) return;
           const MarkerClusterGroup =
             (Leaflet as any).markerClusterGroup ||
             (Leaflet as any).MarkerClusterGroup ||
@@ -567,6 +585,9 @@ function OpportunityMap() {
 
         markersToBatch.push(marker);
         markerById.current.set(point.id, marker);
+        if (point.companyId) {
+          markerById.current.set(point.companyId, marker);
+        }
       });
 
       if (typeof group.addLayers === "function") {
@@ -575,9 +596,45 @@ function OpportunityMap() {
         markersToBatch.forEach((m) => group.addLayer(m));
       }
 
-      if (!mapRef.current) return;
+      if (cancelled || !mapRef.current) return;
       group.addTo(mapRef.current);
       clusterRef.current = group;
+
+      if (routeSearch.companyId) {
+        const cleanCompanyId = routeSearch.companyId.trim();
+        const target = withCoords.find(
+          (p) =>
+            p.companyId === cleanCompanyId ||
+            p.id === cleanCompanyId ||
+            (p.cnpj && p.cnpj === cleanCompanyId) ||
+            (p.cnpj && cleanCompanyId && p.cnpj.replace(/\D/g, "") === cleanCompanyId.replace(/\D/g, ""))
+        );
+
+        if (target && mapRef.current) {
+          hasFittedRef.current = true;
+          setSelectedOpportunity(target);
+          const m =
+            markerById.current.get(target.id) ||
+            (target.companyId ? markerById.current.get(target.companyId) : null);
+
+          if (m) {
+            if (group && typeof (group as any).zoomToShowLayer === "function") {
+              (group as any).zoomToShowLayer(m, () => {
+                setTimeout(() => {
+                  m.openPopup();
+                }, 150);
+              });
+            } else {
+              mapRef.current.setView([target.latitude!, target.longitude!], 17, { animate: true });
+              setTimeout(() => {
+                m.openPopup();
+              }, 250);
+            }
+          } else if (typeof target.latitude === "number" && typeof target.longitude === "number") {
+            mapRef.current.setView([target.latitude, target.longitude], 17, { animate: true });
+          }
+        }
+      }
 
       const bounds = Leaflet.latLngBounds(boundPoints);
       if (!hasFittedRef.current && bounds.isValid()) {
@@ -586,7 +643,11 @@ function OpportunityMap() {
         else mapRef.current.fitBounds(bounds.pad(0.12), { maxZoom: 14 });
       }
     })();
-  }, [withCoords, mapStatus, clustersOn]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [withCoords, mapStatus, clustersOn, routeSearch.companyId]);
 
   // --- counts ---
   const clienteCount = filtered.filter((p) => getCommercialCategory(p) === "CLIENTE").length;

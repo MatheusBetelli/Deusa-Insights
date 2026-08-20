@@ -30,10 +30,20 @@ function isLocalhostOrigin(origin: string): boolean {
   }
 }
 
+function isValidProductionOrigin(origin: string): boolean {
+  try {
+    const parsed = new URL(origin);
+    return parsed.protocol === "https:" && parsed.origin === origin && !isLocalhostOrigin(origin);
+  } catch {
+    return false;
+  }
+}
+
 function validateEnv(configService: ConfigService, logger: Logger): void {
   const nodeEnv = configService.get<string>("NODE_ENV") ?? "development";
   const jwtSecret = configService.get<string>("JWT_SECRET");
   const databaseUrl = configService.get<string>("DATABASE_URL");
+  const frontendUrl = configService.get<string>("FRONTEND_URL")?.trim();
 
   if (!databaseUrl) {
     logger.error("❌ DATABASE_URL não está definida. Configure a variável de ambiente antes de iniciar.");
@@ -66,10 +76,21 @@ function validateEnv(configService: ConfigService, logger: Logger): void {
   // Validar allowlist de origens obrigatória em produção
   if (nodeEnv === "production") {
     const allowedOrigins = getConfiguredAllowedOrigins(configService);
-    if (allowedOrigins.length === 0 || allowedOrigins.some(isLocalhostOrigin)) {
+    if (allowedOrigins.length === 0 || allowedOrigins.some((origin) => !isValidProductionOrigin(origin))) {
       logger.error(
-        "❌ SEGURANÇA: ALLOWED_ORIGINS/FRONTEND_URL não está definida ou aponta para localhost em produção. " +
-        "Configure com os domínios reais do frontend.",
+        "❌ SEGURANÇA: ALLOWED_ORIGINS contém origem inválida. Use somente origens HTTPS completas, sem caminho ou barra final.",
+      );
+      process.exit(1);
+    }
+    if (!frontendUrl || !isValidProductionOrigin(frontendUrl)) {
+      logger.error(
+        "❌ SEGURANÇA: FRONTEND_URL deve ser uma origem HTTPS válida para gerar links de recuperação de senha.",
+      );
+      process.exit(1);
+    }
+    if (!configService.get<string>("RESEND_API_KEY") || !configService.get<string>("RESEND_FROM_EMAIL")) {
+      logger.error(
+        "❌ CONFIGURAÇÃO: RESEND_API_KEY e RESEND_FROM_EMAIL são obrigatórias em produção para recuperação de senha.",
       );
       process.exit(1);
     }

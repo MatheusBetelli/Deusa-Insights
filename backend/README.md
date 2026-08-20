@@ -62,13 +62,8 @@ npx prisma studio
 
 ## Usuários seed
 
-```text
-admin@deusa.com.br / admin123
-rafael.mendes@deusa.com.br / deusa123
-mariana.alves@deusa.com.br / deusa123
-camila.rocha@deusa.com.br / deusa123
-felipe.lima@deusa.com.br / deusa123
-```
+O seed requer `RUN_SEED=true`, `SEED_ADMIN_PASSWORD` e `SEED_SALES_PASSWORD`, e é
+bloqueado fora de um banco local dedicado. As senhas não possuem valores padrão.
 
 O seed cria usuários, cidades monitoradas e CNAEs alvo. Empresas e leads reais entram pelo fluxo de importação/consulta usando o `ReceitaFederalProvider`.
 
@@ -162,7 +157,7 @@ Login:
 ```bash
 curl -X POST http://localhost:3001/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"rafael.mendes@deusa.com.br","password":"deusa123"}'
+  -d '{"email":"<email-configurado>","password":"<senha-configurada>"}'
 ```
 
 Dashboard:

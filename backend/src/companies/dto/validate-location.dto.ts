@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsNumber, IsOptional, IsString, Max, MaxLength, Min } from "class-validator";
+import { IsISO8601, IsIn, IsNotEmpty, IsNumber, IsOptional, IsString, IsUrl, Max, MaxLength, Min } from "class-validator";
 
 export class ValidateLocationDto {
   @IsOptional()
@@ -15,12 +15,31 @@ export class ValidateLocationDto {
 
   @IsNotEmpty()
   @IsString()
-  @MaxLength(40)
+  @IsIn([
+    "confirmado",
+    "provavel",
+    "nao_encontrado",
+    "endereco_invalido",
+    "resultado_incompativel",
+    "fechado",
+    "rejeitado",
+    "revisao_manual",
+  ])
   statusValidacao!: string; // "confirmado" | "provavel" | "nao_encontrado" | "endereco_invalido" | "resultado_incompativel" | "fechado" | "rejeitado" | "revisao_manual"
 
   @IsOptional()
   @IsString()
-  @MaxLength(80)
+  @IsIn([
+    "validacao_manual_com_evidencia",
+    "google_places",
+    "google_maps",
+    "site_oficial",
+    "rede_social_oficial",
+    "outro_diretorio_comercial",
+    "validacao_em_campo",
+    "coordenada_manual",
+    "sem_coordenada",
+  ])
   origemCoordenada?: string; // "google_places" | "google_maps" | "site_oficial" | "rede_social_oficial" | "outro_diretorio_comercial" | "validacao_em_campo" | "coordenada_manual" | "sem_coordenada"
 
   @IsOptional()
@@ -40,6 +59,7 @@ export class ValidateLocationDto {
 
   @IsOptional()
   @IsString()
+  @IsUrl({ require_protocol: true })
   @MaxLength(500)
   urlEvidencia?: string;
 
@@ -75,6 +95,8 @@ export class ValidateLocationDto {
 
   @IsOptional()
   @IsNumber()
+  @Min(0)
+  @Max(1_000_000)
   distanciaAproximadaMeters?: number;
 
   @IsOptional()
@@ -90,7 +112,7 @@ export class ValidateLocationDto {
 
   @IsOptional()
   @IsString()
-  @MaxLength(40)
+  @IsISO8601({ strict: true })
   dataVisita?: string;
 
   @IsOptional()

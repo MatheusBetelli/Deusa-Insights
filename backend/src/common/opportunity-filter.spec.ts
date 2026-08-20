@@ -1,13 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  buildCnaeWhereInput,
   isValidOpportunityCnae,
   isRuralOrNonCommercialLocation,
   isWithinUrbanTerritory,
   isValidOpportunity,
 } from "./opportunity-filter";
 
-test("isValidOpportunityCnae aceita os 4 CNAEs alvo permitidos", () => {
+test("isValidOpportunityCnae aceita os 5 CNAEs alvo permitidos", () => {
   assert.equal(isValidOpportunityCnae("4712100"), true); // Minimercado / Mercado
   assert.equal(isValidOpportunityCnae("47.12-1/00"), true);
   assert.equal(isValidOpportunityCnae("4711302"), true); // Supermercado
@@ -16,16 +17,25 @@ test("isValidOpportunityCnae aceita os 4 CNAEs alvo permitidos", () => {
   assert.equal(isValidOpportunityCnae("4711-3/01"), true);
   assert.equal(isValidOpportunityCnae("4722901"), true); // Açougue
   assert.equal(isValidOpportunityCnae("4722-9/01"), true);
+  assert.equal(isValidOpportunityCnae("4721102"), true); // Mercearia / revenda
+  assert.equal(isValidOpportunityCnae("4721-1/02"), true);
 });
 
-test("isValidOpportunityCnae rejeita CNAEs fora das 4 categorias autorizadas", () => {
+test("isValidOpportunityCnae rejeita CNAEs fora das 5 categorias autorizadas", () => {
   assert.equal(isValidOpportunityCnae("4729699"), false); // Comércio alimentício geral
   assert.equal(isValidOpportunityCnae("4639701"), false); // Atacadista
-  assert.equal(isValidOpportunityCnae("4721102"), false); // Padaria
   assert.equal(isValidOpportunityCnae("4724500"), false); // Hortifruti
   assert.equal(isValidOpportunityCnae("4520000"), false); // Oficina mecânica
   assert.equal(isValidOpportunityCnae(null), false);
   assert.equal(isValidOpportunityCnae(""), false);
+});
+
+test("buildCnaeWhereInput considera CNAE principal e secundário", () => {
+  const where = buildCnaeWhereInput();
+  assert.ok(Array.isArray(where.OR));
+  assert.equal(where.OR.length, 2);
+  assert.ok("cnaePrincipal" in where.OR[0]);
+  assert.ok("cnaes" in where.OR[1]);
 });
 
 test("isRuralOrNonCommercialLocation detecta propriedades rurais pelo nome ou endereço", () => {
@@ -112,6 +122,23 @@ test("isValidOpportunity aprova apenas oportunidades que atendam simultaneamente
   };
   assert.equal(isValidOpportunity(validMarket), true);
 
+  assert.equal(
+    isValidOpportunity({
+      ...validMarket,
+      cnaePrincipal: "4520000",
+      cnaes: [{ cnaeCode: "4721102" }],
+    }),
+    true,
+  );
+
+  assert.equal(
+    isValidOpportunity({
+      ...validMarket,
+      situacaoCadastral: "",
+    }),
+    false,
+  );
+
   const ruralFarm = {
     situacaoCadastral: "ATIVA",
     cnaePrincipal: "4712100", // CNAE de minimercado
@@ -139,4 +166,3 @@ test("isValidOpportunity aprova apenas oportunidades que atendam simultaneamente
   };
   assert.equal(isValidOpportunity(healthFoodStore), false);
 });
-

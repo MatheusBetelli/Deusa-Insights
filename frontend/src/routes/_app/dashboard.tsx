@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Dispatch, ReactNode, SetStateAction } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -20,8 +20,11 @@ import {
 } from "lucide-react";
 import { ExecutiveCityRanking } from "@/components/dashboard/ExecutiveCityRanking";
 import {
+  Area,
+  Bar,
   CartesianGrid,
   Cell,
+  ComposedChart,
   Line,
   LineChart,
   Pie,
@@ -38,6 +41,7 @@ import { formatCnae } from "@/lib/commercial-formatters";
 import { cnaesService } from "@/services/cnaesService";
 import { citiesService } from "@/services/citiesService";
 import { dashboardService } from "@/services/dashboardService";
+import { toast } from "sonner";
 import type { Cnae } from "@/types/cnae";
 import type { City } from "@/types/city";
 import type {
@@ -102,11 +106,11 @@ function getSegmentColor(key: string, colors: Record<string, string>): string {
 function getShortSegmentName(name: string): string {
   const norm = name.toLowerCase();
   if (norm.includes("crític") || norm.includes("critic")) return "Crítico";
-  if (norm.includes("alto") || norm.includes("high")) return "Alto Potencial";
-  if (norm.includes("médio") || norm.includes("medio") || norm.includes("medium")) return "Médio Potencial";
-  if (norm.includes("baixo") || norm.includes("low")) return "Baixo Potencial";
-  if (norm.includes("ativo")) return "Ativos";
+  if (norm.includes("alto") || norm.includes("high")) return "Alto";
+  if (norm.includes("médio") || norm.includes("medio") || norm.includes("medium")) return "Médio";
+  if (norm.includes("baixo") || norm.includes("low")) return "Baixo";
   if (norm.includes("inativo")) return "Inativos";
+  if (norm.includes("ativo")) return "Ativos";
   return name;
 }
 
@@ -136,13 +140,15 @@ const MONTH_OPTIONS = [
 ];
 
 const EVOLUTION_SERIES = [
-  { key: "activeClients", name: "Clientes ativos", color: BRAND.blue },
-  { key: "positivatedClients", name: "Clientes positivados", color: "#16A34A" },
+  { key: "negotiationsCount", name: "Contatos / Negociações", color: "#94A3B8" },
+  { key: "positivatedClients", name: "Clientes positivados", color: "#10B981" },
+  { key: "activeClients", name: "Carteira ativa", color: "#2563EB" },
 ] as const;
 
 type EvolutionSeriesKey = (typeof EVOLUTION_SERIES)[number]["key"];
 
 function Dashboard() {
+  const summaryRequestSequence = useRef(0);
   const today = useMemo(() => new Date(), []);
   const [period, setPeriod] = useState<DashboardPeriod>("current_month");
   const [month, setMonth] = useState(today.getMonth() + 1);
@@ -159,6 +165,7 @@ function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [selectedPortfolioKeys, setSelectedPortfolioKeys] = useState<string[]>([]);
   const [selectedPositivationKeys, setSelectedPositivationKeys] = useState<string[]>([]);
+  const [selectedPotentialKeys, setSelectedPotentialKeys] = useState<string[]>([]);
   const [activeEvolutionSeries, setActiveEvolutionSeries] = useState<EvolutionSeriesKey[]>(
     EVOLUTION_SERIES.map((item) => item.key),
   );
@@ -177,21 +184,34 @@ function Dashboard() {
   }, [assignedToId, city, cnae, month, period, uf, year]);
 
   const loadSummary = useCallback(async () => {
+    const requestId = ++summaryRequestSequence.current;
     setLoading(true);
     setError(null);
     try {
-      setSummary(await dashboardService.getSummary(query));
+      const nextSummary = await dashboardService.getSummary(query);
+      if (requestId !== summaryRequestSequence.current) return;
+      setSummary(nextSummary);
     } catch (err) {
+      if (requestId !== summaryRequestSequence.current) return;
       setError(
         err instanceof Error ? err.message : "Não foi possível carregar a Central Comercial.",
       );
     } finally {
-      setLoading(false);
+      if (requestId === summaryRequestSequence.current) {
+        setLoading(false);
+      }
     }
   }, [query]);
 
   useEffect(() => {
-    void loadSummary();
+    const timer = window.setTimeout(() => {
+      void loadSummary();
+    }, 150);
+
+    return () => {
+      window.clearTimeout(timer);
+      summaryRequestSequence.current += 1;
+    };
   }, [loadSummary]);
 
   useEffect(() => {
@@ -204,6 +224,8 @@ function Dashboard() {
         ]);
         setCities(cityData);
         setCnaes(cnaeData);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Não foi possível carregar os filtros.");
       } finally {
         setOptionsLoading(false);
       }
@@ -233,8 +255,9 @@ function Dashboard() {
   );
 
   const potentialSegments = useMemo(() => {
-    if (!summary?.potentialDistribution) return [];
-    const total = summary.potentialDistribution.reduce((acc, curr) => acc + curr.count, 0) || 1;
+    if (!summary?.potentialDistribution || summary.coverage.opportunities === 0) return [];
+    const total = summary.potentialDistribution.reduce((acc, curr) => acc + curr.count, 0);
+    if (total === 0) return [];
     return summary.potentialDistribution.map((item) => ({
       key: item.name,
       name: item.name,
@@ -243,15 +266,13 @@ function Dashboard() {
     }));
   }, [summary]);
 
-  const potentialData = useMemo(() => potentialSegments, [potentialSegments]);
+  const potentialData = useMemo(
+    () => filterSegments(potentialSegments, selectedPotentialKeys),
+    [potentialSegments, selectedPotentialKeys],
+  );
 
   const hasEnoughEvolutionData = useMemo(() => {
-    if (!summary?.monthlyEvolution || summary.monthlyEvolution.length < 2) return false;
-    const sum = summary.monthlyEvolution.reduce(
-      (acc, item) => acc + item.activeClients + item.positivatedClients,
-      0,
-    );
-    return sum > 0;
+    return Boolean(summary?.monthlyEvolution && summary.monthlyEvolution.length > 0);
   }, [summary]);
 
   const activeFilters = useMemo(() => {
@@ -303,6 +324,17 @@ function Dashboard() {
         clear: () => setSelectedPositivationKeys([]),
       });
     }
+    if (selectedPotentialKeys.length > 0) {
+      filters.push({
+        label: "Potencial",
+        value: selectedPotentialKeys
+          .map(
+            (key) => potentialSegments.find((item) => item.key === key)?.name ?? key,
+          )
+          .join(", "),
+        clear: () => setSelectedPotentialKeys([]),
+      });
+    }
     return filters;
   }, [
     assignedToId,
@@ -312,8 +344,10 @@ function Dashboard() {
     period,
     portfolioSegments,
     positivationComparisonSegments,
+    potentialSegments,
     selectedPortfolioKeys,
     selectedPositivationKeys,
+    selectedPotentialKeys,
     summary,
     uf,
     year,
@@ -329,6 +363,7 @@ function Dashboard() {
     setAssignedToId("Todos");
     setSelectedPortfolioKeys([]);
     setSelectedPositivationKeys([]);
+    setSelectedPotentialKeys([]);
   }
 
   const leadSearchBase = {
@@ -377,7 +412,7 @@ function Dashboard() {
       </div>
 
       <section className="rounded-lg border border-[#DDE5EF] bg-white p-4 shadow-sm">
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
           <FilterSelect
             label="Período"
             value={period}
@@ -424,20 +459,6 @@ function Dashboard() {
             <option value="Todas">Todas</option>
             {filteredCities.map((item) => (
               <option key={item.id} value={item.name}>
-                {item.name}
-              </option>
-            ))}
-          </FilterSelect>
-
-          <FilterSelect
-            label="Responsável"
-            value={assignedToId}
-            onChange={setAssignedToId}
-            disabled={!summary?.filters.responsibles.length}
-          >
-            <option value="Todos">Todos</option>
-            {(summary?.filters.responsibles ?? []).map((item) => (
-              <option key={item.id} value={item.id}>
                 {item.name}
               </option>
             ))}
@@ -562,15 +583,15 @@ function Dashboard() {
                 data={potentialData}
                 total={sumSegments(potentialData)}
                 colors={POTENTIAL_COLORS}
-                centerValue={summary.coverage.opportunities}
+                centerValue={sumSegments(potentialData)}
                 centerLabel="Oportunidades"
                 emptyLabel="Sem oportunidades no período"
               />
               <SegmentLegend
                 items={potentialSegments}
                 colors={POTENTIAL_COLORS}
-                selectedKeys={[]}
-                onToggle={() => {}}
+                selectedKeys={selectedPotentialKeys}
+                onToggle={(key) => toggleIsolatingSelection(key, setSelectedPotentialKeys)}
               />
               <DetailLink
                 to="/mapa-oportunidades"
@@ -582,25 +603,19 @@ function Dashboard() {
             <ChartCard
               eyebrow="Evolução comercial"
               title="Séries Mensais Acumuladas"
-              action={
-                hasEnoughEvolutionData ? (
-                  <SeriesLegend
-                    active={activeEvolutionSeries}
-                    onToggle={(key) =>
-                      setActiveEvolutionSeries((current) =>
-                        current.includes(key)
-                          ? current.filter((item) => item !== key)
-                          : [...current, key],
-                      )
-                    }
-                  />
-                ) : null
-              }
+              action={<PeriodLabel>{formatPeriodHeading(summary.period)}</PeriodLabel>}
             >
               {hasEnoughEvolutionData ? (
                 <EvolutionChart
                   data={summary.monthlyEvolution}
                   activeSeries={activeEvolutionSeries}
+                  onToggleSeries={(key) =>
+                    setActiveEvolutionSeries((current) =>
+                      current.includes(key)
+                        ? current.filter((item) => item !== key)
+                        : [...current, key],
+                    )
+                  }
                 />
               ) : (
                 <div className="flex h-56 flex-col items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50/50 p-6 text-center">
@@ -625,17 +640,6 @@ function Dashboard() {
               onSelectCity={(nextCity) => setCity(nextCity)}
             />
           </section>
-
-          {summary.filters.unsupported.length > 0 && (
-            <section className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
-              <div className="font-bold text-[#0B1F33]">Dependências de dados comerciais</div>
-              <div className="mt-1 grid gap-1 md:grid-cols-3">
-                {summary.filters.unsupported.map((item) => (
-                  <span key={item}>{item}</span>
-                ))}
-              </div>
-            </section>
-          )}
         </>
       ) : (
         <section className="rounded-lg border border-dashed border-[#CBD5E1] bg-white p-8 text-center text-sm font-semibold text-[#64748B]">
@@ -850,23 +854,35 @@ function DonutChart(props: {
             ))}
           </Pie>
           <RechartsTooltip
-            formatter={(value: number, _name, item) => {
-              const segment = item.payload as DashboardSegment;
-              return [
-                `${formatNumber(value)} (${formatPercent(segment.percentage)})`,
-                segment.name,
-              ];
+            wrapperStyle={{ outline: "none", zIndex: 1000, opacity: 1 }}
+            content={({ active, payload }) => {
+              if (!active || !payload || !payload.length) return null;
+              const segment = payload[0].payload as DashboardSegment;
+              const color = getSegmentColor(segment.key, props.colors);
+
+              return (
+                <div
+                  className="rounded-lg border-2 border-slate-700 bg-slate-900 p-3 text-xs shadow-2xl text-white"
+                  style={{ backgroundColor: "#0F172A", opacity: 1 }}
+                >
+                  <div className="flex items-center gap-2 font-bold text-white">
+                    <span
+                      className="h-3 w-3 shrink-0 rounded-full border border-white/20"
+                      style={{ backgroundColor: color }}
+                    />
+                    <span className="text-sm font-bold text-white">{segment.name}</span>
+                  </div>
+                  <div className="mt-2 flex items-baseline gap-2 font-bold tabular-nums">
+                    <span className="text-base font-extrabold text-white">
+                      {formatNumber(segment.count)}
+                    </span>
+                    <span className="text-xs font-semibold text-slate-300">
+                      ({formatPercent(segment.percentage)})
+                    </span>
+                  </div>
+                </div>
+              );
             }}
-            contentStyle={{
-              backgroundColor: "#0B1F33",
-              border: "1px solid #1E293B",
-              borderRadius: 8,
-              color: "#FFFFFF",
-              fontSize: 12,
-              boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.3)",
-              padding: "8px 12px",
-            }}
-            itemStyle={{ color: "#F8FAFC", fontWeight: 600 }}
           />
         </PieChart>
       </ResponsiveContainer>
@@ -904,11 +920,12 @@ function SegmentLegend(props: {
             type="button"
             disabled={isEmpty}
             onClick={() => props.onToggle(item.key)}
-            className={`flex items-center justify-between gap-2 rounded-lg border border-slate-100 bg-slate-50/70 px-2.5 py-1.5 text-left transition ${
+            title={item.name}
+            className={`flex items-center justify-between gap-1.5 rounded-lg border border-slate-100 bg-slate-50/70 px-2.5 py-1.5 text-left transition ${
               isMuted
-                ? "opacity-40"
-                : "hover:border-slate-200 hover:bg-slate-100"
-            }`}
+                ? "opacity-40 cursor-pointer"
+                : "hover:border-slate-200 hover:bg-slate-100 cursor-pointer"
+            } ${isEmpty ? "cursor-not-allowed" : ""}`}
           >
             <span className="flex min-w-0 items-center gap-2">
               <span
@@ -1060,59 +1077,117 @@ function ExpansionBars(props: {
 function EvolutionChart(props: {
   data: MonthlyEvolutionPoint[];
   activeSeries: EvolutionSeriesKey[];
+  onToggleSeries: (key: EvolutionSeriesKey) => void;
 }) {
   if (props.data.length === 0) {
     return <NoData icon={LineChartIcon} label="Sem evolução mensal para os filtros atuais" />;
   }
 
   return (
-    <div className="h-[324px] w-full">
-      <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={props.data} margin={{ top: 12, right: 16, left: -16, bottom: 4 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#EEF2F7" />
-          <XAxis
-            dataKey="month"
-            tick={{ fontSize: 11, fill: BRAND.muted, fontWeight: 600 }}
-            tickLine={false}
-            axisLine={{ stroke: "#E2E8F0" }}
-          />
-          <YAxis
-            allowDecimals={false}
-            tick={{ fontSize: 11, fill: BRAND.muted, fontWeight: 600 }}
-            tickLine={false}
-            axisLine={false}
-          />
-          <RechartsTooltip
-            formatter={(value: number, name: string) => [formatNumber(value), name]}
-            labelFormatter={(label, payload) => {
-              const point = payload?.[0]?.payload as MonthlyEvolutionPoint | undefined;
-              return point ? `${label}/${point.year}` : label;
-            }}
-            contentStyle={{
-              backgroundColor: BRAND.navy,
-              border: "none",
-              borderRadius: 8,
-              color: "#FFFFFF",
-              fontSize: 12,
-            }}
-            itemStyle={{ color: "#FFFFFF" }}
-          />
-          {EVOLUTION_SERIES.map((series) =>
-            props.activeSeries.includes(series.key) ? (
-              <Line
-                key={series.key}
-                type="monotone"
-                dataKey={series.key}
-                name={series.name}
-                stroke={series.color}
-                strokeWidth={2.5}
-                dot={{ r: 3 }}
-                activeDot={{ r: 5 }}
+    <div className="space-y-2">
+      <div className="flex w-full items-center justify-between gap-2 border-b border-slate-100 pb-2">
+        <span className="text-[11px] font-semibold text-slate-500">
+          Séries Analíticas
+        </span>
+        <SeriesLegend active={props.activeSeries} onToggle={props.onToggleSeries} />
+      </div>
+
+      <div className="h-[285px] w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart data={props.data} margin={{ top: 12, right: 12, left: -20, bottom: 4 }}>
+            <defs>
+              <linearGradient id="colorPositivated" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#10B981" stopOpacity={0.4} />
+                <stop offset="95%" stopColor="#10B981" stopOpacity={0.0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke="#EEF2F7" vertical={false} />
+            <XAxis
+              dataKey="month"
+              tick={{ fontSize: 11, fill: BRAND.muted, fontWeight: 600 }}
+              tickLine={false}
+              axisLine={{ stroke: "#E2E8F0" }}
+            />
+            <YAxis
+              allowDecimals={false}
+              tick={{ fontSize: 11, fill: BRAND.muted, fontWeight: 600 }}
+              tickLine={false}
+              axisLine={false}
+            />
+            <RechartsTooltip
+              wrapperStyle={{ outline: "none", zIndex: 1000, opacity: 1 }}
+              content={({ active, payload, label }) => {
+                if (!active || !payload || !payload.length) return null;
+                const point = payload[0]?.payload as MonthlyEvolutionPoint | undefined;
+                const periodLabel = point ? `${label}/${point.year}` : label;
+
+                return (
+                  <div
+                    className="rounded-lg border-2 border-slate-700 bg-slate-900 p-3 text-xs shadow-2xl text-white"
+                    style={{ backgroundColor: "#0F172A", opacity: 1 }}
+                  >
+                    <div className="mb-2 font-bold text-xs uppercase tracking-wider text-slate-300 border-b border-slate-700/80 pb-1">
+                      {periodLabel}
+                    </div>
+                    <div className="space-y-1.5">
+                      {payload.map((entry) => (
+                        <div key={String(entry.dataKey)} className="flex items-center justify-between gap-4">
+                          <span className="flex items-center gap-1.5 font-semibold text-slate-200">
+                            <span
+                              className="h-2.5 w-2.5 rounded-full"
+                              style={{ backgroundColor: entry.color }}
+                            />
+                            {entry.name}
+                          </span>
+                          <span className="font-extrabold text-white tabular-nums">
+                            {formatNumber(Number(entry.value))}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              }}
+            />
+
+            {props.activeSeries.includes("negotiationsCount") && (
+              <Bar
+                dataKey="negotiationsCount"
+                name="Contatos / Negociações"
+                fill="#CBD5E1"
+                opacity={0.5}
+                radius={[4, 4, 0, 0]}
+                barSize={20}
               />
-            ) : null,
-          )}
-        </LineChart>
-      </ResponsiveContainer>
+            )}
+
+            {props.activeSeries.includes("positivatedClients") && (
+              <Area
+                type="monotone"
+                dataKey="positivatedClients"
+                name="Clientes positivados"
+                fill="url(#colorPositivated)"
+                stroke="#10B981"
+                strokeWidth={2.5}
+                dot={{ r: 3, fill: "#10B981", strokeWidth: 2, stroke: "#FFFFFF" }}
+                activeDot={{ r: 5, fill: "#059669" }}
+              />
+            )}
+
+            {props.activeSeries.includes("activeClients") && (
+              <Line
+                type="monotone"
+                dataKey="activeClients"
+                name="Carteira ativa"
+                stroke="#2563EB"
+                strokeWidth={2}
+                strokeDasharray="4 4"
+                dot={false}
+              />
+            )}
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
     </div>
   );
 }
@@ -1122,7 +1197,7 @@ function SeriesLegend(props: {
   onToggle: (key: EvolutionSeriesKey) => void;
 }) {
   return (
-    <div className="flex flex-wrap items-center justify-end gap-2">
+    <div className="flex flex-wrap items-center justify-end gap-1.5">
       {EVOLUTION_SERIES.map((item) => {
         const active = props.active.includes(item.key);
         return (
@@ -1130,10 +1205,10 @@ function SeriesLegend(props: {
             key={item.key}
             type="button"
             onClick={() => props.onToggle(item.key)}
-            className={`inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-[11px] font-bold transition ${
+            className={`inline-flex h-6 items-center gap-1.5 rounded-md border px-2 text-[10px] font-bold transition ${
               active
-                ? "border-[#DDE5EF] bg-[#F8FAFC] text-[#0B1F33]"
-                : "border-[#EEF2F7] bg-white text-[#94A3B8]"
+                ? "border-slate-300 bg-slate-100 text-slate-800"
+                : "border-slate-200 bg-white text-slate-400 opacity-60"
             }`}
           >
             <span className="h-2 w-2 rounded-full" style={{ backgroundColor: item.color }} />

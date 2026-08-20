@@ -2,14 +2,16 @@ import { BadRequestException, Body, Controller, Get, Param, Post, UploadedFile, 
 import { FileInterceptor } from "@nestjs/platform-express";
 import { Throttle } from "@nestjs/throttler";
 import { AuthGuard } from "../auth/auth.guard";
+import { Roles } from "../auth/roles.decorator";
+import { RolesGuard } from "../auth/roles.guard";
+import { UserRole } from "@prisma/client";
 import { ImportCnpjDto } from "./dto/import-cnpj.dto";
 import { ImportsService } from "./imports.service";
 
 const MAX_EXCEL_UPLOAD_BYTES = 5 * 1024 * 1024;
-const ALLOWED_UPLOAD_EXTENSIONS = /\.(xlsx|xls|csv)$/i;
+const ALLOWED_UPLOAD_EXTENSIONS = /\.(xlsx|csv)$/i;
 const ALLOWED_UPLOAD_MIME_TYPES = new Set([
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  "application/vnd.ms-excel",
   "text/csv",
   "application/csv",
 ]);
@@ -21,7 +23,8 @@ type UploadedImportFile = {
   size?: number;
 };
 
-@UseGuards(AuthGuard)
+@Roles(UserRole.ADMIN)
+@UseGuards(AuthGuard, RolesGuard)
 @Controller("imports")
 export class ImportsController {
   constructor(private readonly importsService: ImportsService) {}
@@ -39,21 +42,21 @@ export class ImportsController {
     fileFilter: (_req: unknown, file: UploadedImportFile, callback: (error: Error | null, acceptFile: boolean) => void) => {
       const mimeAllowed = file.mimetype ? ALLOWED_UPLOAD_MIME_TYPES.has(file.mimetype) : false;
       const extensionAllowed = file.originalname ? ALLOWED_UPLOAD_EXTENSIONS.test(file.originalname) : false;
-      if (mimeAllowed || extensionAllowed) {
+      if (mimeAllowed && extensionAllowed) {
         callback(null, true);
         return;
       }
-      callback(new BadRequestException("Tipo de arquivo não permitido. Envie .xlsx, .xls ou .csv."), false);
+      callback(new BadRequestException("Tipo de arquivo não permitido. Envie .xlsx ou .csv."), false);
     },
   }))
   importExcelClients(@UploadedFile() file: UploadedImportFile) {
     if (!file || !file.buffer) {
-      throw new BadRequestException("Arquivo Excel (.xlsx, .xls, .csv) não fornecido.");
+      throw new BadRequestException("Arquivo de clientes (.xlsx ou .csv) não fornecido.");
     }
     if (file.size && file.size > MAX_EXCEL_UPLOAD_BYTES) {
       throw new BadRequestException("Arquivo excede o limite de 5 MB.");
     }
-    return this.importsService.importClientsFromExcelBuffer(file.buffer);
+    return this.importsService.importClientsFromExcelBuffer(file.buffer, file.originalname);
   }
 
   @Get()

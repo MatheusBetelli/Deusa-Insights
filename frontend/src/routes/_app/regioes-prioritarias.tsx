@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PriorityBadge } from "@/components/common/PriorityBadge";
@@ -8,6 +8,9 @@ import type { Lead } from "@/types/lead";
 import { ArrowUpRight, Users, Sparkles, Activity } from "lucide-react";
 
 export const Route = createFileRoute("/_app/regioes-prioritarias")({
+  beforeLoad: () => {
+    throw redirect({ to: "/dashboard" });
+  },
   component: Regs,
 });
 

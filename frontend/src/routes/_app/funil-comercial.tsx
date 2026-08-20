@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { EmptyState, ErrorState, LoadingState } from "@/components/common/InterfaceStates";
 import { LeadDetailsSheet } from "@/features/leads/components/LeadDetailsSheet";
@@ -36,6 +36,7 @@ function priorityClass(priority: PotentialLevel) {
 }
 
 function CommercialFunnel() {
+  const pipelineRequestSequence = useRef(0);
   const routeSearch = Route.useSearch();
   const [pipeline, setPipeline] = useState<Pipeline | null>(null);
   const [cities, setCities] = useState<City[]>([]);
@@ -84,16 +85,24 @@ function CommercialFunnel() {
   );
 
   const loadPipeline = useCallback(async () => {
+    const requestId = ++pipelineRequestSequence.current;
     setLoading(true);
+    setLoadingStage(null);
     setError(null);
     try {
-      setPipeline(
-        await pipelineService.getPipeline({ ...filters, columnPageSize: COLUMN_PAGE_SIZE }),
-      );
+      const nextPipeline = await pipelineService.getPipeline({
+        ...filters,
+        columnPageSize: COLUMN_PAGE_SIZE,
+      });
+      if (requestId !== pipelineRequestSequence.current) return;
+      setPipeline(nextPipeline);
     } catch (err) {
+      if (requestId !== pipelineRequestSequence.current) return;
       setError(err instanceof Error ? err.message : "Não foi possível carregar o funil.");
     } finally {
-      setLoading(false);
+      if (requestId === pipelineRequestSequence.current) {
+        setLoading(false);
+      }
     }
   }, [filters]);
 
@@ -101,13 +110,17 @@ function CommercialFunnel() {
     const timer = window.setTimeout(() => {
       void loadPipeline();
     }, 250);
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      pipelineRequestSequence.current += 1;
+    };
   }, [loadPipeline]);
 
   async function loadMore(status: LeadStatus) {
     const stage = pipeline?.stages[status];
     if (!stage || stage.page >= stage.totalPages) return;
 
+    const requestId = pipelineRequestSequence.current;
     setLoadingStage(status);
     try {
       const next = await pipelineService.getStage(status, {
@@ -115,6 +128,7 @@ function CommercialFunnel() {
         page: stage.page + 1,
         pageSize: COLUMN_PAGE_SIZE,
       });
+      if (requestId !== pipelineRequestSequence.current) return;
       setPipeline((current) => {
         if (!current) return current;
         const previous = current.stages[status];
@@ -130,9 +144,12 @@ function CommercialFunnel() {
         };
       });
     } catch (err) {
+      if (requestId !== pipelineRequestSequence.current) return;
       toast.error(err instanceof Error ? err.message : "Não foi possível carregar mais leads.");
     } finally {
-      setLoadingStage(null);
+      if (requestId === pipelineRequestSequence.current) {
+        setLoadingStage(null);
+      }
     }
   }
 
@@ -273,7 +290,7 @@ function CommercialFunnel() {
                         className="block w-full rounded-lg border border-[#DDE5EF] bg-white p-3 text-left shadow-sm transition hover:border-[#1061AF]"
                       >
                         <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
+                          <div className="min-w-0 flex-1">
                             <h3 className="truncate text-sm font-bold leading-snug text-[#0B1F33]">
                               {lead.companyName}
                             </h3>
@@ -281,21 +298,14 @@ function CommercialFunnel() {
                               {lead.city}
                             </p>
                           </div>
-                          <span className="rounded-md border border-[#DDE5EF] bg-white px-2 py-0.5 text-xs font-bold tabular-nums text-[#0B1F33]">
-                            {lead.score}
-                          </span>
                         </div>
                         <div className="mt-2.5 flex items-center justify-between gap-2">
                           <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${priorityClass(lead.potentialLevel)}`}>
                             {potentialLabels[lead.potentialLevel]}
                           </span>
-                          {lead.assignedTo ? (
+                          {lead.assignedTo && (
                             <span className="truncate text-[11px] font-medium text-[#64748B]">
                               {lead.assignedTo}
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-800 border border-amber-200">
-                              Sem responsável
                             </span>
                           )}
                         </div>

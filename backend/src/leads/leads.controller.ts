@@ -1,11 +1,14 @@
 import { Body, Controller, Get, Header, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { AuthGuard } from "../auth/auth.guard";
+import { Roles } from "../auth/roles.decorator";
+import { RolesGuard } from "../auth/roles.guard";
+import { UserRole } from "@prisma/client";
 import { CreateLeadDto } from "./dto/create-lead.dto";
 import { LeadQueryDto } from "./dto/lead-query.dto";
 import { UpdateLeadDto } from "./dto/update-lead.dto";
 import { LeadsService } from "./leads.service";
 
-@UseGuards(AuthGuard)
+@UseGuards(AuthGuard, RolesGuard)
 @Controller("leads")
 export class LeadsController {
   constructor(private readonly leadsService: LeadsService) {}
@@ -23,6 +26,7 @@ export class LeadsController {
   }
 
   @Post("auto-assign")
+  @Roles(UserRole.ADMIN, UserRole.MANAGER)
   autoAssign() {
     return this.leadsService.autoAssignTerritory();
   }

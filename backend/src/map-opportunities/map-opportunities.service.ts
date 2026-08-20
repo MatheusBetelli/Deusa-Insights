@@ -1,10 +1,12 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { ForbiddenException, Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { GeocodingService } from "../common/geocoding.service";
 import { calculateOpportunityScoreDetails } from "../common/scoring";
 import {
+  buildCnaeWhereInput,
   isValidOpportunity,
+  isValidOpportunityCnae,
   TARGET_OPPORTUNITY_CNAES,
   IBGE_CENTROIDES,
 } from "../common/opportunity-filter";
@@ -32,62 +34,57 @@ function joinSqlFragments(fragments: Prisma.Sql[], separator: Prisma.Sql): Prism
   return fragments.slice(1).reduce((sql, fragment) => Prisma.sql`${sql}${separator}${fragment}`, fragments[0]);
 }
 
+function rejectRegionalDiscovery(): void {
+  throw new ForbiddenException(
+    "Descoberta regional automática desativada: use somente dados locais ou correção individual autorizada.",
+  );
+}
+
 @Injectable()
-export class MapOpportunitiesService {
+export class MapOpportunitiesService implements OnModuleInit {
   private readonly logger = new Logger(MapOpportunitiesService.name);
+  private mapCache: { data: any; expiresAt: number } | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly geocodingService: GeocodingService,
   ) {}
 
+  async onModuleInit() {
+    // Pré-aquecer os pontos do mapa na inicialização do backend
+    setTimeout(() => {
+      void this.findAll().catch(() => {});
+    }, 1500);
+  }
+
   async findAll() {
-    // 1. Garantir que empresas ativas sem lead associado recebam um lead padrão
-    const companiesWithoutLead = await this.prisma.company.findMany({
-      where: {
-        situacaoCadastral: "ATIVA",
-        lead: { is: null },
-      },
-      select: { id: true, pontuacaoOportunidade: true, nivelOportunidade: true },
-    });
-
-    if (companiesWithoutLead.length > 0) {
-      for (const c of companiesWithoutLead) {
-        await this.prisma.lead.create({
-          data: {
-            companyId: c.id,
-            score: c.pontuacaoOportunidade ?? 70,
-            potentialLevel: c.nivelOportunidade === "critica" ? "CRITICAL" : c.nivelOportunidade === "alta" ? "HIGH" : c.nivelOportunidade === "media" ? "MEDIUM" : "LOW",
-            status: "NEW",
-          },
-        }).catch(() => null);
-      }
+    if (this.mapCache && this.mapCache.expiresAt > Date.now()) {
+      return this.mapCache.data;
     }
-
-    // 2. Buscar APENAS oportunidades ativas pertencentes às 4 categorias autorizadas (Minimercados, Supermercados, Hipermercados, Açougues)
+    // Buscar apenas leads criados explicitamente pelos fluxos de ingestão autorizados.
     const leads = await this.prisma.lead.findMany({
       where: {
         company: {
           situacaoCadastral: "ATIVA",
-          cnaePrincipal: { in: Array.from(TARGET_OPPORTUNITY_CNAES) },
+          ...buildCnaeWhereInput(),
         },
       },
       include: {
-        company: { include: { details: true } },
+        company: { include: { details: true, cnaes: true } },
         assignedTo: { select: { name: true } },
       },
       orderBy: { score: "desc" },
     });
 
-    // 3. Filtrar estritamente por geofence urbano e não-rural
+    // Filtrar estritamente por geofence urbano e não-rural
     const validLeads = leads.filter((lead) => isValidOpportunity(lead.company));
 
-    // 4. Mapear para exibição no mapa, aplicando fallback de centroide se lat/lon forem nulas ou divergentes
-    return validLeads.map((lead) => {
+    // Mapear para exibição no mapa, aplicando fallback de centroide se lat/lon forem nulas ou divergentes
+    const result = validLeads.map((lead) => {
       let lat = lead.company.latitude;
       let lng = lead.company.longitude;
       let origemCoordenada = lead.company.origemCoordenada;
-      let confiancaVerificacao = lead.company.confiancaVerificacao ?? 70;
+      let confiancaVerificacao = lead.company.confiancaVerificacao;
 
       // Se o status da verificação for divergente ou as coordenadas estiverem fora da região das 26 cidades monitoradas em SP (-23.10 a -20.10 lat, -51.90 a -47.10 lon)
       const isOutOfSpBounds =
@@ -121,6 +118,7 @@ export class MapOpportunitiesService {
 
       return {
         id: lead.id,
+        companyId: lead.companyId,
         companyName: lead.company.nomeFantasia || lead.company.razaoSocial,
         cnpj: lead.company.cnpj,
         city: lead.company.cidade,
@@ -139,10 +137,15 @@ export class MapOpportunitiesService {
         confiancaVerificacao,
         telefone: lead.company.details?.telefone || lead.company.telefoneEncontrado || null,
         email: lead.company.details?.email || null,
-        cnaePrincipal: lead.company.cnaePrincipal || null,
-        responsibleName: lead.assignedTo?.name || "Não atribuído",
+        cnaePrincipal:
+          (isValidOpportunityCnae(lead.company.cnaePrincipal)
+            ? lead.company.cnaePrincipal
+            : lead.company.cnaes.find((item) => isValidOpportunityCnae(item.cnaeCode))?.cnaeCode) || null,
       };
     });
+
+    this.mapCache = { data: result, expiresAt: Date.now() + 60000 };
+    return result;
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -153,6 +156,8 @@ export class MapOpportunitiesService {
   // territorial. Cadastra somente registros únicos e separa Place ID do CNPJ.
   // ─────────────────────────────────────────────────────────────────────────────
   async discoverRegion(cidade: string, uf: string) {
+    rejectRegionalDiscovery();
+
     if (!this.geocodingService.isAvailable()) {
       return {
         success: false,
@@ -168,7 +173,7 @@ export class MapOpportunitiesService {
     const ufNorm = uf.toUpperCase().trim();
     const cidadeSemAcento = cidadeNorm.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
-    // Termos de busca comerciais focados EXCLUSIVAMENTE nas 4 categorias autorizadas
+    // Termos de busca comerciais focados EXCLUSIVAMENTE nas 5 categorias autorizadas
     const baseTerms = [
       "supermercado",
       "hipermercado",
@@ -534,7 +539,12 @@ export class MapOpportunitiesService {
       );
     } else {
       conditions.push(
-        Prisma.sql`REGEXP_REPLACE("cnaePrincipal", '\\\\D', '', 'g') IN (${Prisma.join(Array.from(TARGET_OPPORTUNITY_CNAES))})`,
+        Prisma.sql`(REGEXP_REPLACE("cnaePrincipal", '\\\\D', '', 'g') IN (${Prisma.join(Array.from(TARGET_OPPORTUNITY_CNAES))})
+          OR EXISTS (
+            SELECT 1 FROM company_cnaes cc
+            WHERE cc."companyId" = companies.id
+              AND REGEXP_REPLACE(cc."cnaeCode", '\\\\D', '', 'g') IN (${Prisma.join(Array.from(TARGET_OPPORTUNITY_CNAES))})
+          ))`,
       );
     }
 
@@ -554,7 +564,7 @@ export class MapOpportunitiesService {
       SELECT
         TRIM(cidade)                                           AS cidade,
         UPPER(TRIM(uf))                                        AS uf,
-        COUNT(DISTINCT REGEXP_REPLACE(cnpj, '\\\\D', '', 'g'))   AS quantidade,
+        COUNT(DISTINCT COALESCE(NULLIF(REGEXP_REPLACE(cnpj, '\\\\D', '', 'g'), ''), id)) AS quantidade,
         AVG(CASE WHEN latitude  IS NOT NULL AND latitude  <> 0 THEN latitude  END) AS lat_media,
         AVG(CASE WHEN longitude IS NOT NULL AND longitude <> 0 THEN longitude END) AS lon_media
       FROM companies

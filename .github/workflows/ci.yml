@@ -30,11 +30,14 @@ jobs:
           cd backend && npm ci
           cd ../frontend && npm ci
 
-      - name: Executar Typecheck do Frontend
+      - name: Executar Typecheck do Monorepo
         run: npm run typecheck
 
-      - name: Compilar Backend (NestJS Build)
-        run: cd backend && npm run build
+      - name: Compilar Backend e Frontend
+        env:
+          # URL não roteável usada somente para validar o bundle; deploys reais devem fornecer sua API HTTPS.
+          VITE_API_URL: https://api.deusa-ci.invalid
+        run: npm run build
 
-      - name: Executar Suíte Completa de Testes Unitários
+      - name: Executar Testes Unitários
         run: npm run test

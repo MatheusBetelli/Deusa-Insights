@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import xlsx from "xlsx";
+import { readSheet } from "read-excel-file/node";
 
 function parseCsv(text) {
   const rows = [];
@@ -54,7 +54,7 @@ function parseCsv(text) {
   );
 }
 
-export function readRowsFromFile(filePath) {
+export async function readRowsFromFile(filePath) {
   const extension = path.extname(filePath).toLowerCase();
 
   if (extension === ".json") {
@@ -70,10 +70,17 @@ export function readRowsFromFile(filePath) {
   }
 
   if (extension === ".xlsx") {
-    const workbook = xlsx.readFile(filePath, { cellDates: false });
-    const firstSheet = workbook.SheetNames[0];
-    if (!firstSheet) return [];
-    return xlsx.utils.sheet_to_json(workbook.Sheets[firstSheet], { defval: "" });
+    const rows = await readSheet(filePath);
+    if (rows.length === 0) return [];
+
+    const headers = rows[0].map((header, index) => String(header ?? "").trim() || `coluna_${index + 1}`);
+    return rows.slice(1).map((values) =>
+      headers.reduce((acc, header, index) => {
+        const value = values[index];
+        acc[header] = value instanceof Date ? value.toISOString() : value ?? "";
+        return acc;
+      }, {}),
+    );
   }
 
   throw new Error(`Formato nao suportado: ${extension}`);

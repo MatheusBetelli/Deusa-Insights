@@ -1,4 +1,5 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { randomUUID } from "crypto";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { LeadStatus, Prisma } from "@prisma/client";
 import { calculateLeadScore, getPotentialLevel, calculateOpportunityScoreDetails } from "../common/scoring";
 import { buildCnaeWhereInput, isValidOpportunity } from "../common/opportunity-filter";
@@ -25,7 +26,9 @@ const leadInclude = {
 
 function csvValue(value: unknown) {
   if (value === null || value === undefined) return '""';
-  return `"${String(value).replace(/"/g, '""')}"`;
+  const text = String(value);
+  const spreadsheetSafe = /^[\t\r ]*[=+\-@]/.test(text) ? `'${text}` : text;
+  return `"${spreadsheetSafe.replace(/"/g, '""')}"`;
 }
 
 @Injectable()
@@ -64,68 +67,7 @@ export class LeadsService {
         cnpj: lead.company.cnpj,
         situacaoCadastral: lead.company.situacaoCadastral,
         cnaePrincipal: lead.company.cnaePrincipal,
-        nomeFantasia: lead.company.nomeFantasia,
-        porte: lead.company.porte,
-        cidade: lead.company.cidade,
-        uf: lead.company.uf,
-        latitude: lead.company.latitude,
-        longitude: lead.company.longitude,
-        logradouro: lead.company.logradouro,
-        numero: lead.company.numero,
-        bairro: lead.company.bairro,
-        cep: lead.company.cep,
-        statusLead: lead.status,
-        neighborCount,
-      });
-
-      return {
-        ...lead,
-        score: fullScore.score,
-        potentialLevel: fullScore.level,
-        scoreBreakdown: fullScore.breakdown,
-      };
-    });
-
-    return {
-      items: enrichedItems,
-      total: total,
-      page,
-      pageSize,
-      totalPages: Math.max(1, Math.ceil(total / pageSize)),
-    };
-  }
-
-  async findPage(query: LeadQueryDto) {
-    const page = Math.max(1, query.page ?? 1);
-    const pageSize = Math.min(Math.max(1, query.pageSize ?? query.limit ?? query.perPage ?? 25), 100);
-    const where = this.buildWhere(query);
-    const [total, items, targetCompanies] = await this.prisma.$transaction([
-      this.prisma.lead.count({ where }),
-      this.prisma.lead.findMany({
-        where,
-        include: leadInclude,
-        orderBy: this.buildOrderBy(query),
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-      }),
-      this.prisma.company.findMany({
-        where: {
-          situacaoCadastral: "ATIVA",
-          ...buildCnaeWhereInput(),
-        },
-        select: { id: true, cidade: true, bairro: true, latitude: true, longitude: true },
-      }),
-    ]);
-
-    const validItems = items.filter((lead) => isValidOpportunity(lead.company));
-    const neighborCounts = this.computeSpatialClusters(validItems, targetCompanies);
-
-    const enrichedItems = validItems.map((lead) => {
-      const neighborCount = neighborCounts.get(lead.company.id) ?? 0;
-      const fullScore = calculateOpportunityScoreDetails({
-        cnpj: lead.company.cnpj,
-        situacaoCadastral: lead.company.situacaoCadastral,
-        cnaePrincipal: lead.company.cnaePrincipal,
+        cnaes: lead.company.cnaes,
         nomeFantasia: lead.company.nomeFantasia,
         porte: lead.company.porte,
         cidade: lead.company.cidade,
@@ -200,15 +142,6 @@ export class LeadsService {
     ]);
 
     return [header, ...rows].map((row) => row.map(csvValue).join(",")).join("\n");
-  }
-
-  private shouldPaginate(query: LeadQueryDto) {
-    return (
-      query.page !== undefined ||
-      query.pageSize !== undefined ||
-      query.limit !== undefined ||
-      query.perPage !== undefined
-    );
   }
 
   private buildWhere(query: LeadQueryDto) {
@@ -294,6 +227,7 @@ export class LeadsService {
       cnpj: lead.company.cnpj,
       situacaoCadastral: lead.company.situacaoCadastral,
       cnaePrincipal: lead.company.cnaePrincipal,
+      cnaes: lead.company.cnaes,
       nomeFantasia: lead.company.nomeFantasia,
       porte: lead.company.porte,
       cidade: lead.company.cidade,
@@ -316,7 +250,10 @@ export class LeadsService {
   }
 
   async create(dto: CreateLeadDto) {
-    const company = await this.prisma.company.findUnique({ where: { id: dto.companyId } });
+    const company = await this.prisma.company.findUnique({
+      where: { id: dto.companyId },
+      include: { cnaes: true },
+    });
     if (!company) throw new NotFoundException("Empresa não encontrada");
 
     const targetCnaes = await this.getTargetCnaes();
@@ -329,13 +266,20 @@ export class LeadsService {
         priorityCities,
       });
 
+    const assignedProfileId = dto.assignedToId
+      ? await this.resolveProfileId(dto.assignedToId)
+      : undefined;
+    if (dto.assignedToId && !assignedProfileId) {
+      throw new BadRequestException("Responsável informado não possui um perfil válido");
+    }
+
     return this.prisma.lead.create({
       data: {
         companyId: dto.companyId,
         status: dto.status ?? LeadStatus.NEW,
         score,
         potentialLevel: dto.potentialLevel ?? getPotentialLevel(score),
-        assignedToId: dto.assignedToId,
+        assignedToId: assignedProfileId,
         notes: dto.notes,
         lastContactAt: dto.lastContactAt,
         nextActionAt: dto.nextActionAt,
@@ -346,21 +290,116 @@ export class LeadsService {
 
   async update(id: string, dto: UpdateLeadDto) {
     await this.findById(id);
+
+    const updatePayload: Prisma.LeadUpdateInput = {
+      ...dto,
+      potentialLevel:
+        dto.score !== undefined && dto.potentialLevel === undefined
+          ? getPotentialLevel(dto.score)
+          : dto.potentialLevel,
+    };
+
+    if (dto.assignedToId !== undefined) {
+      const profileId = await this.resolveProfileId(dto.assignedToId);
+      if (dto.assignedToId && !profileId) {
+        throw new BadRequestException("Responsável informado não possui um perfil válido");
+      }
+      if (profileId) {
+        updatePayload.assignedTo = { connect: { id: profileId } };
+      } else {
+        updatePayload.assignedTo = { disconnect: true };
+      }
+      delete (updatePayload as any).assignedToId;
+    }
+
     return this.prisma.lead.update({
       where: { id },
-      data: {
-        ...dto,
-        potentialLevel:
-          dto.score !== undefined && dto.potentialLevel === undefined
-            ? getPotentialLevel(dto.score)
-            : dto.potentialLevel,
-      },
+      data: updatePayload,
       include: { company: true, assignedTo: { select: safeAssignedToSelect } },
     });
   }
 
-  convert(id: string) {
-    return this.update(id, { status: LeadStatus.CONVERTED, lastContactAt: new Date() });
+  public async resolveProfileId(idOrCuid?: string | null): Promise<string | null> {
+    if (!idOrCuid || !idOrCuid.trim()) return null;
+    const cleanId = idOrCuid.trim();
+
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanId);
+    if (isUuid) {
+      const existing = await this.prisma.profile.findUnique({ where: { id: cleanId } });
+      if (existing) return existing.id;
+    }
+
+    const mapping = isUuid
+      ? await this.prisma.userMapping.findUnique({ where: { uuid: cleanId } })
+      : await this.prisma.userMapping.findUnique({ where: { cuid: cleanId } });
+    if (mapping) return mapping.uuid;
+
+    const user = await this.prisma.user.findFirst({
+      where: { OR: [{ id: cleanId }, { email: cleanId }] },
+    });
+
+    if (user) {
+      const profile = await this.prisma.profile.upsert({
+        where: { email: user.email },
+        update: { name: user.name, role: user.role },
+        create: {
+          id: randomUUID(),
+          name: user.name,
+          email: user.email,
+          role: user.role,
+        },
+      });
+      await this.prisma.userMapping.upsert({
+        where: { cuid: user.id },
+        update: { uuid: profile.id, email: user.email },
+        create: { cuid: user.id, uuid: profile.id, email: user.email },
+      });
+      return profile.id;
+    }
+
+    return null;
+  }
+
+  async convert(id: string) {
+    const lead = await this.findById(id);
+    return this.prisma.$transaction(async (transaction) => {
+      const updatedLead = await transaction.lead.update({
+        where: { id },
+        data: { status: LeadStatus.CONVERTED, lastContactAt: new Date() },
+        include: { company: true, assignedTo: { select: safeAssignedToSelect } },
+      });
+
+      const existingClient = await transaction.clientAccount.findFirst({
+        where: { companyId: lead.companyId },
+        orderBy: { createdAt: "asc" },
+      });
+      if (existingClient) {
+        if (!existingClient.isCurrentClient) {
+          await transaction.clientAccount.update({
+            where: { id: existingClient.id },
+            data: { isCurrentClient: true },
+          });
+        }
+      } else {
+        await transaction.clientAccount.upsert({
+          where: { codigoClienteDeusa: `LEAD-${lead.companyId}` },
+          update: { isCurrentClient: true, companyId: lead.companyId },
+          create: {
+            codigoClienteDeusa: `LEAD-${lead.companyId}`,
+            companyId: lead.companyId,
+            razaoSocial: lead.company.razaoSocial,
+            nomeFantasia: lead.company.nomeFantasia,
+            cnpj: lead.company.cnpj,
+            cidade: lead.company.cidade,
+            uf: lead.company.uf,
+            isCurrentClient: true,
+            importedFromExcel: false,
+          },
+        });
+      }
+
+      return updatedLead;
+    });
   }
 
   discard(id: string) {
@@ -368,7 +407,10 @@ export class LeadsService {
   }
 
   async upsertLeadForCompany(companyId: string, assignedToId?: string) {
-    const company = await this.prisma.company.findUnique({ where: { id: companyId } });
+    const company = await this.prisma.company.findUnique({
+      where: { id: companyId },
+      include: { cnaes: true },
+    });
     if (!company) throw new NotFoundException("Empresa não encontrada");
     const targetCnaes = await this.getTargetCnaes();
     const priorityCities = await this.getPriorityCities();
@@ -406,37 +448,50 @@ export class LeadsService {
       return { success: false, message: "Nenhum vendedor ou gerente cadastrado no sistema." };
     }
 
+    const assignableUsers = await Promise.all(
+      salesUsers.map(async (user) => ({
+        ...user,
+        profileId: await this.resolveProfileId(user.id),
+      })),
+    );
+    const usersWithProfile = assignableUsers.filter(
+      (user): user is typeof user & { profileId: string } => Boolean(user.profileId),
+    );
+    if (usersWithProfile.length === 0) {
+      return { success: false, message: "Nenhum perfil de vendedor válido foi encontrado." };
+    }
+
     let assignedCount = 0;
     const cityMap: Record<string, string> = {};
 
     // Mapeamento territorial de vendedores da Deusa Alimentos por região
-    for (const user of salesUsers) {
+    for (const user of usersWithProfile) {
       const nameLower = user.name.toLowerCase();
       if (nameLower.includes("rafael")) {
-        cityMap["tupã"] = user.id;
-        cityMap["marília"] = user.id;
-        cityMap["pompeia"] = user.id;
+        cityMap["tupã"] = user.profileId;
+        cityMap["marília"] = user.profileId;
+        cityMap["pompeia"] = user.profileId;
       } else if (nameLower.includes("camila")) {
-        cityMap["araçatuba"] = user.id;
-        cityMap["bauru"] = user.id;
-        cityMap["lins"] = user.id;
+        cityMap["araçatuba"] = user.profileId;
+        cityMap["bauru"] = user.profileId;
+        cityMap["lins"] = user.profileId;
       } else if (nameLower.includes("felipe")) {
-        cityMap["ourinhos"] = user.id;
-        cityMap["assis"] = user.id;
-        cityMap["bastos"] = user.id;
+        cityMap["ourinhos"] = user.profileId;
+        cityMap["assis"] = user.profileId;
+        cityMap["bastos"] = user.profileId;
       }
     }
 
     for (let i = 0; i < unassignedLeads.length; i++) {
       const lead = unassignedLeads[i];
       const cityClean = lead.company.cidade?.toLowerCase().trim() || "";
-      const assignedId = cityMap[cityClean] || salesUsers[i % salesUsers.length].id;
+      const assignedId = cityMap[cityClean] || usersWithProfile[i % usersWithProfile.length].profileId;
 
-      await this.prisma.lead.update({
-        where: { id: lead.id },
+      const assigned = await this.prisma.lead.updateMany({
+        where: { id: lead.id, assignedToId: null },
         data: { assignedToId: assignedId },
       });
-      assignedCount++;
+      assignedCount += assigned.count;
     }
 
     return {

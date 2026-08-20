@@ -52,3 +52,17 @@ frontend/data/imports/
 frontend/data/*.db
 frontend/data/processed/
 
+# Prisma & Generated Code
+/generated/prisma
+prisma.config.ts
+
+# Agent & AI Tooling Metadata
+.agent/
+.agents/
+.claude/
+.windsurf/
+.gemini/
+skills-lock.json
+*.tmp
+*.log
+

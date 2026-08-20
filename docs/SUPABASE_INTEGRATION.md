@@ -79,5 +79,6 @@ Quando você decidir conectar o projeto a uma instância real do Supabase:
 5. **Executar o Seed da Base (opcional)**:
    ```bash
    cd backend
-   npm run seed
+   RUN_SEED=true npm run seed
    ```
+   Execute somente em uma base nova e revisada; o seed não deve ser usado para reimportar dados existentes.

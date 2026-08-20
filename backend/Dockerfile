@@ -13,7 +13,9 @@ COPY prisma ./prisma/
 RUN npm ci --frozen-lockfile
 
 # Gera o Prisma Client
-RUN npx prisma generate
+RUN DATABASE_URL="postgresql://build:build@localhost:5432/build" \
+    DIRECT_URL="postgresql://build:build@localhost:5432/build" \
+    npx prisma generate
 
 # Copia o código-fonte e compila
 COPY tsconfig.json tsconfig.build.json ./

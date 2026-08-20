@@ -8,8 +8,7 @@ export const NON_FOOD_KEYWORDS = [
   'eletronico', 'eletrônico', 'game', 'brinquedo', 'perfumaria', 'cosmetico', 'cosmético',
   'eletrica', 'elétrica', 'ferragem', 'tinta', 'marcenaria', 'colchão', 'colchao', 'pisos',
   'vidraçaria', 'vidracaria', 'imóveis', 'imoveis', 'corretor', 'mecanica', 'mecânica',
-  'lava jato', 'pneus', 'auto center', 'oficina', 'cris park', 'hospital', 'perdizes',
-  'brasilândia', 'brasilandia', 'são camilo', 'sao camilo', 'postagem', 'grafica', 'gráfica',
+  'lava jato', 'pneus', 'auto center', 'oficina', 'hospital', 'postagem', 'grafica', 'gráfica',
   'fotografia', 'joalheria', 'relojoaria', 'lingerie', 'armarinho', 'enxovais', 'brinquedos',
   'boutique', 'boate', 'casa noturna', 'escritorio', 'escritório', 'advocacia', 'contabilidade',
   'consultoria', 'estofaria', 'funilaria', 'suplemento', 'suplementos'
@@ -18,5 +17,8 @@ export const NON_FOOD_KEYWORDS = [
 export function isNonFoodBusiness(name: string, cnaeDescription?: string): boolean {
   if (!name) return false;
   const fullName = (name + ' ' + (cnaeDescription || '')).toLowerCase();
-  return NON_FOOD_KEYWORDS.some((kw) => fullName.includes(kw));
+  return NON_FOOD_KEYWORDS.some((keyword) => {
+    const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`(^|[^\\p{L}\\p{N}])${escaped}([^\\p{L}\\p{N}]|$)`, "iu").test(fullName);
+  });
 }

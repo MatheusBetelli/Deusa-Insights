@@ -31,7 +31,7 @@ function LoginPage() {
   const [loading, setLoading] = useState(false);
   
   // Login form states
-  const [email, setEmail] = useState("admin@deusa.com.br");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
@@ -92,25 +92,28 @@ function LoginPage() {
   return (
     <div className="min-h-screen bg-slate-100 flex items-center justify-center px-6 py-12">
       <main className="w-full max-w-[465px] flex flex-col items-center">
-        <div className="relative w-full overflow-hidden rounded-xl border border-slate-200 bg-white p-10 shadow-[0_30px_70px_-20px_rgba(15,23,42,0.15)] sm:p-12 transition-all">
+        <div className="relative w-full overflow-hidden rounded-xl border border-slate-200 bg-white p-10 shadow-xl shadow-slate-200/60 sm:p-12 transition-all">
           {/* Linha fina azul no topo */}
           <div className="absolute inset-x-0 top-0 h-[2px] bg-[#1061AF]" />
 
-          {mode === "login" ? (
-            <>
-              <div className="mb-10 flex flex-col items-center">
-                <DeusaLogo className="h-9 w-auto mb-8" />
-                <h2 className="text-xl font-bold tracking-tight text-slate-900">
-                  Acesso interno
-                </h2>
-                <p className="mt-2 text-center text-sm text-slate-500 font-medium">
-                  Entre com seu e-mail corporativo para acessar o Deusa Analytics.
-                </p>
-              </div>
+            {mode === "login" ? (
+              <>
+                <div className="mb-8 flex flex-col items-center">
+                  <DeusaLogo className="h-10 w-auto mb-6" />
+                  <span className="mb-3 inline-flex items-center rounded-full bg-blue-50/90 px-3 py-1 text-[10px] font-bold tracking-widest text-[#1061AF] uppercase border border-blue-200/70">
+                    Deusa Analytics
+                  </span>
+                  <h2 className="text-xl font-bold tracking-tight text-slate-900">
+                    Acesso interno
+                  </h2>
+                  <p className="mt-1.5 text-center text-sm text-slate-500 font-medium">
+                    Entre com seu e-mail corporativo para acessar a plataforma.
+                  </p>
+                </div>
 
               <form onSubmit={submitLogin} className="space-y-6">
                 <div className="space-y-2.5">
-                  <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 ml-0.5">
+                  <label className="text-[11px] font-bold uppercase tracking-wider text-slate-600 ml-0.5">
                     E-mail corporativo
                   </label>
                   <div className="relative">
@@ -120,7 +123,7 @@ function LoginPage() {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="nome@deusa.com.br"
-                      className="h-11 w-full rounded-lg border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-sm font-medium text-slate-900 outline-none transition hover:border-slate-300 focus:border-blue-600 focus:bg-white focus:ring-4 focus:ring-blue-600/5"
+                      className="h-11 w-full rounded-lg border border-slate-200 bg-white pl-10 pr-4 text-sm font-medium text-slate-900 shadow-sm outline-none transition duration-150 hover:border-slate-300 focus:border-[#1061AF] focus:ring-4 focus:ring-[#1061AF]/15"
                       required
                     />
                   </div>
@@ -128,7 +131,7 @@ function LoginPage() {
 
                 <div className="space-y-2.5">
                   <div className="flex items-center justify-between">
-                    <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 ml-0.5">
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-slate-600 ml-0.5">
                       Senha
                     </label>
                     {capsLockOn && (
@@ -147,7 +150,7 @@ function LoginPage() {
                       onKeyDown={handlePasswordKey}
                       onKeyUp={handlePasswordKey}
                       placeholder="••••••••"
-                      className="h-12 w-full rounded-lg border border-slate-200 bg-slate-50/30 pl-11 pr-11 text-sm font-medium text-slate-900 outline-none transition hover:border-slate-300 focus:border-blue-600 focus:bg-white focus:ring-4 focus:ring-blue-600/5"
+                      className="h-12 w-full rounded-lg border border-slate-200 bg-white pl-11 pr-11 text-sm font-medium text-slate-900 shadow-sm outline-none transition duration-150 hover:border-slate-300 focus:border-[#1061AF] focus:ring-4 focus:ring-[#1061AF]/15"
                       required
                     />
                     <button
@@ -196,7 +199,7 @@ function LoginPage() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="relative group mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-[#1061AF] text-[15px] font-bold text-white shadow-lg shadow-blue-900/10 transition-all hover:bg-[#0E5496] hover:shadow-blue-900/20 active:scale-[0.98] disabled:opacity-70 disabled:pointer-events-none"
+                  className="relative group mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-[#1061AF] text-[15px] font-bold text-white shadow-md shadow-[#1061AF]/20 transition-all hover:bg-[#0E5496] hover:shadow-lg hover:shadow-[#1061AF]/30 active:scale-[0.99] disabled:opacity-70 disabled:pointer-events-none"
                 >
                   {loading ? (
                     <Loader2 className="h-5 w-5 animate-spin" />
@@ -250,7 +253,7 @@ function LoginPage() {
               ) : (
                 <form onSubmit={submitForgot} className="space-y-6">
                   <div className="space-y-2.5">
-                    <label className="text-[11px] font-bold uppercase tracking-wider text-slate-500 ml-0.5">
+                    <label className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 ml-0.5">
                       E-mail corporativo
                     </label>
                     <div className="relative">
@@ -260,7 +263,7 @@ function LoginPage() {
                         value={forgotEmail}
                         onChange={(e) => setForgotEmail(e.target.value)}
                         placeholder="nome@deusa.com.br"
-                        className="h-11 w-full rounded-lg border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-sm font-medium text-slate-900 outline-none transition hover:border-slate-300 focus:border-blue-600 focus:bg-white focus:ring-4 focus:ring-blue-600/5"
+                        className="h-11 w-full rounded-lg border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-sm font-medium text-slate-900 outline-none transition hover:border-slate-300 focus:border-[#1061AF] focus:bg-white focus:ring-4 focus:ring-[#1061AF]/10"
                         required
                       />
                     </div>
@@ -317,4 +320,3 @@ function LoginPage() {
     </div>
   );
 }
-

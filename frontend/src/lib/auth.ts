@@ -1,10 +1,24 @@
 const AUTH_TOKEN_KEY = "deusa_auth_token";
 const USER_DATA_KEY = "deusa_user_data";
 
-const API_URL = (import.meta && import.meta.env && import.meta.env.VITE_API_URL) || "http://127.0.0.1:3001";
+const CONFIGURED_API_URL = import.meta?.env?.VITE_API_URL?.trim();
+const API_URL = CONFIGURED_API_URL || (import.meta?.env?.PROD ? "" : "http://127.0.0.1:3001");
+const REQUEST_TIMEOUT_MS = 45_000;
 
-if (!import.meta?.env?.VITE_API_URL && import.meta?.env?.PROD) {
-  console.warn("[Deusa Analytics] ⚠️ VITE_API_URL não configurada em produção. Usando fallback localhost.");
+function buildAuthUrl(path: string): string {
+  if (!API_URL) {
+    throw new Error("VITE_API_URL não configurada para o ambiente de produção.");
+  }
+  let baseUrl: URL;
+  try {
+    baseUrl = new URL(API_URL);
+  } catch {
+    throw new Error("VITE_API_URL possui formato inválido.");
+  }
+  if (!["http:", "https:"].includes(baseUrl.protocol)) {
+    throw new Error("VITE_API_URL deve usar HTTP ou HTTPS.");
+  }
+  return new URL(path, `${API_URL.replace(/\/+$/, "")}/`).toString();
 }
 
 function hasBrowserStorage() {
@@ -12,6 +26,9 @@ function hasBrowserStorage() {
 }
 
 async function readError(response: Response, fallback: string) {
+  if (response.status === 429) {
+    return "Muitas tentativas de login em sequência. Aguarde 10 segundos e tente novamente.";
+  }
   let message = fallback;
   try {
     const payload = await response.json();
@@ -24,12 +41,25 @@ async function readError(response: Response, fallback: string) {
   return message;
 }
 
+async function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init: RequestInit = {},
+): Promise<Response> {
+  if (init.signal) return fetch(input, init);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export interface User {
   id: string;
   name: string;
   email: string;
   role: string;
-  location: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -40,14 +70,9 @@ export type ChangePasswordPayload = {
   confirmPassword: string;
 };
 
-function getStorage(remember = true) {
-  if (!hasBrowserStorage()) return null;
-  return remember ? localStorage : sessionStorage;
-}
-
 export const AuthService = {
   login: async (email: string, password: string, rememberMe = true): Promise<User> => {
-    const response = await fetch(`${API_URL}/auth/login`, {
+    const response = await fetchWithTimeout(buildAuthUrl("auth/login"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
@@ -67,7 +92,6 @@ export const AuthService = {
       name: data.user.name,
       email: data.user.email,
       role: data.user.role,
-      location: "SP",
     };
 
     if (hasBrowserStorage()) {
@@ -105,12 +129,18 @@ export const AuthService = {
   getUser: (): User | null => {
     if (!hasBrowserStorage()) return null;
     const data = localStorage.getItem(USER_DATA_KEY) || sessionStorage.getItem(USER_DATA_KEY);
-    return data ? JSON.parse(data) : null;
+    if (!data) return null;
+    try {
+      return JSON.parse(data) as User;
+    } catch {
+      AuthService.logout();
+      return null;
+    }
   },
 
   getProfile: async (): Promise<User> => {
     const token = AuthService.getToken();
-    const response = await fetch(`${API_URL}/auth/me`, {
+    const response = await fetchWithTimeout(buildAuthUrl("auth/me"), {
       headers: {
         "Content-Type": "application/json",
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -118,11 +148,11 @@ export const AuthService = {
     });
 
     if (!response.ok) {
+      if (response.status === 401) AuthService.logout();
       throw new Error(await readError(response, "Não foi possível carregar o perfil."));
     }
 
-    const data = (await response.json()) as Omit<User, "location">;
-    const user: User = { ...data, location: "SP" };
+    const user = (await response.json()) as User;
     if (hasBrowserStorage()) {
       const storage = localStorage.getItem(AUTH_TOKEN_KEY) ? localStorage : sessionStorage;
       storage.setItem(USER_DATA_KEY, JSON.stringify(user));
@@ -132,7 +162,7 @@ export const AuthService = {
 
   changePassword: async (payload: ChangePasswordPayload) => {
     const token = AuthService.getToken();
-    const response = await fetch(`${API_URL}/auth/password`, {
+    const response = await fetchWithTimeout(buildAuthUrl("auth/password"), {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
@@ -150,7 +180,7 @@ export const AuthService = {
 
   forgotPassword: async (email: string): Promise<{ message: string }> => {
     try {
-      const response = await fetch(`${API_URL}/auth/forgot-password`, {
+      const response = await fetchWithTimeout(buildAuthUrl("auth/forgot-password"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
@@ -162,18 +192,23 @@ export const AuthService = {
 
       return (await response.json()) as { message: string };
     } catch (err) {
-      // Fallback message if backend isn't reachable
-      if (err instanceof Error && err.message !== "Failed to fetch") {
+      if (
+        err instanceof Error &&
+        err.message !== "Failed to fetch" &&
+        err.name !== "AbortError"
+      ) {
         throw err;
       }
-      return {
-        message: "Se o e-mail estiver cadastrado em nosso sistema, um link para redefinição de senha foi enviado.",
-      };
+      throw new Error("Não foi possível contatar o serviço de recuperação de senha.");
     }
   },
 
-  resetPassword: async (payload: { token: string; newPassword: string; confirmPassword: string }): Promise<{ message: string }> => {
-    const response = await fetch(`${API_URL}/auth/reset-password`, {
+  resetPassword: async (payload: {
+    token: string;
+    newPassword: string;
+    confirmPassword: string;
+  }): Promise<{ message: string }> => {
+    const response = await fetchWithTimeout(buildAuthUrl("auth/reset-password"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -186,5 +221,3 @@ export const AuthService = {
     return (await response.json()) as { message: string };
   },
 };
-
-

@@ -1,4 +1,5 @@
 import { PotentialLevel } from "@prisma/client";
+import { isValidOpportunityCnae } from "./opportunity-filter";
 
 // Sede da Distribuidora Deusa em Garça/SP
 export const GARCA_COORDS = { lat: -22.2131, lon: -49.6553 };
@@ -47,6 +48,7 @@ export type ScoreInput = {
   cnpj?: string | null;
   situacaoCadastral?: string | null;
   cnaePrincipal?: string | null;
+  cnaes?: Array<string | { cnaeCode?: string | null }>;
   targetCnaes?: string[];
   nomeFantasia?: string | null;
   porte?: string | null;
@@ -133,13 +135,19 @@ export function calculateOpportunityScoreDetails(input: ScoreInput): FullScoreRe
   const city = normalize(input.cidade);
 
   // 1. Perfil / CNAE (Peso 30% -> max 30 pts)
-  // Oportunidades comerciais autorizadas exclusivamente: Minimercados (4712100), Supermercados (4711302), Hipermercados (4711301) e Açougues (4722901)
-  const isTargetCnae = cnae === "4712100" || cnae === "4711302" || cnae === "4711301" || cnae === "4722901";
+  // Mantém o mesmo escopo comercial central usado por filtros e ingestão.
+  const isTargetCnae =
+    isValidOpportunityCnae(cnae) ||
+    Boolean(
+      input.cnaes?.some((item) =>
+        isValidOpportunityCnae(typeof item === "string" ? item : item.cnaeCode),
+      ),
+    );
   const perfilPts = isTargetCnae ? 30 : 0;
 
   // 2. Cluster Logístico / Densidade de Alvos no Entorno (Peso 25% -> max 25 pts)
   // Avalia a proximidade entre estabelecimentos alvos (minimercados e açougues).
-  let clusterScore = 60; // Fallback médio para quando a contagem não é fornecida
+  let clusterScore = 40; // Fallback moderado para quando a contagem não é fornecida
   const count = input.neighborCount;
   if (typeof count === "number") {
     if (count >= 5) clusterScore = 100;
@@ -147,8 +155,8 @@ export function calculateOpportunityScoreDetails(input: ScoreInput): FullScoreRe
     else if (count >= 1) clusterScore = 48;
     else clusterScore = 20; // Estabelecimento isolado
   } else if (isTargetCnae) {
-    // Estimativa por cidade/porte quando não há contagem espacial pré-calculada
-    clusterScore = 70;
+    // Estimativa moderada por cidade/porte quando não há contagem espacial pré-calculada
+    clusterScore = 50;
   }
   const potencialPts = Math.round((clusterScore / 100) * 25);
 
@@ -191,7 +199,7 @@ export function calculateOpportunityScoreDetails(input: ScoreInput): FullScoreRe
   let totalScore = Math.max(0, Math.min(100, perfilPts + potencialPts + logisticaPts + dadosPts + prontidaoPts + territorioPts));
 
   // Trava de Segurança: Se não é um CNAE Alvo ou não está Ativa, limita o score em no máximo 30 (nível LOW)
-  if (!isTargetCnae || (status !== "ativa" && status !== "ativo" && status !== "")) {
+  if (!isTargetCnae || (status !== "ativa" && status !== "ativo")) {
     totalScore = Math.min(30, totalScore);
   }
 
@@ -218,9 +226,8 @@ export function calculateLeadScore(input: ScoreInput): number {
 }
 
 export function getPotentialLevel(score: number): PotentialLevel {
-  if (score >= 80) return PotentialLevel.CRITICAL;
-  if (score >= 65) return PotentialLevel.HIGH;
-  if (score >= 45) return PotentialLevel.MEDIUM;
+  if (score >= 85) return PotentialLevel.CRITICAL;
+  if (score >= 70) return PotentialLevel.HIGH;
+  if (score >= 50) return PotentialLevel.MEDIUM;
   return PotentialLevel.LOW;
 }
-

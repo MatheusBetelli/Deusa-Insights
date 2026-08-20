@@ -1,7 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { EmptyState, ErrorState, LoadingState } from "@/components/common/InterfaceStates";
 import { LeadDetailsSheet } from "@/features/leads/components/LeadDetailsSheet";
+import { LeadContactsPopover } from "@/features/leads/components/LeadContactsPopover";
 import { PaginationBar } from "@/components/common/PaginationBar";
 import { ScoreBreakdownTooltip } from "@/components/common/ScoreBreakdownTooltip";
 import {
@@ -28,11 +29,15 @@ import {
   EllipsisVertical,
   Eye,
   Loader2,
+  MapPin,
   PhoneCall,
   Search,
   SlidersHorizontal,
-  UserPlus,
   X,
+  CheckCircle,
+  Clock,
+  UserCheck,
+  Ban,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -42,6 +47,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 export type LeadsB2BSearch = {
   search?: string;
@@ -97,49 +108,23 @@ export const Route = createFileRoute("/_app/leads-b2b")({
 
 const PAGE_SIZE = 25;
 
-const verificationLabels: Record<string, string> = {
-  confiavel_cadastralmente: "Confiável cadastralmente",
-  aproximado: "Aproximado",
-  nao_verificado: "Não verificado",
-  verificado: "Verificado",
-  divergente: "Divergente",
-};
-
 type SortBy = NonNullable<LeadQuery["sortBy"]>;
 
-function isPriorityOpportunity(priority: PotentialLevel) {
-  return priority === "CRITICAL" || priority === "HIGH";
-}
-
-function verificationLabel(status?: string | null) {
-  if (!status) return "Não verificado";
-  return verificationLabels[status] ?? status;
-}
-
-function calculateDataQualityScore(company: Lead["company"]) {
-  let score = 0;
-  if (company.cnpj && company.cnpj.replace(/\D/g, "").length === 14) score += 25;
-  if (company.logradouro && company.numero && company.bairro && company.cep) score += 30;
-  if (company.telefone && company.telefone.trim().length >= 8) score += 20;
-  if (typeof company.latitude === "number" && typeof company.longitude === "number" && company.latitude !== 0) {
-    if (company.statusVerificacaoEndereco === "aproximado" || company.origemCoordenada === "municipio_centroide_jitter") {
-      score += 10;
-    } else {
-      score += 25;
-    }
-  }
-  return Math.min(100, score);
-}
-
 function priorityClass(priority: PotentialLevel) {
-  if (priority === "CRITICAL") return "border-[#ED1C24]/30 bg-[#ED1C24]/10 text-[#B91C1C]";
-  if (priority === "HIGH") return "border-[#F97316]/30 bg-[#FFF7ED] text-[#C2410C]";
+  if (priority === "CRITICAL") return "border-[#ED1C24]/40 bg-[#ED1C24]/10 text-[#B91C1C]";
+  if (priority === "HIGH") return "border-[#F97316]/40 bg-[#FFF7ED] text-[#C2410C]";
   if (priority === "MEDIUM") return "border-[#1061AF]/30 bg-blue-50 text-[#1061AF]";
   return "border-[#DDE5EF] bg-[#F8FAFC] text-[#64748B]";
 }
 
-function statusClass() {
-  return "border-[#DDE5EF] bg-[#F8FAFC] text-[#475569]";
+function statusBadgeStyle(status: LeadStatus) {
+  if (status === "CONVERTED") return "border-emerald-300 bg-emerald-50 text-emerald-800 font-bold";
+  if (status === "INTERESTED") return "border-blue-300 bg-blue-50 text-blue-800 font-semibold";
+  if (status === "NEGOTIATION") return "border-amber-300 bg-amber-50 text-amber-800 font-semibold";
+  if (status === "CONTACTED") return "border-slate-300 bg-slate-100 text-slate-800 font-medium";
+  if (status === "NOT_INTERESTED") return "border-red-200 bg-red-50 text-red-700 font-medium";
+  if (status === "INACTIVE") return "border-slate-300 bg-slate-100 text-slate-500 font-medium line-through";
+  return "border-[#DDE5EF] bg-[#F8FAFC] text-[#475569] font-medium";
 }
 
 function LeadsB2B() {
@@ -147,21 +132,7 @@ function LeadsB2B() {
   const navigate = Route.useNavigate();
   const storedFilters = useMemo(() => getStoredB2BFilters(), []);
 
-  const [autoAssigning, setAutoAssigning] = useState(false);
   const currentUser = AuthService.getUser();
-
-  async function handleAutoAssignTerritory() {
-    setAutoAssigning(true);
-    try {
-      const res = await leadsService.autoAssignTerritory();
-      toast.success(res.message);
-      await loadLeads();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Falha ao distribuir leads.");
-    } finally {
-      setAutoAssigning(false);
-    }
-  }
 
   const [leads, setLeads] = useState<Lead[]>([]);
   const [cities, setCities] = useState<City[]>([]);
@@ -201,6 +172,7 @@ function LeadsB2B() {
   const [totalPages, setTotalPages] = useState(1);
   const [highPotentialCount, setHighPotentialCount] = useState(0);
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
+  const loadSequence = useRef(0);
 
   useEffect(() => {
     const currentParams: LeadsB2BSearch = {
@@ -302,26 +274,30 @@ function LeadsB2B() {
   }, []);
 
   const loadLeads = useCallback(async () => {
+    const requestId = ++loadSequence.current;
     setLoading(true);
     setError(null);
     try {
-      const data = await leadsService.getLeadsPage({
-        ...baseFilters,
-        page,
-        pageSize: PAGE_SIZE,
-        sortBy,
-        sortOrder,
-      });
+      const [data, highCount] = await Promise.all([
+        leadsService.getLeadsPage({
+          ...baseFilters,
+          page,
+          pageSize: PAGE_SIZE,
+          sortBy,
+          sortOrder,
+        }),
+        countPriorityLeads(baseFilters),
+      ]);
+      if (requestId !== loadSequence.current) return;
       setLeads(data.items);
       setTotal(data.total);
       setTotalPages(data.totalPages);
-
-      const highCount = await countPriorityLeads(baseFilters);
       setHighPotentialCount(highCount);
     } catch (err) {
+      if (requestId !== loadSequence.current) return;
       setError(err instanceof Error ? err.message : "Não foi possível carregar leads.");
     } finally {
-      setLoading(false);
+      if (requestId === loadSequence.current) setLoading(false);
     }
   }, [baseFilters, countPriorityLeads, page, sortBy, sortOrder]);
 
@@ -378,10 +354,10 @@ function LeadsB2B() {
     }
   }
 
-  async function quickUpdate(lead: Lead, payload: Partial<Pick<Lead, "status" | "assignedToId">>) {
+  async function quickUpdateStatus(lead: Lead, nextStatus: LeadStatus) {
     try {
-      await leadsService.updateLead(lead.id, payload);
-      toast.success("Lead atualizado.");
+      await leadsService.updateLead(lead.id, { status: nextStatus });
+      toast.success(`Status de "${companyName(lead.company)}" atualizado para ${statusLabels[nextStatus]}.`);
       await loadLeads();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Não foi possível atualizar o lead.");
@@ -389,21 +365,14 @@ function LeadsB2B() {
   }
 
   async function quickContact(lead: Lead) {
-    if (!lead.assignedToId) {
-      toast.error("Atribua um responsável antes de registrar contato.");
-      return;
-    }
     try {
+      const activeUserId = currentUser?.id || lead.assignedToId || "admin";
       await leadsService.createInteraction(lead.id, {
-        userId: lead.assignedToId,
+        userId: activeUserId,
         type: "Contato comercial",
-        description: "Contato registrado pela lista de Leads B2B.",
+        description: "Contato registrado via painel Leads B2B.",
       });
-      await leadsService.updateLead(lead.id, {
-        status: lead.status === "NEW" || lead.status === "NO_CONTACT" ? "CONTACTED" : lead.status,
-        lastContactAt: new Date().toISOString(),
-      });
-      toast.success("Contato registrado.");
+      toast.success("Contato registrado com sucesso.");
       await loadLeads();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Não foi possível registrar contato.");
@@ -434,7 +403,7 @@ function LeadsB2B() {
     statusVerificacaoEndereco !== "Todos"
       ? {
           label: "Endereço",
-          value: verificationLabel(statusVerificacaoEndereco),
+          value: statusVerificacaoEndereco,
           clear: () => setStatusVerificacaoEndereco("Todos"),
         }
       : null,
@@ -451,460 +420,463 @@ function LeadsB2B() {
   ].filter(Boolean) as { label: string; value: string; clear: () => void }[];
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-widest text-[#1061AF]">
-            Comercial
-          </p>
-          <h1 className="mt-0.5 text-2xl font-bold tracking-tight text-[#0B1F33]">Leads B2B</h1>
-          <p className="mt-0.5 text-sm text-[#64748B]">
-            Área operacional para priorizar, atribuir e acionar leads.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => void handleAutoAssignTerritory()}
-            disabled={autoAssigning}
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#0B1F33] px-3.5 text-xs font-bold text-white shadow-sm transition hover:bg-[#1061AF] active:scale-[0.99] disabled:opacity-60"
-          >
-            {autoAssigning ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin text-[#FFF200]" />
-            ) : (
-              <UserPlus className="h-3.5 w-3.5 text-[#FFF200]" />
-            )}
-            Distribuir por Região
-          </button>
-          <button
-            onClick={() => void handleExportCsv()}
-            disabled={exporting}
-            className="inline-flex h-9 w-fit items-center gap-1.5 rounded-lg border border-[#DDE5EF] bg-white px-3.5 text-sm font-bold text-[#0B1F33] transition hover:border-[#1061AF] disabled:opacity-60"
-          >
-            {exporting ? (
-              <Loader2 className="h-4 w-4 animate-spin text-[#1061AF]" />
-            ) : (
-              <Download className="h-4 w-4 text-[#1061AF]" />
-            )}
-            Exportar CSV
-          </button>
-        </div>
-      </div>
-
-      <section className="grid gap-3 sm:grid-cols-2">
-        <MetricCard
-          label="Total de leads"
-          value={total}
-          description="Resultados nos filtros atuais"
-          accent="#1061AF"
-        />
-        <MetricCard
-          label="Oportunidades prioritárias"
-          value={highPotentialCount}
-          description="Alto ou crítico (Score >= 65) nos filtros"
-          accent="#ED1C24"
-        />
-      </section>
-
-      <section className="rounded-xl border border-[#DDE5EF] bg-white p-4 shadow-sm">
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
-          <label className="block">
-            <span className="mb-1 block text-[11px] font-bold uppercase text-[#64748B]">Busca</span>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#94A3B8]" />
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Empresa, CNPJ ou cidade"
-                className="h-10 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] pl-9 pr-3 text-sm text-[#0B1F33] outline-none transition focus:border-[#1061AF]"
-              />
+    <TooltipProvider>
+      <div className="space-y-5 text-[#0B1F33]">
+        {/* Header da Tela */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-[#FFF200]" />
+              <p className="text-[11px] font-bold uppercase tracking-widest text-[#1061AF]">
+                Deusa Alimentos · Inteligência Comercial
+              </p>
             </div>
-          </label>
-
-          <FilterSelect 
-            label="Estado (UF)" 
-            value={uf} 
-            onChange={(newUf) => {
-              setUf(newUf);
-              setCity("Todas");
-            }}
-          >
-            <option value="Todos">Todos</option>
-            {ESTADOS_UF.map((ufOption) => (
-              <option key={ufOption} value={ufOption}>
-                {ufOption}
-              </option>
-            ))}
-          </FilterSelect>
-
-          <FilterSelect label="Cidade" value={city} onChange={setCity}>
-            <option value="Todas">Todas</option>
-            {cities
-              .filter(c => uf === "Todos" || c.uf === uf)
-              .map((option) => (
-              <option key={option.id} value={option.name}>
-                {option.name}
-              </option>
-            ))}
-          </FilterSelect>
-
-          <FilterSelect label="CNAE" value={cnae} onChange={setCnae}>
-            <option value="Todos">Todos</option>
-            {cnaes.map((option) => (
-              <option key={option.id} value={option.code}>
-                {formatCnae(option.code)}
-              </option>
-            ))}
-          </FilterSelect>
-
-          <FilterSelect label="Oportunidade" value={potentialLevel} onChange={setPotentialLevel}>
-            <option value="Todos">Todas</option>
-            {Object.entries(potentialLabels).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </FilterSelect>
-
-          <FilterSelect label="Status Comercial" value={status} onChange={setStatus}>
-            <option value="Todos">Todos</option>
-            {Object.entries(statusLabels).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </FilterSelect>
-        </div>
-
-        <div className="mt-3 border-t border-[#EEF2F7] pt-3">
-          <button
-            type="button"
-            onClick={() => setAdvancedOpen((current) => !current)}
-            className="inline-flex h-8 items-center gap-2 rounded-md border border-[#DDE5EF] bg-white px-3 text-xs font-bold text-[#0B1F33] transition hover:border-[#1061AF]"
-          >
-            <SlidersHorizontal className="h-3.5 w-3.5 text-[#1061AF]" />
-            Filtros avançados
-          </button>
-
-          {advancedOpen && (
-            <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
-              <FilterSelect
-                label="Verificação de Endereço"
-                value={statusVerificacaoEndereco}
-                onChange={setStatusVerificacaoEndereco}
-                compact
-              >
-                <option value="Todos">Todos os status</option>
-                <option value="confiavel_cadastralmente">Confiável cadastralmente</option>
-                <option value="aproximado">Aproximado</option>
-                <option value="nao_verificado">Não verificado</option>
-                <option value="verificado">Verificado</option>
-                <option value="divergente">Divergente</option>
-              </FilterSelect>
-              <FilterSelect
-                label="Validação"
-                value={pendenteValidacao}
-                onChange={setPendenteValidacao}
-                compact
-              >
-                <option value="Todos">Qualquer estado</option>
-                <option value="true">Apenas pendentes</option>
-                <option value="false">Sem pendências</option>
-              </FilterSelect>
-              <FilterSelect
-                label="Situação Cadastral"
-                value={situacaoCadastral}
-                onChange={setSituacaoCadastral}
-                compact
-              >
-                <option value="Todos">Todas as situações</option>
-                <option value="ATIVA">ATIVA</option>
-                <option value="BAIXADA">BAIXADA</option>
-                <option value="INAPTA">INAPTA</option>
-                <option value="SUSPENSA">SUSPENSA</option>
-                <option value="NULA">NULA</option>
-              </FilterSelect>
-            </div>
-          )}
-
-          <div className="mt-3 flex flex-col gap-2 rounded-lg bg-[#F8FAFC] px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <span className="text-[11px] font-bold uppercase text-[#64748B]">
-                Filtros aplicados
-              </span>
-              {activeFilters.length === 0 ? (
-                <span className="text-xs text-[#94A3B8]">Nenhum filtro aplicado</span>
-              ) : (
-                activeFilters.map((filter) => (
-                  <button
-                    key={`${filter.label}-${filter.value}`}
-                    type="button"
-                    onClick={filter.clear}
-                    className="inline-flex max-w-full items-center gap-1 rounded-full border border-[#DDE5EF] bg-white px-2 py-1 text-[11px] font-semibold text-[#475569] transition hover:border-[#1061AF] hover:text-[#0B1F33]"
-                  >
-                    <span className="truncate">
-                      {filter.label}: {filter.value}
-                    </span>
-                    <X className="h-3 w-3 shrink-0" />
-                  </button>
-                ))
-              )}
-            </div>
+            <h1 className="mt-0.5 text-2xl font-bold tracking-tight text-[#0B1F33]">Leads B2B</h1>
+            <p className="mt-0.5 text-sm text-[#64748B]">
+              Painel comercial operacional para priorização, qualificação e prospecção de estabelecimentos.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
             <button
-              type="button"
-              onClick={clearFilters}
-              className="h-8 shrink-0 rounded-md border border-[#DDE5EF] bg-white px-3 text-xs font-bold text-[#0B1F33] transition hover:border-[#1061AF]"
+              onClick={() => void handleExportCsv()}
+              disabled={exporting}
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#DDE5EF] bg-white px-3.5 text-sm font-semibold text-[#0B1F33] transition hover:border-[#1061AF] hover:text-[#1061AF] disabled:opacity-60 cursor-pointer shadow-2xs"
             >
-              Limpar tudo
+              {exporting ? (
+                <Loader2 className="h-4 w-4 animate-spin text-[#1061AF]" />
+              ) : (
+                <Download className="h-4 w-4 text-[#1061AF]" />
+              )}
+              Exportar CSV
             </button>
           </div>
         </div>
-      </section>
 
-      {error && (
-        <ErrorState
-          description={error}
-          action={
-            <button
-              onClick={() => void loadLeads()}
-              className="h-9 rounded-lg bg-[#0B1F33] px-3 text-xs font-bold text-white"
+        {/* Métricas Principais */}
+        <section className="grid gap-3 sm:grid-cols-2">
+          <MetricCard
+            label="Total de leads filtrados"
+            value={total}
+            description="Estabelecimentos no resultado atual"
+            accent="#1061AF"
+          />
+          <MetricCard
+            label="Oportunidades de alta prioridade"
+            value={highPotentialCount}
+            description="Prioridade Alta ou Crítica (Score ≥ 65)"
+            accent="#ED1C24"
+          />
+        </section>
+
+        {/* Filtros e Busca */}
+        <section className="rounded-xl border border-[#DDE5EF] bg-white p-4 shadow-2xs">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
+            <label className="block">
+              <span className="mb-1 block text-[11px] font-bold uppercase text-[#64748B]">Busca</span>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#94A3B8]" />
+                <input
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Empresa, CNPJ ou cidade..."
+                  className="h-10 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] pl-9 pr-3 text-sm text-[#0B1F33] outline-none transition focus:border-[#1061AF] focus:bg-white"
+                />
+              </div>
+            </label>
+
+            <FilterSelect
+              label="Estado (UF)"
+              value={uf}
+              onChange={(newUf) => {
+                setUf(newUf);
+                setCity("Todas");
+              }}
             >
-              Tentar novamente
+              <option value="Todos">Todos</option>
+              {ESTADOS_UF.map((ufOption) => (
+                <option key={ufOption} value={ufOption}>
+                  {ufOption}
+                </option>
+              ))}
+            </FilterSelect>
+
+            <FilterSelect label="Cidade" value={city} onChange={setCity}>
+              <option value="Todas">Todas</option>
+              {cities
+                .filter(c => uf === "Todos" || c.uf === uf)
+                .map((option) => (
+                <option key={option.id} value={option.name}>
+                  {option.name}
+                </option>
+              ))}
+            </FilterSelect>
+
+            <FilterSelect label="Segmento / CNAE" value={cnae} onChange={setCnae}>
+              <option value="Todos">Todos os CNAEs</option>
+              {cnaes.map((option) => (
+                <option key={option.id} value={option.code}>
+                  {formatCnae(option.code)}
+                </option>
+              ))}
+            </FilterSelect>
+
+            <FilterSelect label="Prioridade" value={potentialLevel} onChange={setPotentialLevel}>
+              <option value="Todos">Todas as prioridades</option>
+              {Object.entries(potentialLabels).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </FilterSelect>
+
+            <FilterSelect label="Status Comercial" value={status} onChange={setStatus}>
+              <option value="Todos">Todos os status</option>
+              {Object.entries(statusLabels).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </FilterSelect>
+          </div>
+
+          <div className="mt-3 border-t border-[#EEF2F7] pt-3">
+            <button
+              type="button"
+              onClick={() => setAdvancedOpen((current) => !current)}
+              className="inline-flex h-8 items-center gap-2 rounded-md border border-[#DDE5EF] bg-white px-3 text-xs font-semibold text-[#0B1F33] transition hover:border-[#1061AF] cursor-pointer"
+            >
+              <SlidersHorizontal className="h-3.5 w-3.5 text-[#1061AF]" />
+              Filtros avançados
             </button>
-          }
-        />
-      )}
 
-      {loading || optionsLoading ? (
-        <LoadingState message="Carregando leads B2B..." />
-      ) : leads.length === 0 ? (
-        <EmptyState
-          title="Nenhum lead encontrado"
-          description="Ajuste os filtros ou revise a base de dados."
-        />
-      ) : (
-        <section className="overflow-hidden rounded-xl border border-[#DDE5EF] bg-white shadow-sm">
-          <div className="max-h-[68vh] overflow-auto">
-            <table className="w-full min-w-[1120px] text-left text-sm">
-              <thead className="sticky top-0 z-10 border-b border-[#DDE5EF] bg-[#F8FAFC] text-[11px] font-bold uppercase text-[#64748B] shadow-[0_1px_0_0_#DDE5EF]">
-                <tr>
-                  <th className="px-4 py-2.5">
-                    <SortButton
-                      active={sortBy === "company"}
-                      order={sortOrder}
-                      onClick={() => toggleSort("company")}
-                    >
-                      Empresa / CNPJ
-                    </SortButton>
-                  </th>
-                  <th className="px-4 py-2.5">
-                    <SortButton
-                      active={sortBy === "city"}
-                      order={sortOrder}
-                      onClick={() => toggleSort("city")}
-                    >
-                      Localização / CNAE
-                    </SortButton>
-                  </th>
-                  <th className="px-4 py-2.5">Status Comercial</th>
-                  <th className="px-4 py-2.5">
-                    <SortButton
-                      active={sortBy === "score"}
-                      order={sortOrder}
-                      onClick={() => toggleSort("score")}
-                    >
-                      Score
-                    </SortButton>
-                  </th>
-                  <th className="px-4 py-2.5">
-                    <SortButton
-                      active={sortBy === "potential"}
-                      order={sortOrder}
-                      onClick={() => toggleSort("potential")}
-                    >
-                      Oportunidade
-                    </SortButton>
-                  </th>
-                  <th className="px-4 py-2.5">Confiança / Verificação</th>
-                  <th className="px-4 py-2.5">Responsável</th>
-                  <th className="px-4 py-2.5 text-right">Ações</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#EEF2F7]">
-                {leads.map((lead) => {
-                  const leadName = companyName(lead.company);
-                  const isPriority = isPriorityOpportunity(lead.potentialLevel);
+            {advancedOpen && (
+              <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+                <FilterSelect
+                  label="Verificação de Endereço"
+                  value={statusVerificacaoEndereco}
+                  onChange={setStatusVerificacaoEndereco}
+                  compact
+                >
+                  <option value="Todos">Todos os status de endereço</option>
+                  <option value="confiavel_cadastralmente">Confiável cadastralmente</option>
+                  <option value="aproximado">Aproximado (GPS)</option>
+                  <option value="nao_verificado">Não verificado</option>
+                  <option value="verificado">Verificado</option>
+                  <option value="divergente">Divergente</option>
+                </FilterSelect>
+                <FilterSelect
+                  label="Validação Cadastral"
+                  value={pendenteValidacao}
+                  onChange={setPendenteValidacao}
+                  compact
+                >
+                  <option value="Todos">Qualquer estado</option>
+                  <option value="true">Apenas pendentes de validação</option>
+                  <option value="false">Sem pendência</option>
+                </FilterSelect>
+                <FilterSelect
+                  label="Situação Cadastral"
+                  value={situacaoCadastral}
+                  onChange={setSituacaoCadastral}
+                  compact
+                >
+                  <option value="Todos">Todas as situações</option>
+                  <option value="ATIVA">ATIVA</option>
+                  <option value="BAIXADA">BAIXADA</option>
+                  <option value="INAPTA">INAPTA</option>
+                  <option value="SUSPENSA">SUSPENSA</option>
+                  <option value="NULA">NULA</option>
+                </FilterSelect>
+              </div>
+            )}
 
-                  return (
-                    <tr key={lead.id} className="transition-colors hover:bg-[#F8FAFC]/80">
-                      <td className="px-4 py-2.5">
-                        <Link
-                          to="/leads-b2b/$leadId"
-                          params={{ leadId: lead.id }}
-                          className="flex min-w-0 items-start gap-2 text-left"
-                        >
-                          <div className="min-w-0">
-                            <div
-                              className="truncate font-bold leading-tight text-[#0B1F33] hover:text-[#1061AF]"
-                              title={leadName}
-                            >
-                              {leadName}
+            {/* Chips de filtros ativos */}
+            <div className="mt-3 flex flex-col gap-2 rounded-lg bg-[#F8FAFC] px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <span className="text-[11px] font-bold uppercase text-[#64748B]">
+                  Filtros aplicados
+                </span>
+                {activeFilters.length === 0 ? (
+                  <span className="text-xs text-[#94A3B8]">Nenhum filtro ativo</span>
+                ) : (
+                  activeFilters.map((filter) => (
+                    <button
+                      key={`${filter.label}-${filter.value}`}
+                      type="button"
+                      onClick={filter.clear}
+                      className="inline-flex max-w-full items-center gap-1 rounded-full border border-[#DDE5EF] bg-white px-2 py-1 text-[11px] font-semibold text-[#475569] transition hover:border-[#1061AF] hover:text-[#0B1F33] cursor-pointer"
+                    >
+                      <span className="truncate">
+                        {filter.label}: {filter.value}
+                      </span>
+                      <X className="h-3 w-3 shrink-0 text-[#64748B]" />
+                    </button>
+                  ))
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="h-8 shrink-0 rounded-md border border-[#DDE5EF] bg-white px-3 text-xs font-semibold text-[#0B1F33] transition hover:border-[#1061AF] cursor-pointer"
+              >
+                Limpar tudo
+              </button>
+            </div>
+          </div>
+        </section>
+
+        {/* Tabela de Leads */}
+        {error && (
+          <ErrorState
+            description={error}
+            action={
+              <button
+                onClick={() => void loadLeads()}
+                className="h-9 rounded-lg bg-[#0B1F33] px-3 text-xs font-semibold text-white cursor-pointer"
+              >
+                Tentar novamente
+              </button>
+            }
+          />
+        )}
+
+        {loading || optionsLoading ? (
+          <LoadingState message="Carregando lista de leads B2B..." />
+        ) : leads.length === 0 ? (
+          <EmptyState
+            title="Nenhum lead encontrado"
+            description="Ajuste os filtros de busca para encontrar estabelecimentos cadastrados."
+          />
+        ) : (
+          <section className="overflow-hidden rounded-xl border border-[#DDE5EF] bg-white shadow-2xs">
+            <div className="max-h-[68vh] overflow-auto">
+              <table className="w-full min-w-[1000px] text-left text-sm">
+                <thead className="sticky top-0 z-10 border-b border-[#DDE5EF] bg-[#F8FAFC] text-[11px] font-bold uppercase text-[#64748B] shadow-[0_1px_0_0_#DDE5EF]">
+                  <tr>
+                    <th className="px-4 py-3">
+                      <SortButton
+                        active={sortBy === "company"}
+                        order={sortOrder}
+                        onClick={() => toggleSort("company")}
+                      >
+                        Empresa
+                      </SortButton>
+                    </th>
+                    <th className="px-4 py-3">
+                      <SortButton
+                        active={sortBy === "city"}
+                        order={sortOrder}
+                        onClick={() => toggleSort("city")}
+                      >
+                        Localização / CNAE
+                      </SortButton>
+                    </th>
+                    <th className="px-4 py-3">Status comercial</th>
+                    <th className="px-4 py-3">
+                      <SortButton
+                        active={sortBy === "potential" || sortBy === "score"}
+                        order={sortOrder}
+                        onClick={() => toggleSort("score")}
+                      >
+                        Prioridade & Score
+                      </SortButton>
+                    </th>
+                    <th className="px-4 py-3">Contatos</th>
+                    <th className="px-4 py-3 text-center">Mapa</th>
+                    <th className="px-4 py-3 text-right">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#EEF2F7]">
+                  {leads.map((lead) => {
+                    const leadName = companyName(lead.company);
+                    const isCadastralPending = lead.company.pendenteValidacao || lead.company.statusVerificacaoEndereco === "divergente";
+                    const pendingReason = lead.company.pendenteValidacao
+                      ? "Validação cadastral pendente"
+                      : lead.company.statusVerificacaoEndereco === "divergente"
+                      ? "Endereço com divergência no mapa"
+                      : "Inconsistência cadastral";
+
+                    return (
+                      <tr key={lead.id} className="transition-colors hover:bg-[#F8FAFC]">
+                        {/* 1. Empresa (Nome + CNPJ discreto abaixo + Alerta condicional com tooltip) */}
+                        <td className="px-4 py-3">
+                          <div className="flex min-w-0 flex-col text-left">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <button
+                                onClick={() => setSelectedLeadId(lead.id)}
+                                className="truncate text-left font-bold leading-snug text-[#0B1F33] hover:text-[#1061AF] cursor-pointer"
+                                title={leadName}
+                              >
+                                {leadName}
+                              </button>
+                              {isCadastralPending && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="inline-flex shrink-0 cursor-help">
+                                      <AlertTriangle className="h-3.5 w-3.5 text-[#ED1C24]" />
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top" className="bg-[#0B1F33] text-white text-xs">
+                                    {pendingReason}
+                                  </TooltipContent>
+                                </Tooltip>
+                              )}
                             </div>
-                            <div className="mt-0.5 font-mono text-[11px] leading-tight text-[#64748B]">
+                            <div className="font-mono text-[11px] text-[#64748B] mt-0.5">
                               {formatCnpj(lead.company.cnpj)}
                             </div>
                           </div>
-                          {isPriority && (
-                            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#ED1C24]" />
-                          )}
-                        </Link>
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <div className="font-medium leading-tight text-[#0B1F33]">
-                          {lead.company.cidade}/{lead.company.uf}
-                        </div>
-                        <div className="mt-0.5 max-w-[220px] truncate text-[11px] leading-tight text-[#64748B]">
-                          {formatCnae(lead.company.cnaePrincipal)}
-                        </div>
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <span
-                          className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusClass()}`}
-                        >
-                          {statusLabels[lead.status]}
-                        </span>
-                        {lead.lastContactAt && (
-                          <div className="mt-1 text-[10px] text-[#94A3B8]">
-                            Último contato: {formatDateTime(lead.lastContactAt)}
+                        </td>
+
+                        {/* 2. Localização (Cidade/UF + CNAE secundário abaixo) */}
+                        <td className="px-4 py-3">
+                          <div className="font-semibold leading-snug text-[#0B1F33]">
+                            {lead.company.cidade}/{lead.company.uf}
                           </div>
-                        )}
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <ScoreBreakdownTooltip
-                          score={lead.score}
-                          variant="subtle"
-                          breakdown={lead.scoreBreakdown}
-                        />
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <span
-                          className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-bold ${priorityClass(lead.potentialLevel)}`}
-                        >
-                          {potentialLabels[lead.potentialLevel]}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <div className="font-semibold leading-tight text-[#0B1F33]">
-                          {calculateDataQualityScore(lead.company)}%
-                        </div>
-                        <div className="mt-0.5 max-w-[210px] truncate text-[11px] leading-tight text-[#64748B]">
-                          {verificationLabel(lead.company.statusVerificacaoEndereco)}
-                          {lead.company.pendenteValidacao ? " · Validação pendente" : ""}
-                        </div>
-                      </td>
-                      <td className="px-4 py-2.5">
-                        {lead.assignedTo ? (
-                          <span className="text-xs font-semibold text-[#0B1F33]">
-                            {lead.assignedTo.name}
+                          <div className="max-w-[220px] truncate text-[11px] text-[#64748B] mt-0.5" title={formatCnae(lead.company.cnaePrincipal)}>
+                            {formatCnae(lead.company.cnaePrincipal)}
+                          </div>
+                        </td>
+
+                        {/* 3. Status Comercial */}
+                        <td className="px-4 py-3">
+                          <span
+                            className={`inline-flex rounded-full border px-2.5 py-0.5 text-xs ${statusBadgeStyle(lead.status)}`}
+                          >
+                            {statusLabels[lead.status]}
                           </span>
-                        ) : (
-                          <button
-                            onClick={() => {
-                              if (currentUser?.id) {
-                                void quickUpdate(lead, { assignedToId: currentUser.id });
-                              } else {
-                                setSelectedLeadId(lead.id);
-                              }
-                            }}
-                            className="inline-flex items-center gap-1 text-xs font-semibold text-[#1061AF] hover:underline cursor-pointer"
-                            title="Atribuir este lead a você com 1 clique"
-                          >
-                            <UserPlus className="h-3.5 w-3.5" />
-                            Atribuir a mim
-                          </button>
-                        )}
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <div className="flex items-center justify-end gap-2">
+                          {lead.lastContactAt && (
+                            <div className="mt-1 text-[10px] text-[#94A3B8]">
+                              Último: {formatDateTime(lead.lastContactAt)}
+                            </div>
+                          )}
+                        </td>
+
+                        {/* 4. Prioridade & Score */}
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-bold ${priorityClass(lead.potentialLevel)}`}
+                            >
+                              {potentialLabels[lead.potentialLevel]}
+                            </span>
+                            <ScoreBreakdownTooltip
+                              score={lead.score}
+                              variant="subtle"
+                              breakdown={lead.scoreBreakdown}
+                            />
+                          </div>
+                        </td>
+
+                        {/* 5. Contatos (Pop-over único consolidado) */}
+                        <td className="px-4 py-3">
+                          <LeadContactsPopover company={lead.company} />
+                        </td>
+
+                        {/* 6. Abrir no Mapa */}
+                        <td className="px-4 py-3 text-center">
                           <Link
-                            to="/leads-b2b/$leadId"
-                            params={{ leadId: lead.id }}
-                            className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-[#0B1F33] px-3 text-xs font-bold text-white transition hover:bg-[#1061AF]"
+                            to="/mapa-oportunidades"
+                            search={{ companyId: lead.companyId, city: lead.company.cidade, uf: lead.company.uf }}
+                            className="inline-flex h-8 items-center gap-1 rounded-md border border-[#DDE5EF] bg-white px-2.5 text-xs font-semibold text-[#0B1F33] transition hover:border-[#1061AF] hover:text-[#1061AF] cursor-pointer"
+                            title="Visualizar este estabelecimento no mapa"
                           >
-                            <Eye className="h-3.5 w-3.5" />
-                            Abrir
+                            <MapPin className="h-3.5 w-3.5 text-[#ED1C24]" />
+                            <span>Abrir no mapa</span>
                           </Link>
+                        </td>
+
+                        {/* 7. Ações (Menu 3 pontos simplificado) */}
+                        <td className="px-4 py-3 text-right">
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <button className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[#DDE5EF] bg-white text-[#64748B] transition hover:border-[#1061AF] hover:text-[#0B1F33]">
+                              <button
+                                type="button"
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-[#DDE5EF] bg-white text-[#64748B] transition hover:border-[#1061AF] hover:text-[#0B1F33] cursor-pointer"
+                              >
                                 <EllipsisVertical className="h-4 w-4" />
                               </button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent
                               align="end"
-                              className="w-56 border-[#DDE5EF] bg-white text-[#0B1F33]"
+                              className="w-52 border-[#DDE5EF] bg-white text-[#0B1F33]"
                             >
+                              <DropdownMenuItem
+                                onClick={() => setSelectedLeadId(lead.id)}
+                                className="cursor-pointer"
+                              >
+                                <Eye className="h-4 w-4 text-[#1061AF] mr-2" />
+                                Ver detalhes
+                              </DropdownMenuItem>
                               <DropdownMenuItem
                                 onClick={() => void quickContact(lead)}
                                 className="cursor-pointer"
                               >
-                                <PhoneCall className="h-4 w-4 text-[#1061AF]" />
+                                <PhoneCall className="h-4 w-4 text-[#1061AF] mr-2" />
                                 Registrar contato
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
-                                onClick={() => void quickUpdate(lead, { status: "INTERESTED" })}
+                                onClick={() => void quickUpdateStatus(lead, "INTERESTED")}
                                 className="cursor-pointer"
                               >
-                                Marcar interessado
+                                Marcar como interessado
                               </DropdownMenuItem>
                               <DropdownMenuItem
-                                onClick={() => void quickUpdate(lead, { status: "NEGOTIATION" })}
+                                onClick={() => void quickUpdateStatus(lead, "NEGOTIATION")}
                                 className="cursor-pointer"
                               >
                                 Enviar para negociação
                               </DropdownMenuItem>
                               <DropdownMenuItem
-                                onClick={() => void quickUpdate(lead, { status: "CONVERTED" })}
-                                className="cursor-pointer"
+                                onClick={() => void quickUpdateStatus(lead, "CONVERTED")}
+                                className="cursor-pointer font-semibold text-emerald-700"
                               >
                                 Converter em cliente
                               </DropdownMenuItem>
+                              <DropdownMenuSeparator />
                               <DropdownMenuItem
-                                onClick={() => void quickUpdate(lead, { status: "NOT_INTERESTED" })}
-                                className="cursor-pointer text-[#B91C1C]"
+                                onClick={() => void quickUpdateStatus(lead, "NOT_INTERESTED")}
+                                className="cursor-pointer font-semibold text-[#ED1C24]"
                               >
                                 Descartar oportunidade
                               </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => void quickUpdateStatus(lead, "INACTIVE")}
+                                className="cursor-pointer text-slate-600"
+                              >
+                                Marcar como inativo / inexistente
+                              </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          <PaginationBar
-            page={page}
-            totalPages={totalPages}
-            total={total}
-            pageSize={PAGE_SIZE}
-            onPageChange={setPage}
-            label="leads"
-          />
-        </section>
-      )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <PaginationBar
+              page={page}
+              totalPages={totalPages}
+              total={total}
+              pageSize={PAGE_SIZE}
+              onPageChange={setPage}
+              label="leads"
+            />
+          </section>
+        )}
 
-      <LeadDetailsSheet
-        leadId={selectedLeadId}
-        open={!!selectedLeadId}
-        onOpenChange={(open) => {
-          if (!open) setSelectedLeadId(null);
-        }}
-        onUpdated={() => void loadLeads()}
-      />
-    </div>
+        <LeadDetailsSheet
+          leadId={selectedLeadId}
+          open={!!selectedLeadId}
+          onOpenChange={(open) => {
+            if (!open) setSelectedLeadId(null);
+          }}
+          onUpdated={() => void loadLeads()}
+        />
+      </div>
+    </TooltipProvider>
   );
 }
 
@@ -920,7 +892,7 @@ function MetricCard({
   accent: string;
 }) {
   return (
-    <div className="relative flex min-h-[76px] items-center justify-between gap-3 overflow-hidden rounded-lg border border-[#DDE5EF] bg-white px-4 py-3 shadow-sm">
+    <div className="relative flex min-h-[76px] items-center justify-between gap-3 overflow-hidden rounded-lg border border-[#DDE5EF] bg-white px-4 py-3 shadow-2xs">
       <span
         className="absolute inset-y-3 left-0 w-[3px] rounded-r-full"
         style={{ background: accent }}
@@ -955,7 +927,7 @@ function FilterSelect({
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className={`${compact ? "h-9 text-xs" : "h-10 text-sm"} w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-[#0B1F33] outline-none transition focus:border-[#1061AF]`}
+        className={`${compact ? "h-9 text-xs" : "h-10 text-sm"} w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-[#0B1F33] outline-none transition focus:border-[#1061AF] focus:bg-white`}
       >
         {children}
       </select>
@@ -978,7 +950,7 @@ function SortButton({
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex items-center gap-1 hover:text-[#0B1F33]"
+      className="inline-flex items-center gap-1 hover:text-[#0B1F33] cursor-pointer"
     >
       {children}
       <ArrowDownUp className={`h-3.5 w-3.5 ${active ? "text-[#1061AF]" : "text-[#CBD5E1]"}`} />

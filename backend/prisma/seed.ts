@@ -3,22 +3,33 @@ import { PrismaClient, UserRole } from "@prisma/client";
 import * as bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
-const isProduction = process.env.NODE_ENV === "production";
+const databaseUrl = process.env.DIRECT_URL || process.env.DATABASE_URL || "";
 
-function getRequiredPassword(envVar: string, fallback: string): string {
+function isLocalDatabase(url: string): boolean {
+  try {
+    const hostname = new URL(url).hostname.toLowerCase();
+    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+  } catch {
+    return false;
+  }
+}
+
+function getRequiredPassword(envVar: string): string {
   const value = process.env[envVar];
   if (value) return value;
-  if (isProduction) {
-    console.error(`❌ SEGURANÇA: ${envVar} é obrigatória em produção. Defina antes de executar o seed.`);
-    process.exit(1);
-  }
-  console.warn(`⚠️  ${envVar} não definida. Usando senha padrão de desenvolvimento.`);
-  return fallback;
+  throw new Error(`SEGURANÇA: ${envVar} é obrigatória; o seed não possui senha padrão.`);
 }
 
 async function main() {
-  const adminPassword = await bcrypt.hash(getRequiredPassword("SEED_ADMIN_PASSWORD", "admin123"), 12);
-  const salesPassword = await bcrypt.hash(getRequiredPassword("SEED_SALES_PASSWORD", "deusa123"), 12);
+  if (process.env.RUN_SEED !== "true") {
+    throw new Error("Seed não autorizado. Defina RUN_SEED=true somente para uma base nova e revisada.");
+  }
+  if (!isLocalDatabase(databaseUrl)) {
+    throw new Error("Seed bloqueado: somente bancos locais dedicados são aceitos.");
+  }
+
+  const adminPassword = await bcrypt.hash(getRequiredPassword("SEED_ADMIN_PASSWORD"), 12);
+  const salesPassword = await bcrypt.hash(getRequiredPassword("SEED_SALES_PASSWORD"), 12);
 
   const admin = await prisma.user.upsert({
     where: { email: "admin@deusa.com.br" },
@@ -129,7 +140,7 @@ async function main() {
       { code: "4712100", description: "Minimercados, mercearias e armazéns", category: "Minimercados e Mercearias", isTarget: true },
       { code: "4722901", description: "Comércio varejista de carnes - Açougues", category: "Açougues", isTarget: true },
       { code: "4724500", description: "Comércio varejista de hortifrutigranjeiros", category: "Varejo alimentar (Pequeno porte)", isTarget: false },
-      { code: "4721102", description: "Padarias e confeitarias com predominância de revenda", category: "Varejo alimentar (Pequeno porte)", isTarget: false },
+      { code: "4721102", description: "Padarias e confeitarias com predominância de revenda", category: "Minimercados e Mercearias", isTarget: true },
       { code: "4729699", description: "Comércio varejista de produtos alimentícios em geral", category: "Varejo alimentar (Pequeno porte)", isTarget: false },
       { code: "4723700", description: "Comércio varejista de peixes e frutos do mar - Peixarias", category: "Varejo alimentar (Pequeno porte)", isTarget: false },
       { code: "4639701", description: "Comércio atacadista de produtos alimentícios em geral", category: "Atacado alimentar", isTarget: false },
@@ -154,4 +165,3 @@ main()
     await prisma.$disconnect();
     process.exit(1);
   });
-

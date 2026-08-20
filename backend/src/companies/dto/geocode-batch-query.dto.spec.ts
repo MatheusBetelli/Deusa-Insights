@@ -4,13 +4,18 @@ import { test } from "node:test";
 import { plainToInstance } from "class-transformer";
 import { validate } from "class-validator";
 import { GeocodeBatchQueryDto } from "./geocode-batch-query.dto";
+import { VerifyGoogleBatchQueryDto } from "./verify-google-batch-query.dto";
 
 test("GeocodeBatchQueryDto normaliza CNAE formatado e boolean de query string", async () => {
-  const dto = plainToInstance(GeocodeBatchQueryDto, {
-    cnaeCode: "4712-1/00",
-    limit: "25",
-    force: "true",
-  });
+  const dto = plainToInstance(
+    GeocodeBatchQueryDto,
+    {
+      cnaeCode: "4712-1/00",
+      limit: "25",
+      force: "true",
+    },
+    { enableImplicitConversion: true },
+  );
 
   const errors = await validate(dto);
 
@@ -18,6 +23,24 @@ test("GeocodeBatchQueryDto normaliza CNAE formatado e boolean de query string", 
   assert.strictEqual(dto.cnaeCode, "4712100");
   assert.strictEqual(dto.limit, 25);
   assert.strictEqual(dto.force, true);
+});
+
+test("DTOs de lote preservam false com conversao implicita habilitada", async () => {
+  const geocode = plainToInstance(
+    GeocodeBatchQueryDto,
+    { force: "false" },
+    { enableImplicitConversion: true },
+  );
+  const verification = plainToInstance(
+    VerifyGoogleBatchQueryDto,
+    { dryRun: "false" },
+    { enableImplicitConversion: true },
+  );
+
+  assert.strictEqual((await validate(geocode)).length, 0);
+  assert.strictEqual((await validate(verification)).length, 0);
+  assert.strictEqual(geocode.force, false);
+  assert.strictEqual(verification.dryRun, false);
 });
 
 test("GeocodeBatchQueryDto rejeita limite excessivo e CNAE malformado", async () => {

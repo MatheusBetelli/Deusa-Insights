@@ -51,6 +51,8 @@ export type MonthlyEvolutionPoint = {
   year: number;
   activeClients: number;
   positivatedClients: number;
+  negotiationsCount?: number;
+  newLeads?: number;
 };
 
 export type CityTerritorialRanking = {

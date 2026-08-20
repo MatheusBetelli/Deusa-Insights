@@ -14,6 +14,10 @@ function cleanString(str: string): string {
 }
 
 async function main() {
+  throw new Error(
+    "Script desativado: ele altera coordenadas já importadas. Faça auditoria somente leitura e aprove uma estratégia de correção antes de reativá-lo.",
+  );
+
   console.log("\n=======================================================");
   console.log(" DEUSA ANALYTICS — SANITIZAÇÃO DE COORDENADAS DIVERGENTES ");
   console.log("=======================================================\n");

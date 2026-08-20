@@ -20,13 +20,10 @@ npm run dev
 
 ---
 
-## 🔑 Credenciais de Acesso (Seed Users)
+## 🔑 Usuários de desenvolvimento
 
-| Perfil | E-mail | Senha |
-| :--- | :--- | :--- |
-| **Administrador** | `admin@deusa.com.br` | `admin123` |
-| **Comercial** | `rafael.mendes@deusa.com.br` | `deusa123` |
-| **Gerente** | `mariana.alves@deusa.com.br` | `deusa123` |
+O seed é opt-in e aceita somente banco local dedicado. Antes de executá-lo, defina
+`RUN_SEED=true`, `SEED_ADMIN_PASSWORD` e `SEED_SALES_PASSWORD`; não existem senhas padrão.
 
 ---
 

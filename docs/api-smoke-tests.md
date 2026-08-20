@@ -95,7 +95,7 @@ Comando:
 ```bash
 curl -s -X POST "$API_URL/auth/login" \
   -H "Content-Type: application/json" \
-  -d '{"email":"rafael.mendes@deusa.com.br","password":"deusa123"}'
+  -d '{"email":"<email-configurado>","password":"<senha-configurada>"}'
 ```
 
 Resultado esperado:

@@ -1,12 +1,13 @@
 import { BadRequestException, Injectable, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcryptjs";
-import { Resend } from "resend";
 import { PrismaService } from "../prisma/prisma.service";
 import { ChangePasswordDto } from "./dto/change-password.dto";
 import { LoginDto } from "./dto/login.dto";
 import { ResetPasswordDto } from "./dto/reset-password.dto";
 import { escapeHtml } from "../common/html-safety";
+
+const DUMMY_PASSWORD_HASH = "$2b$12$LHnUBoIInYMJZXnrv95KwOp0eaXS0xp/NCr8/Tzrf5dNJKZlSPLHK";
 
 @Injectable()
 export class AuthService {
@@ -16,13 +17,18 @@ export class AuthService {
   ) {}
 
   async login(dto: LoginDto) {
-    const user = await this.prisma.user.findUnique({ where: { email: dto.email.toLowerCase() } });
-    if (!user) throw new UnauthorizedException("Credenciais inválidas");
+    const user = await this.prisma.user.findUnique({ where: { email: dto.email.trim().toLowerCase() } });
+    const passwordMatches = await bcrypt.compare(dto.password, user?.passwordHash ?? DUMMY_PASSWORD_HASH);
+    if (!user || !passwordMatches) throw new UnauthorizedException("Credenciais inválidas");
 
-    const passwordMatches = await bcrypt.compare(dto.password, user.passwordHash);
-    if (!passwordMatches) throw new UnauthorizedException("Credenciais inválidas");
-
-    const payload = { sub: user.id, email: user.email, role: user.role, name: user.name };
+    const payload = {
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+      name: user.name,
+      type: "access",
+      ver: user.updatedAt.getTime(),
+    };
     const accessToken = await this.jwtService.signAsync(payload);
 
     return {
@@ -57,24 +63,32 @@ export class AuthService {
     if (!passwordMatches) throw new UnauthorizedException("Senha atual inválida");
 
     const passwordHash = await bcrypt.hash(dto.newPassword, 12);
-    await this.prisma.user.update({
-      where: { id: userId },
+    const updateResult = await this.prisma.user.updateMany({
+      where: { id: userId, updatedAt: user.updatedAt },
       data: { passwordHash },
     });
+    if (updateResult.count !== 1) {
+      throw new BadRequestException("A conta foi alterada durante a troca de senha. Tente novamente.");
+    }
 
     return { message: "Senha alterada com sucesso" };
   }
 
   async forgotPassword(email: string) {
-    const user = await this.prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+    const user = await this.prisma.user.findUnique({ where: { email: email.trim().toLowerCase() } });
     
     if (user) {
       const resetToken = await this.jwtService.signAsync(
-        { sub: user.id, email: user.email, type: "password_reset" },
+        {
+          sub: user.id,
+          email: user.email,
+          type: "password_reset",
+          ver: user.updatedAt.getTime(),
+        },
         { expiresIn: "1h" },
       );
 
-      const frontendUrl = process.env.FRONTEND_URL || "http://localhost:8080";
+      const frontendUrl = (process.env.FRONTEND_URL || "http://localhost:8080").replace(/\/+$/, "");
       const resetLink = `${frontendUrl}/reset-password?token=${resetToken}`;
       const safeResetLink = escapeHtml(resetLink);
       const safeUserName = escapeHtml(user.name);
@@ -82,12 +96,18 @@ export class AuthService {
       const resendApiKey = process.env.RESEND_API_KEY;
       if (resendApiKey) {
         try {
-          const resend = new Resend(resendApiKey);
-          await resend.emails.send({
-            from: process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev",
-            to: user.email,
-            subject: "Redefinição de Senha - Deusa Analytics",
-            html: `
+          const response = await fetch("https://api.resend.com/emails", {
+            method: "POST",
+            signal: AbortSignal.timeout(10_000),
+            headers: {
+              Authorization: `Bearer ${resendApiKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              from: process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev",
+              to: [user.email],
+              subject: "Redefinição de Senha - Deusa Analytics",
+              html: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background-color: #ffffff;">
                 <h2 style="color: #1061AF; margin-top: 0;">Deusa Analytics</h2>
                 <h3 style="color: #0f172a;">Solicitação de Redefinição de Senha</h3>
@@ -99,7 +119,11 @@ export class AuthService {
                 <p style="color: #64748b; font-size: 13px; line-height: 1.5; margin-bottom: 0;">Se você não solicitou a redefinição de senha, ignore este e-mail com segurança. Este link expira em 1 hora.</p>
               </div>
             `,
+            }),
           });
+          if (!response.ok) {
+            throw new Error(`Resend retornou HTTP ${response.status}`);
+          }
         } catch (error) {
           console.error("[Resend Email Error]:", error instanceof Error ? error.message : "Falha ao enviar e-mail");
         }
@@ -124,7 +148,7 @@ export class AuthService {
 
     let payload: any;
     try {
-      payload = await this.jwtService.verifyAsync(dto.token);
+      payload = await this.jwtService.verifyAsync(dto.token, { algorithms: ["HS256"] });
     } catch {
       throw new BadRequestException("O link de redefinição de senha é inválido ou expirou.");
     }
@@ -137,14 +161,19 @@ export class AuthService {
     if (!user) {
       throw new UnauthorizedException("Usuário não encontrado.");
     }
+    if (payload.ver !== user.updatedAt.getTime()) {
+      throw new BadRequestException("Este link de redefinição já foi utilizado ou invalidado.");
+    }
 
     const passwordHash = await bcrypt.hash(dto.newPassword, 12);
-    await this.prisma.user.update({
-      where: { id: user.id },
+    const updateResult = await this.prisma.user.updateMany({
+      where: { id: user.id, updatedAt: user.updatedAt },
       data: { passwordHash },
     });
+    if (updateResult.count !== 1) {
+      throw new BadRequestException("Este link de redefinição já foi utilizado ou invalidado.");
+    }
 
     return { message: "Sua senha foi redefinida com sucesso! Você já pode fazer login com sua nova senha." };
   }
 }
-

@@ -8,6 +8,7 @@ import { isNonFoodBusiness } from "./non-food-filter";
  *     - Minimercados (CNAE 4712100)
  *     - Supermercados (CNAE 4711302)
  *     - Hipermercados (CNAE 4711301)
+ *     - Mercearias / revenda (CNAE 4721102)
  *     - Açougues (CNAE 4722901)
  *  2. Não é uma propriedade rural (fazenda, sítio, estância, chácara, etc.).
  *  3. Está localizado dentro da área urbana da cidade analisada (raio geodésico em relação ao centroide IBGE).
@@ -18,6 +19,7 @@ export const TARGET_OPPORTUNITY_CNAES = new Set<string>([
   "4711301", // Hipermercados 🏬
   "4711302", // Supermercados 🛒
   "4712100", // Minimercados / Mercados 🏪
+  "4721102", // Mercearias / revenda de panificados 🥖
   "4722901", // Açougues 🥩
 ]);
 
@@ -146,7 +148,10 @@ export function buildCnaeWhereInput(code?: string | null) {
     };
   }
   return {
-    cnaePrincipal: { in: getAllTargetCnaeVariants() },
+    OR: [
+      { cnaePrincipal: { in: getAllTargetCnaeVariants() } },
+      { cnaes: { some: { cnaeCode: { in: getAllTargetCnaeVariants() } } } },
+    ],
   };
 }
 
@@ -242,6 +247,7 @@ export function isWithinUrbanTerritory(
 export function isValidOpportunity(company: {
   situacaoCadastral?: string | null;
   cnaePrincipal?: string | null;
+  cnaes?: Array<{ cnaeCode?: string | null }> | null;
   cidade?: string | null;
   uf?: string | null;
   latitude?: number | null;
@@ -254,12 +260,15 @@ export function isValidOpportunity(company: {
 }): boolean {
   // 1. Situação cadastral deve ser ATIVA
   const status = (company.situacaoCadastral || "").toUpperCase().trim();
-  if (status && status !== "ATIVA" && status !== "ATIVO") {
+  if (status !== "ATIVA" && status !== "ATIVO") {
     return false;
   }
 
-  // 2. Categoria (CNAE) deve pertencer exclusivamente às 4 categorias autorizadas
-  if (!isValidOpportunityCnae(company.cnaePrincipal)) {
+  // 2. Categoria (CNAE principal ou secundário) deve pertencer ao escopo autorizado
+  const hasTargetCnae =
+    isValidOpportunityCnae(company.cnaePrincipal) ||
+    Boolean(company.cnaes?.some((item) => isValidOpportunityCnae(item.cnaeCode)));
+  if (!hasTargetCnae) {
     return false;
   }
 

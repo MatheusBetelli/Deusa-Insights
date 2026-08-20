@@ -77,7 +77,7 @@ export class PipelineService {
       this.prisma.lead.count({ where }),
       this.prisma.lead.findMany({
         where,
-        include: { company: true, assignedTo: { select: safeAssignedToSelect } },
+        include: { company: { include: { cnaes: true } }, assignedTo: { select: safeAssignedToSelect } },
         orderBy: [{ score: "desc" }, { createdAt: "desc" }],
         skip: (page - 1) * pageSize,
         take: pageSize,
@@ -88,10 +88,10 @@ export class PipelineService {
 
     return {
       status: typedStatus,
-      total: validItems.length,
+      total,
       page,
       pageSize,
-      totalPages: Math.max(1, Math.ceil(validItems.length / pageSize)),
+      totalPages: Math.max(1, Math.ceil(total / pageSize)),
       items: validItems.map((lead) => this.toCard(lead)),
     };
   }
@@ -104,7 +104,7 @@ export class PipelineService {
   ) {
     const leads = await this.prisma.lead.findMany({
       where: this.buildWhere(query, status),
-      include: { company: true, assignedTo: { select: safeAssignedToSelect } },
+      include: { company: { include: { cnaes: true } }, assignedTo: { select: safeAssignedToSelect } },
       orderBy: [{ score: "desc" }, { createdAt: "desc" }],
       skip: (page - 1) * pageSize,
       take: pageSize,
@@ -150,13 +150,17 @@ export class PipelineService {
 
   private toCard(
     lead: Prisma.LeadGetPayload<{
-      include: { company: true; assignedTo: { select: typeof safeAssignedToSelect } };
+      include: {
+        company: { include: { cnaes: true } };
+        assignedTo: { select: typeof safeAssignedToSelect };
+      };
     }>,
   ) {
     const fullScore = calculateOpportunityScoreDetails({
       cnpj: lead.company.cnpj,
       situacaoCadastral: lead.company.situacaoCadastral,
       cnaePrincipal: lead.company.cnaePrincipal,
+      cnaes: lead.company.cnaes,
       nomeFantasia: lead.company.nomeFantasia,
       porte: lead.company.porte,
       cidade: lead.company.cidade,

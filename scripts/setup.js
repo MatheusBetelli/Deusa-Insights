@@ -32,6 +32,22 @@ function copyEnvIfNotExists(examplePath, targetPath, name) {
   }
 }
 
+function readEnvValue(filePath, name) {
+  if (process.env[name]) return process.env[name];
+  if (!fs.existsSync(filePath)) return "";
+  const match = fs.readFileSync(filePath, "utf8").match(new RegExp(`^${name}\\s*=\\s*(.*)$`, "m"));
+  return match ? match[1].trim().replace(/^['"]|['"]$/g, "") : "";
+}
+
+function isLocalDatabaseUrl(rawUrl) {
+  try {
+    const hostname = new URL(rawUrl).hostname.toLowerCase();
+    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+  } catch {
+    return false;
+  }
+}
+
 function checkTcpConnection(host, port) {
   return new Promise((resolve) => {
     const socket = new net.Socket();
@@ -123,6 +139,13 @@ async function runSetup() {
   // 5. Prisma Generate & Migrate
   logStep("Gerando Prisma Client e aplicando migrations...");
   const backendDir = path.join(rootDir, "backend");
+  const backendEnvPath = path.join(backendDir, ".env");
+  const migrationUrl =
+    readEnvValue(backendEnvPath, "DIRECT_URL") || readEnvValue(backendEnvPath, "DATABASE_URL");
+  if (!isLocalDatabaseUrl(migrationUrl)) {
+    logError("Setup local bloqueado: backend/.env não aponta para um banco PostgreSQL local.");
+    process.exit(1);
+  }
   try {
     execSync("npx prisma generate", { stdio: "inherit", cwd: backendDir, shell: true });
     logSuccess("Prisma Client gerado com sucesso.");
@@ -134,13 +157,17 @@ async function runSetup() {
     process.exit(1);
   }
 
-  // 6. Executar Seed se necessário
-  logStep("Verificando seed inicial do banco de dados...");
-  try {
-    execSync("npm run seed", { stdio: "inherit", cwd: backendDir, shell: true });
-    logSuccess("Seed de dados iniciais verificado com sucesso.");
-  } catch (err) {
-    logWarn("Falha ao executar o seed do banco de dados. (O banco pode já conter dados cadastrados).");
+  // 6. Seed somente com opt-in explícito para não alterar uma base existente.
+  if (process.env.RUN_SEED === "true") {
+    logStep("Executando seed autorizado por RUN_SEED=true...");
+    try {
+      execSync("npm run seed", { stdio: "inherit", cwd: backendDir, shell: true });
+      logSuccess("Seed inicial executado com sucesso.");
+    } catch (err) {
+      logWarn("Falha ao executar o seed autorizado.");
+    }
+  } else {
+    logWarn("Seed não executado. Defina RUN_SEED=true somente para uma base nova e vazia.");
   }
 
   // 7. Resumo Final

@@ -1,4 +1,4 @@
-import { Controller, Get, Logger } from "@nestjs/common";
+import { Controller, Get, Logger, ServiceUnavailableException } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
 
 @Controller("health")
@@ -16,14 +16,14 @@ export class HealthController {
         database: "connected",
         timestamp: new Date().toISOString(),
       };
-    } catch (err) {
-      this.logger.warn(`Database health check failed: ${err instanceof Error ? err.message : "unknown error"}`);
-      return {
+    } catch {
+      this.logger.warn("Database health check failed.");
+      throw new ServiceUnavailableException({
         status: "error",
         database: "disconnected",
         error: "Database connection failed",
         timestamp: new Date().toISOString(),
-      };
+      });
     }
   }
 }

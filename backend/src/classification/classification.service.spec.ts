@@ -27,7 +27,7 @@ test("ClassificationService - classifica supermercado grande ativo corretamente"
   assert.ok(res.score >= 75);
 });
 
-test("ClassificationService - classifica padaria pequena em cidade menor", () => {
+test("ClassificationService - classifica CNAE de mercearia autorizado em cidade menor", () => {
   const service = new ClassificationService();
   const company = {
     id: "2",
@@ -44,7 +44,7 @@ test("ClassificationService - classifica padaria pequena em cidade menor", () =>
 
   const res = service.classifyCompany(company);
 
-  assert.equal(res.type, "Padaria");
+  assert.equal(res.type, "Mercearia");
   assert.equal(res.size, "Pequeno");
   assert.equal(res.region, "Região Sul/Sudeste");
   assert.ok(res.score >= 50);
@@ -67,8 +67,25 @@ test("ClassificationService - lida com empresa sem CNAE e sem porte", () => {
 
   const res = service.classifyCompany(company);
 
-  assert.equal(res.type, "Outro");
+  assert.equal(res.type, "Fora do escopo");
   assert.equal(res.size, "Médio");
   assert.equal(res.region, "Recife / PE");
-  assert.equal(res.potentialLevel, "MEDIUM");
+  assert.equal(res.potentialLevel, "LOW");
+});
+
+test("ClassificationService - não promove atacadista fora do escopo comercial", () => {
+  const service = new ClassificationService();
+  const company = {
+    cnaePrincipal: "4639701",
+    porte: "GRANDE",
+    cidade: "Garça",
+    uf: "SP",
+    situacaoCadastral: "ATIVA",
+    statusVerificacaoEndereco: "verificado",
+  } as Company;
+
+  const res = service.classifyCompany(company);
+  assert.equal(res.type, "Fora do escopo");
+  assert.equal(res.score, 0);
+  assert.equal(res.potentialLevel, "LOW");
 });

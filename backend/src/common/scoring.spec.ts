@@ -53,6 +53,38 @@ test("calculateOpportunityScoreDetails limita o score e garante nível LOW para 
   assert.equal(result.level, PotentialLevel.LOW);
 });
 
+test("calculateOpportunityScoreDetails usa o escopo central e exige situação ativa", () => {
+  const mercearia = calculateOpportunityScoreDetails({
+    situacaoCadastral: "ATIVA",
+    cnaePrincipal: "4721102",
+    nomeFantasia: "Mercearia Teste",
+    cidade: "Garça",
+  });
+  const semSituacao = calculateOpportunityScoreDetails({
+    situacaoCadastral: "",
+    cnaePrincipal: "4712100",
+    nomeFantasia: "Mercado sem situação",
+    cidade: "Garça",
+  });
+
+  assert.equal(mercearia.breakdown.perfilPts, 30);
+  assert.ok(semSituacao.score <= 30);
+  assert.equal(semSituacao.level, PotentialLevel.LOW);
+});
+
+test("calculateOpportunityScoreDetails reconhece CNAE alvo secundário", () => {
+  const result = calculateOpportunityScoreDetails({
+    situacaoCadastral: "ATIVA",
+    cnaePrincipal: "9999999",
+    cnaes: [{ cnaeCode: "4721102" }],
+    nomeFantasia: "Mercearia Secundária",
+    cidade: "Garça",
+  });
+
+  assert.equal(result.breakdown.perfilPts, 30);
+  assert.ok(result.score > 30);
+});
+
 test("calculateGarcaDistance calcula distancias por coordenadas ou nome de cidade", () => {
   const distGarca = calculateGarcaDistance(-22.2131, -49.6553, "Garça");
   assert.equal(distGarca, 0);
@@ -67,4 +99,3 @@ test("getPotentialLevel mapeia corretamente os niveis de oportunidade conforme n
   assert.equal(getPotentialLevel(50), PotentialLevel.MEDIUM);   // 45–64: Média
   assert.equal(getPotentialLevel(30), PotentialLevel.LOW);      // 0–44: Baixa
 });
-

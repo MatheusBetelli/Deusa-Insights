@@ -54,17 +54,17 @@ export const Route = createFileRoute("/_app/base-de-dados")({
     tab: search.tab === "companies" || search.tab === "cities" || search.tab === "cnaes" ? search.tab : undefined,
     search: typeof search.search === "string" ? search.search : undefined,
     uf: typeof search.uf === "string" ? search.uf : undefined,
-    page: typeof search.page === "number" ? search.page : typeof search.page === "string" ? parseInt(search.page, 10) || 1 : undefined,
+    page:
+      typeof search.page === "number"
+        ? search.page
+        : typeof search.page === "string"
+          ? parseInt(search.page, 10) || 1
+          : undefined,
   }),
   beforeLoad: () => {
-    if (typeof window !== "undefined") {
-      const user = AuthService.getUser();
-      if (user && user.role?.toUpperCase() === "SALES") {
-        throw redirect({ to: "/dashboard" });
-      }
-    }
+    throw redirect({ to: "/leads-b2b" });
   },
-  component: BaseDeDados,
+  component: () => null,
 });
 
 type Tab = "companies" | "cities" | "cnaes";

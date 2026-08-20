@@ -18,7 +18,7 @@
     "geocode": "ts-node scripts/run-google-geocoding.ts",
     "quality:report": "ts-node scripts/generate-quality-report.ts",
     "lint": "tsc --noEmit",
-    "test": "node -r ts-node/register --test 'src/**/*.spec.ts'"
+    "test": "node -r reflect-metadata -r ts-node/register --test 'src/**/*.spec.ts'"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.9",
@@ -34,10 +34,10 @@
     "class-validator": "^0.14.3",
     "dotenv": "^17.2.3",
     "helmet": "^8.3.0",
+    "read-excel-file": "^9.3.10",
     "reflect-metadata": "^0.2.2",
-    "resend": "^6.18.0",
     "rxjs": "^7.8.2",
-    "xlsx": "^0.18.5"
+    "unzipper-esm": "^0.13.3"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",

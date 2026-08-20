@@ -167,10 +167,12 @@ export function ExecutiveDashboardMap({
   useEffect(() => {
     if (!mapReady || !mapRef.current) return;
     const map = mapRef.current;
+    let cancelled = false;
 
     (async () => {
       const LeafletModule = await import("leaflet");
       const Leaflet = LeafletModule.default || LeafletModule;
+      if (cancelled || !mapRef.current) return;
       (window as any).L = Leaflet;
 
       if (clusterRef.current) {
@@ -189,6 +191,7 @@ export function ExecutiveDashboardMap({
       }
 
       await import("leaflet.markercluster");
+      if (cancelled || !mapRef.current) return;
 
       const clusterGroup = (Leaflet as any).markerClusterGroup({
         chunkedLoading: true,
@@ -248,6 +251,7 @@ export function ExecutiveDashboardMap({
         bounds.extend([p.latitude, p.longitude]);
       }
 
+      if (cancelled || !mapRef.current) return;
       map.addLayer(clusterGroup);
       clusterRef.current = clusterGroup;
 
@@ -255,6 +259,10 @@ export function ExecutiveDashboardMap({
         map.fitBounds(bounds, { padding: [30, 30], maxZoom: 14 });
       }
     })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [filteredPoints, mapReady]);
 
   return (

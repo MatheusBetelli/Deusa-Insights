@@ -18,6 +18,10 @@ const TOM_CITY_MAP: Record<string, string> = {
 };
 
 async function run() {
+  throw new Error(
+    "Script legado desativado: ele sobrescreve dados cadastrais existentes e inventa valores ausentes. Use o fluxo de importação validado e idempotente.",
+  );
+
   const csvPath = path.resolve(__dirname, "../../dadosCNAE/sp_4712100_estabelecimentos.csv");
   if (!fs.existsSync(csvPath)) {
     console.error(`❌ Arquivo CSV não encontrado: ${csvPath}`);

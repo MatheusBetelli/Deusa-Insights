@@ -1,9 +1,10 @@
-import { Type } from "class-transformer";
-import { IsArray, IsDate, IsNumber, IsOptional, IsString, Length, MaxLength } from "class-validator";
+import { Transform, Type } from "class-transformer";
+import { IsArray, IsDate, IsNumber, IsOptional, IsString, Length, Matches, Max, MaxLength, Min } from "class-validator";
 
 export class CreateCompanyDto {
   @IsString()
-  @MaxLength(32)
+  @Transform(({ value }) => (typeof value === "string" ? value.replace(/\D/g, "") : value))
+  @Matches(/^\d{14}$/, { message: "cnpj deve conter 14 dígitos" })
   cnpj!: string;
 
   @IsString()
@@ -75,11 +76,15 @@ export class CreateCompanyDto {
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
+  @Min(-90)
+  @Max(90)
   latitude?: number;
 
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
+  @Min(-180)
+  @Max(180)
   longitude?: number;
 
   @IsOptional()

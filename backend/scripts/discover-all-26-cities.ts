@@ -11,6 +11,10 @@ const MONITORED_CITIES = [
 ];
 
 async function main() {
+  throw new Error(
+    "Script desativado: descoberta regional em massa por API paga não é permitida. Use apenas correção individual explicitamente autorizada.",
+  );
+
   console.log('🚀 Iniciando Descoberta Completa para as 26 Cidades Monitoradas via Google Places...\n');
   const prisma = new PrismaClient();
   const geocoding = new GeocodingService();

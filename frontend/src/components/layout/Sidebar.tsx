@@ -10,6 +10,7 @@ import {
   ShieldCheck,
   PanelLeftClose,
   PanelLeftOpen,
+  LogOut,
   X,
 } from "lucide-react";
 import { DeusaLogo } from "./Logo";
@@ -73,13 +74,6 @@ const navigationGroups: NavGroup[] = [
         badge: "Receita",
         roles: ["ADMIN"],
       },
-      {
-        to: "/base-de-dados",
-        label: "Base de Dados",
-        icon: Database,
-        badge: null,
-        roles: ["ADMIN", "MANAGER"],
-      },
     ],
   },
   {
@@ -118,7 +112,7 @@ export function Sidebar({
     setUser(AuthService.getUser());
   }, []);
 
-  const userRoleUpper = (user?.role || "ADMIN").toUpperCase();
+  const userRoleUpper = (user?.role || "SALES").toUpperCase();
 
   return (
     <>
@@ -379,8 +373,8 @@ export function Sidebar({
           {!collapsed ? (
             <div className="flex items-center justify-between rounded-lg border border-slate-800 bg-[#0D1C2D] p-2.5 shadow-xs">
               <div className="flex items-center gap-2.5 min-w-0">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[#1061AF] text-xs font-extrabold text-white">
-                  {mounted ? user?.name?.substring(0, 2).toUpperCase() || "DE" : "DE"}
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white p-1 border border-slate-700 shadow-xs overflow-hidden">
+                  <DeusaLogo className="h-5 w-auto object-contain" />
                 </div>
 
                 <div className="flex flex-col min-w-0">
@@ -400,22 +394,38 @@ export function Sidebar({
                 </div>
               </div>
 
-              <Link
-                to="/configuracoes"
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-colors"
-                title="Configurações"
-              >
-                <Settings className="h-3.5 w-3.5" />
-              </Link>
+              <div className="flex items-center gap-1">
+                <Link
+                  to="/configuracoes"
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-colors"
+                  title="Configurações"
+                >
+                  <Settings className="h-3.5 w-3.5" />
+                </Link>
+                <button
+                  onClick={() => {
+                    AuthService.logout();
+                    window.location.href = "/login";
+                  }}
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-400 hover:bg-red-950/50 hover:text-red-400 transition-colors"
+                  title="Sair do sistema"
+                >
+                  <LogOut className="h-3.5 w-3.5" />
+                </button>
+              </div>
             </div>
           ) : (
             <div className="flex flex-col items-center gap-2">
-              <div
-                className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#1061AF] text-xs font-extrabold text-white shadow-xs"
-                title={mounted ? user?.name || "Usuário Deusa" : "Usuário Deusa"}
+              <button
+                onClick={() => {
+                  AuthService.logout();
+                  window.location.href = "/login";
+                }}
+                className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#1061AF] text-xs font-extrabold text-white shadow-xs hover:bg-red-600 transition-colors"
+                title="Clique para Sair"
               >
                 {mounted ? user?.name?.substring(0, 2).toUpperCase() || "DE" : "DE"}
-              </div>
+              </button>
             </div>
           )}
 

@@ -3,6 +3,9 @@ import { Transform } from "class-transformer";
 import { IsOptional, IsString, IsNotEmpty, Length, Matches, MaxLength } from "class-validator";
 import { Throttle } from "@nestjs/throttler";
 import { AuthGuard } from "../auth/auth.guard";
+import { Roles } from "../auth/roles.decorator";
+import { RolesGuard } from "../auth/roles.guard";
+import { UserRole } from "@prisma/client";
 import { MapOpportunitiesService } from "./map-opportunities.service";
 
 class HeatmapQueryDto {
@@ -41,7 +44,7 @@ class DiscoverRegionDto {
   uf!: string;
 }
 
-@UseGuards(AuthGuard)
+@UseGuards(AuthGuard, RolesGuard)
 @Controller("map")
 export class MapOpportunitiesController {
   constructor(private readonly mapOpportunitiesService: MapOpportunitiesService) {}
@@ -60,6 +63,7 @@ export class MapOpportunitiesController {
    * Retorna: { success, message, discovered, existing, total }
    */
   @Post("discover-region")
+  @Roles(UserRole.ADMIN)
   @Throttle({ default: { ttl: 60000, limit: 6 } })
   discoverRegion(@Query() query: DiscoverRegionDto) {
     return this.mapOpportunitiesService.discoverRegion(query.cidade, query.uf);

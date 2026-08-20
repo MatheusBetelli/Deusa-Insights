@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Company, CompanyDetails } from '@prisma/client';
+import { isValidOpportunityCnae } from '../common/opportunity-filter';
 
 export interface CompanyClassification {
   type: string;
@@ -11,8 +12,16 @@ export interface CompanyClassification {
 
 @Injectable()
 export class ClassificationService {
-  classifyCompany(company: Company & { details?: CompanyDetails | null }): CompanyClassification {
-    const type = this.determineType(company.cnaePrincipal);
+  classifyCompany(
+    company: Company & {
+      details?: CompanyDetails | null;
+      cnaes?: Array<{ cnaeCode: string }>;
+    },
+  ): CompanyClassification {
+    const targetCnae = isValidOpportunityCnae(company.cnaePrincipal)
+      ? company.cnaePrincipal
+      : company.cnaes?.find((item) => isValidOpportunityCnae(item.cnaeCode))?.cnaeCode;
+    const type = this.determineType(targetCnae);
     const size = this.determineSize(company.porte);
     const region = this.determineRegion(company.cidade, company.uf);
     const score = this.calculateScore(type, size, company);
@@ -27,15 +36,15 @@ export class ClassificationService {
     };
   }
 
-  private determineType(cnae: string | null): string {
-    if (!cnae) return 'Outro';
+  private determineType(cnae: string | null | undefined): string {
+    if (!cnae) return 'Fora do escopo';
     const c = cnae.replace(/\D/g, '');
-    if (c.startsWith('47113') || c.startsWith('47121')) return 'Supermercado';
-    if (c.startsWith('47130') || c.startsWith('47237')) return 'Mercado';
-    if (c.startsWith('47211') || c.startsWith('47212')) return 'Padaria';
-    if (c.startsWith('46397') || c.startsWith('46914')) return 'Atacadista';
-    if (c.startsWith('46371') || c.startsWith('46389') || c.startsWith('464')) return 'Distribuidor';
-    return 'Outro';
+    if (c === '4711301') return 'Hipermercado';
+    if (c === '4711302') return 'Supermercado';
+    if (c === '4712100') return 'Minimercado';
+    if (c === '4721102') return 'Mercearia';
+    if (c === '4722901') return 'Açougue';
+    return 'Fora do escopo';
   }
 
   private determineSize(porte: string | null): string {
@@ -58,12 +67,12 @@ export class ClassificationService {
   }
 
   private calculateScore(type: string, size: string, company: Company): number {
+    if (type === 'Fora do escopo') return 0;
     let score = 50;
 
     // Pontuação por tipo
-    if (type === 'Supermercado' || type === 'Atacadista') score += 20;
-    else if (type === 'Mercado' || type === 'Distribuidor') score += 10;
-    else if (type === 'Padaria') score += 5;
+    if (type === 'Hipermercado' || type === 'Supermercado') score += 20;
+    else if (type === 'Minimercado' || type === 'Mercearia' || type === 'Açougue') score += 10;
 
     // Pontuação por porte
     if (size === 'Grande') score += 15;

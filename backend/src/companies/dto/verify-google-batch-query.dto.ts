@@ -22,9 +22,12 @@ export class VerifyGoogleBatchQueryDto {
   minScore?: number;
 
   @IsOptional()
-  @Transform(({ value }) => {
+  @Transform(({ obj, key }) => {
+    const value = (obj as Record<string, unknown>)[key];
     if (value === undefined || value === null || value === "") return undefined;
-    return value === true || value === "true";
+    if (value === true || value === "true") return true;
+    if (value === false || value === "false") return false;
+    return value;
   })
   @IsBoolean()
   dryRun?: boolean;

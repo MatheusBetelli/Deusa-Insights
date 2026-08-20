@@ -1,11 +1,14 @@
 import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { AuthGuard } from "../auth/auth.guard";
+import { Roles } from "../auth/roles.decorator";
+import { RolesGuard } from "../auth/roles.guard";
+import { UserRole } from "@prisma/client";
 import { CitiesService } from "./cities.service";
 import { CityQueryDto } from "./dto/city-query.dto";
 import { CreateCityDto } from "./dto/create-city.dto";
 import { UpdateCityDto } from "./dto/update-city.dto";
 
-@UseGuards(AuthGuard)
+@UseGuards(AuthGuard, RolesGuard)
 @Controller("cities")
 export class CitiesController {
   constructor(private readonly citiesService: CitiesService) {}
@@ -16,11 +19,13 @@ export class CitiesController {
   }
 
   @Post()
+  @Roles(UserRole.ADMIN)
   create(@Body() dto: CreateCityDto) {
     return this.citiesService.create(dto);
   }
 
   @Patch(":id")
+  @Roles(UserRole.ADMIN)
   update(@Param("id") id: string, @Body() dto: UpdateCityDto) {
     return this.citiesService.update(id, dto);
   }

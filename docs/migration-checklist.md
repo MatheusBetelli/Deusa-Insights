@@ -135,7 +135,7 @@ Risco:
 Comando de verificacao:
 
 ```bash
-curl -s -X POST http://127.0.0.1:3001/auth/login -H "Content-Type: application/json" -d '{"email":"rafael.mendes@deusa.com.br","password":"deusa123"}'
+curl -s -X POST http://127.0.0.1:3001/auth/login -H "Content-Type: application/json" -d '{"email":"<email-configurado>","password":"<senha-configurada>"}'
 ```
 
 ## Fase 6 - Dashboard Angular

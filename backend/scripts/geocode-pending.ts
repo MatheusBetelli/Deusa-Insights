@@ -6,6 +6,10 @@ const prisma = new PrismaClient();
 const geocodingService = new GeocodingService();
 
 async function main() {
+  throw new Error(
+    "Script desativado: geocodificação em massa por API paga não é permitida. Use correção individual autorizada.",
+  );
+
   console.log("\n=======================================================");
   console.log("  DEUSA ANALYTICS — GEOCODIFICAÇÃO DE EMPRESAS PENDENTES ");
   console.log("=======================================================\n");

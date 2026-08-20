@@ -20,7 +20,7 @@ export const Route = createFileRoute("/_app/importar-cnpjs")({
   beforeLoad: () => {
     if (typeof window !== "undefined") {
       const user = AuthService.getUser();
-      if (user && user.role?.toUpperCase() !== "ADMIN") {
+      if (!user || user.role?.toUpperCase() !== "ADMIN") {
         throw redirect({ to: "/dashboard" });
       }
     }
@@ -258,12 +258,21 @@ function ImportCnpjs() {
             <div className="flex flex-col gap-3 border-b border-[#DDE5EF] px-5 py-3 sm:flex-row sm:items-center sm:justify-between bg-[#F8FAFC]">
               <div>
                 <h2 className="text-sm font-bold text-[#0B1F33]">Resultado do Processamento da Planilha</h2>
-                <p className="text-[11px] text-[#64748B]">Planilha enviada com sucesso</p>
+                <p className="text-[11px] text-[#64748B]">Planilha enviada e salva com sucesso no banco de dados</p>
               </div>
-              <Link to="/mapa-oportunidades" search={{ uf: "Todos", city: "Todas" }} className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-[#0B1F33] px-3.5 text-xs font-bold text-white transition hover:bg-[#1061AF]">
-                <CheckCircle2 className="h-4 w-4 text-[#FFF200]" />
-                Ver no mapa
-              </Link>
+              <div className="flex items-center gap-2">
+                <Link
+                  to="/funil-comercial"
+                  search={{ search: "", uf: "Todos", city: "Todas", cnae: "Todos" }}
+                  className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-[#DDE5EF] bg-white px-3 text-xs font-bold text-[#0B1F33] transition hover:border-[#1061AF]"
+                >
+                  Ver no Funil (Convertidos)
+                </Link>
+                <Link to="/mapa-oportunidades" search={{ uf: "Todos", city: "Todas" }} className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-[#0B1F33] px-3 text-xs font-bold text-white transition hover:bg-[#1061AF]">
+                  <CheckCircle2 className="h-4 w-4 text-[#FFF200]" />
+                  Ver no mapa
+                </Link>
+              </div>
             </div>
 
             <div className="grid gap-3 p-4 sm:grid-cols-3">
@@ -359,7 +368,6 @@ function ImportCnpjs() {
       <section className="mt-5 rounded-xl border border-[#DDE5EF] bg-white p-5 shadow-sm">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-bold text-[#0B1F33]">Histórico recente</h2>
-          <FileUp className="h-5 w-5 text-[#1061AF]" />
         </div>
         {imports.length === 0 ? (
           <p className="text-sm text-[#64748B]">Nenhuma importação registrada.</p>

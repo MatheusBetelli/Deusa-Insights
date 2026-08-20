@@ -1,5 +1,6 @@
-import { Type } from "class-transformer";
-import { IsInt, IsOptional, IsString, Length, Max, MaxLength, Min } from "class-validator";
+import { Transform, Type } from "class-transformer";
+import { IsIn, IsInt, IsOptional, IsString, Length, Max, MaxLength, Min } from "class-validator";
+import { TARGET_OPPORTUNITY_CNAES } from "../../common/opportunity-filter";
 
 export class ImportCnpjDto {
   @IsString()
@@ -15,8 +16,10 @@ export class ImportCnpjDto {
   @MaxLength(12)
   cityIbgeCode?: string;
 
-  @IsString()
-  @MaxLength(20)
+  @Transform(({ value }) => (typeof value === "string" ? value.replace(/\D/g, "") : value))
+  @IsIn(Array.from(TARGET_OPPORTUNITY_CNAES), {
+    message: "cnaeCode está fora do escopo comercial autorizado",
+  })
   cnaeCode!: string;
 
   @Type(() => Number)

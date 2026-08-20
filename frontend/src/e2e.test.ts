@@ -1,18 +1,27 @@
 import assert from "node:assert";
 import { test } from "node:test";
 
-const BACKEND_URL = "http://localhost:3001";
-const FRONTEND_URL = "http://localhost:8080";
+const BACKEND_URL = process.env.E2E_BACKEND_URL ?? "http://localhost:3001";
+const FRONTEND_URL = process.env.E2E_FRONTEND_URL ?? "http://localhost:8080";
+const E2E_EMAIL = process.env.E2E_EMAIL;
+const E2E_PASSWORD = process.env.E2E_PASSWORD;
+const missingCredentialsReason =
+  E2E_EMAIL && E2E_PASSWORD ? false : "Defina E2E_EMAIL e E2E_PASSWORD para executar testes autenticados";
+
+let cachedAdminToken: string | null = null;
 
 async function getAdminToken() {
+  if (cachedAdminToken) return cachedAdminToken;
+  assert.ok(E2E_EMAIL && E2E_PASSWORD, "Credenciais E2E não configuradas");
   const loginRes = await fetch(`${BACKEND_URL}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: "admin@deusa.com.br", password: "admin123" }),
+    body: JSON.stringify({ email: E2E_EMAIL, password: E2E_PASSWORD }),
   });
   assert.strictEqual(loginRes.status, 201);
   const { accessToken } = await loginRes.json();
-  return accessToken as string;
+  cachedAdminToken = accessToken as string;
+  return cachedAdminToken;
 }
 
 test("E2E: Backend Health Check responde com status ok", async () => {
@@ -23,25 +32,21 @@ test("E2E: Backend Health Check responde com status ok", async () => {
   assert.strictEqual(data.database, "connected");
 });
 
-test("E2E: Autenticação de Usuário e Geração de Token JWT", async () => {
+test("E2E: Autenticação de Usuário e Geração de Token JWT", { skip: missingCredentialsReason }, async () => {
+  assert.ok(E2E_EMAIL && E2E_PASSWORD, "Credenciais E2E não configuradas");
   const res = await fetch(`${BACKEND_URL}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: "admin@deusa.com.br", password: "admin123" }),
+    body: JSON.stringify({ email: E2E_EMAIL, password: E2E_PASSWORD }),
   });
   assert.strictEqual(res.status, 201);
   const data = await res.json();
   assert.ok(data.accessToken, "Deve retornar um accessToken JWT válido");
-  assert.strictEqual(data.user.email, "admin@deusa.com.br");
+  assert.strictEqual(data.user.email, E2E_EMAIL.trim().toLowerCase());
 });
 
-test("E2E: Endpoint do Dashboard Comercial (/dashboard/summary)", async () => {
-  const loginRes = await fetch(`${BACKEND_URL}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: "admin@deusa.com.br", password: "admin123" }),
-  });
-  const { accessToken } = await loginRes.json();
+test("E2E: Endpoint do Dashboard Comercial (/dashboard/summary)", { skip: missingCredentialsReason }, async () => {
+  const accessToken = await getAdminToken();
 
   const res = await fetch(`${BACKEND_URL}/dashboard/summary`, {
     headers: { Authorization: `Bearer ${accessToken}` },
@@ -53,13 +58,8 @@ test("E2E: Endpoint do Dashboard Comercial (/dashboard/summary)", async () => {
   assert.ok(Array.isArray(summary.topRegions), "topRegions deve ser array");
 });
 
-test("E2E: Endpoint de Leads B2B (/leads)", async () => {
-  const loginRes = await fetch(`${BACKEND_URL}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: "admin@deusa.com.br", password: "admin123" }),
-  });
-  const { accessToken } = await loginRes.json();
+test("E2E: Endpoint de Leads B2B (/leads)", { skip: missingCredentialsReason }, async () => {
+  const accessToken = await getAdminToken();
 
   const res = await fetch(`${BACKEND_URL}/leads?page=1&pageSize=10`, {
     headers: { Authorization: `Bearer ${accessToken}` },
@@ -77,13 +77,8 @@ test("E2E: Endpoint de Leads B2B (/leads)", async () => {
   }
 });
 
-test("E2E: Endpoint do Funil Comercial (/pipeline)", async () => {
-  const loginRes = await fetch(`${BACKEND_URL}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: "admin@deusa.com.br", password: "admin123" }),
-  });
-  const { accessToken } = await loginRes.json();
+test("E2E: Endpoint do Funil Comercial (/pipeline)", { skip: missingCredentialsReason }, async () => {
+  const accessToken = await getAdminToken();
 
   const res = await fetch(`${BACKEND_URL}/pipeline`, {
     headers: { Authorization: `Bearer ${accessToken}` },
@@ -96,7 +91,7 @@ test("E2E: Endpoint do Funil Comercial (/pipeline)", async () => {
   assert.ok(pipeline.stages.CONVERTED);
 });
 
-test("E2E: Endpoint de Cidades Monitoradas (/cities)", async () => {
+test("E2E: Endpoint de Cidades Monitoradas (/cities)", { skip: missingCredentialsReason }, async () => {
   const accessToken = await getAdminToken();
   const res = await fetch(`${BACKEND_URL}/cities`, {
     headers: { Authorization: `Bearer ${accessToken}` },
@@ -108,7 +103,7 @@ test("E2E: Endpoint de Cidades Monitoradas (/cities)", async () => {
   assert.ok(cities.some((c: any) => c.name === "Tupã" || c.name === "Garça"));
 });
 
-test("E2E: Endpoint de CNAEs Monitorados (/cnaes)", async () => {
+test("E2E: Endpoint de CNAEs Monitorados (/cnaes)", { skip: missingCredentialsReason }, async () => {
   const accessToken = await getAdminToken();
   const res = await fetch(`${BACKEND_URL}/cnaes`, {
     headers: { Authorization: `Bearer ${accessToken}` },
