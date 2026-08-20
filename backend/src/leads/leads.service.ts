@@ -551,19 +551,32 @@ export class LeadsService {
     return counts;
   }
 
+  private targetCnaesCache: { data: string[]; expiresAt: number } | null = null;
+  private priorityCitiesCache: { data: string[]; expiresAt: number } | null = null;
+
   private async getTargetCnaes() {
+    if (this.targetCnaesCache && this.targetCnaesCache.expiresAt > Date.now()) {
+      return this.targetCnaesCache.data;
+    }
     const cnaes = await this.prisma.cnae.findMany({
       where: { isTarget: true },
       select: { code: true },
     });
-    return cnaes.map((cnae) => cnae.code);
+    const res = cnaes.map((cnae) => cnae.code);
+    this.targetCnaesCache = { data: res, expiresAt: Date.now() + 60000 };
+    return res;
   }
 
   private async getPriorityCities() {
+    if (this.priorityCitiesCache && this.priorityCitiesCache.expiresAt > Date.now()) {
+      return this.priorityCitiesCache.data;
+    }
     const cities = await this.prisma.city.findMany({
       where: { isActive: true },
       select: { name: true },
     });
-    return cities.map((city) => city.name);
+    const res = cities.map((city) => city.name);
+    this.priorityCitiesCache = { data: res, expiresAt: Date.now() + 60000 };
+    return res;
   }
 }

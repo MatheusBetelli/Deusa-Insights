@@ -104,10 +104,13 @@ function ImportCnpjs() {
       setLastJob(result.job);
       setState("success");
       toast.success(`${result.job.totalSaved} empresa(s) importadas com sucesso.`);
-      setImports(await importsService.getImports());
     } catch (err) {
       setState("error");
       setError(err instanceof Error ? err.message : "Não foi possível importar CNPJs.");
+    } finally {
+      try {
+        setImports(await importsService.getImports());
+      } catch {}
     }
   }
 

@@ -3,10 +3,12 @@ import {
   Inject,
   Injectable,
   InternalServerErrorException,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import { ImportStatus } from "@prisma/client";
 import { isValidCnpj } from "../common/cnpj-validator";
+import { normalizeCnpj } from "../common/cnpj";
 import { CompaniesService } from "../companies/companies.service";
 import { LeadsService } from "../leads/leads.service";
 import { PrismaService } from "../prisma/prisma.service";
@@ -94,6 +96,8 @@ async function assertSafeXlsxArchive(fileBuffer: Buffer): Promise<void> {
 
 @Injectable()
 export class ImportsService {
+  private readonly logger = new Logger(ImportsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly companiesService: CompaniesService,
@@ -132,19 +136,42 @@ export class ImportsService {
         limit: dto.limit,
       });
 
-      const savedCompanies = await Promise.all(
-        companies.map(async (companyData) => {
-          const company = await this.companiesService.upsertCompany({
-            ...companyData,
-            uf: dto.uf.toUpperCase(),
-            cidade: companyData.cidade || dto.cityName,
-            cnaePrincipal: companyData.cnaePrincipal,
-            cnaes: companyData.cnaes?.length ? companyData.cnaes : [dto.cnaeCode],
-          });
-          await this.leadsService.upsertLeadForCompany(company.id);
-          return company;
-        }),
-      );
+      const cnpjs = companies.map((c) => normalizeCnpj(c.cnpj)).filter(Boolean);
+      const existingCompanies = await this.prisma.company.findMany({
+        where: { cnpj: { in: cnpjs } },
+        select: { id: true, cnpj: true },
+      });
+      const existingMap = new Map(existingCompanies.map((c) => [c.cnpj, c.id]));
+
+      const savedCompanies = [];
+      const CHUNK_SIZE = 10;
+      for (let i = 0; i < companies.length; i += CHUNK_SIZE) {
+        const chunk = companies.slice(i, i + CHUNK_SIZE);
+        const results = await Promise.all(
+          chunk.map(async (companyData) => {
+            try {
+              const cleanCnpj = normalizeCnpj(companyData.cnpj);
+              // Se a empresa já existe no banco, pula o re-upsert pesado
+              if (existingMap.has(cleanCnpj)) {
+                return { id: existingMap.get(cleanCnpj)!, cnpj: cleanCnpj };
+              }
+              const company = await this.companiesService.upsertCompany({
+                ...companyData,
+                uf: dto.uf.toUpperCase(),
+                cidade: companyData.cidade || dto.cityName,
+                cnaePrincipal: companyData.cnaePrincipal,
+                cnaes: companyData.cnaes?.length ? companyData.cnaes : [dto.cnaeCode],
+              });
+              await this.leadsService.upsertLeadForCompany(company.id);
+              return company;
+            } catch (err) {
+              this.logger.warn(`Falha ao importar empresa ${companyData.cnpj}: ${err instanceof Error ? err.message : String(err)}`);
+              return null;
+            }
+          }),
+        );
+        savedCompanies.push(...results.filter(Boolean));
+      }
       const totalSaved = savedCompanies.length;
 
       const updatedJob = await this.prisma.importJob.update({
@@ -159,11 +186,13 @@ export class ImportsService {
 
       return { job: updatedJob, companies: savedCompanies };
     } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Erro crítico no importCnpj: ${errorMsg}`, error instanceof Error ? error.stack : undefined);
       await this.prisma.importJob.update({
         where: { id: job.id },
         data: {
           status: ImportStatus.ERROR,
-          errorMessage: error instanceof Error ? error.message : "Erro desconhecido",
+          errorMessage: errorMsg,
           finishedAt: new Date(),
         },
       });
