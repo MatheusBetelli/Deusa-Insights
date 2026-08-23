@@ -164,7 +164,8 @@ export function Sidebar({
 
                   <div className="space-y-1">
                     {visibleGroupItems.map((it) => {
-                      const active = pathname === it.to || (it.to !== "/" && pathname.startsWith(it.to + "/"));
+                      const active =
+                        pathname === it.to || (it.to !== "/" && pathname.startsWith(it.to + "/"));
                       const Icon = it.icon;
 
                       return (
@@ -185,7 +186,9 @@ export function Sidebar({
                           <div className="flex items-center gap-3">
                             <Icon
                               className={`h-[18px] w-[18px] shrink-0 transition-colors ${
-                                active ? "text-[#FFF200]" : "text-slate-400 group-hover:text-slate-200"
+                                active
+                                  ? "text-[#FFF200]"
+                                  : "text-slate-400 group-hover:text-slate-200"
                               }`}
                             />
                             <span className="truncate tracking-tight">{it.label}</span>
@@ -213,37 +216,11 @@ export function Sidebar({
 
           {/* Footer Mobile */}
           <div className="p-3 border-t border-slate-800/80 bg-[#08121E]">
-            <div className="flex items-center justify-between rounded-lg border border-slate-800 bg-[#0D1C2D] p-2.5 shadow-xs">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[#1061AF] text-xs font-extrabold text-white">
-                  {mounted ? user?.name?.substring(0, 2).toUpperCase() || "DE" : "DE"}
-                </div>
-
-                <div className="flex flex-col min-w-0">
-                  <span className="truncate text-xs font-bold text-white leading-tight">
-                    {mounted ? user?.name || "Usuário Deusa" : "Usuário Deusa"}
-                  </span>
-                  <span className="truncate text-[10px] font-medium text-slate-400 flex items-center gap-1">
-                    <ShieldCheck className="h-3 w-3 text-[#1061AF] shrink-0" />
-                    {mounted
-                      ? user?.role === "ADMIN"
-                        ? "Administrador"
-                        : user?.role === "MANAGER"
-                          ? "Gerente"
-                          : "Consultor"
-                      : "Consultor"}
-                  </span>
-                </div>
-              </div>
-
-              <Link
-                to="/configuracoes"
-                onClick={onMobileClose}
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-colors"
-                title="Configurações"
-              >
-                <Settings className="h-3.5 w-3.5" />
-              </Link>
+            <div className="flex items-center justify-between text-[11px] font-medium text-slate-400 px-1">
+              <span>Deusa Alimentos</span>
+              <span className="rounded-full bg-slate-800/80 px-2 py-0.5 text-[10px] font-semibold text-slate-400 border border-slate-700/60">
+                v2.4
+              </span>
             </div>
           </div>
         </aside>
@@ -317,7 +294,8 @@ export function Sidebar({
 
                 <div className="space-y-1">
                   {visibleGroupItems.map((it) => {
-                    const active = pathname === it.to || (it.to !== "/" && pathname.startsWith(it.to + "/"));
+                    const active =
+                      pathname === it.to || (it.to !== "/" && pathname.startsWith(it.to + "/"));
                     const Icon = it.icon;
 
                     return (
@@ -341,10 +319,14 @@ export function Sidebar({
                         <div className="flex items-center gap-3">
                           <Icon
                             className={`h-[18px] w-[18px] shrink-0 transition-colors ${
-                              active ? "text-[#FFF200]" : "text-slate-400 group-hover:text-slate-200"
+                              active
+                                ? "text-[#FFF200]"
+                                : "text-slate-400 group-hover:text-slate-200"
                             }`}
                           />
-                          {!collapsed && <span className="truncate tracking-tight">{it.label}</span>}
+                          {!collapsed && (
+                            <span className="truncate tracking-tight">{it.label}</span>
+                          )}
                         </div>
 
                         {/* Badge discreto */}
@@ -368,72 +350,17 @@ export function Sidebar({
           })}
         </nav>
 
-        {/* Footer / Perfil do Usuário */}
+        {/* Footer do Sidebar Desktop */}
         <div className="p-3 border-t border-slate-800/80 bg-[#08121E]">
           {!collapsed ? (
-            <div className="flex items-center justify-between rounded-lg border border-slate-800 bg-[#0D1C2D] p-2.5 shadow-xs">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white p-1 border border-slate-700 shadow-xs overflow-hidden">
-                  <DeusaLogo className="h-5 w-auto object-contain" />
-                </div>
-
-                <div className="flex flex-col min-w-0">
-                  <span className="truncate text-xs font-bold text-white leading-tight">
-                    {mounted ? user?.name || "Usuário Deusa" : "Usuário Deusa"}
-                  </span>
-                  <span className="truncate text-[10px] font-medium text-slate-400 flex items-center gap-1">
-                    <ShieldCheck className="h-3 w-3 text-[#1061AF] shrink-0" />
-                    {mounted
-                      ? user?.role === "ADMIN"
-                        ? "Administrador"
-                        : user?.role === "MANAGER"
-                          ? "Gerente"
-                          : "Consultor"
-                      : "Consultor"}
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-1">
-                <Link
-                  to="/configuracoes"
-                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-colors"
-                  title="Configurações"
-                >
-                  <Settings className="h-3.5 w-3.5" />
-                </Link>
-                <button
-                  onClick={() => {
-                    AuthService.logout();
-                    window.location.href = "/login";
-                  }}
-                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-slate-400 hover:bg-red-950/50 hover:text-red-400 transition-colors"
-                  title="Sair do sistema"
-                >
-                  <LogOut className="h-3.5 w-3.5" />
-                </button>
-              </div>
+            <div className="flex items-center justify-between text-[11px] font-medium text-slate-400 px-1">
+              <span>Deusa Alimentos</span>
+              <span className="rounded-full bg-slate-800/80 px-2 py-0.5 text-[10px] font-semibold text-slate-400 border border-slate-700/60">
+                v2.4
+              </span>
             </div>
           ) : (
-            <div className="flex flex-col items-center gap-2">
-              <button
-                onClick={() => {
-                  AuthService.logout();
-                  window.location.href = "/login";
-                }}
-                className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#1061AF] text-xs font-extrabold text-white shadow-xs hover:bg-red-600 transition-colors"
-                title="Clique para Sair"
-              >
-                {mounted ? user?.name?.substring(0, 2).toUpperCase() || "DE" : "DE"}
-              </button>
-            </div>
-          )}
-
-          {!collapsed && (
-            <div className="mt-2.5 px-2 flex items-center justify-between text-[10px] font-medium text-slate-400">
-              <span>Deusa Alimentos</span>
-              <span>v2.4</span>
-            </div>
+            <div className="flex justify-center text-[10px] font-bold text-slate-400">v2.4</div>
           )}
         </div>
       </aside>

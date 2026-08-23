@@ -2,7 +2,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Link } from "@tanstack/react-router";
 import { EmptyState, ErrorState, LoadingState } from "@/components/common/InterfaceStates";
-import { LeadContactsPopover, extractCompanyContacts } from "@/features/leads/components/LeadContactsPopover";
+import {
+  LeadContactsPopover,
+  extractCompanyContacts,
+} from "@/features/leads/components/LeadContactsPopover";
 import { ScoreBreakdownTooltip } from "@/components/common/ScoreBreakdownTooltip";
 import {
   Sheet,
@@ -49,8 +52,9 @@ const STORE_URL = import.meta.env.VITE_STORE_URL || "https://loja.deusalimentos.
 
 function getEstablishmentSegment(cnae?: string | null): string {
   const norm = (cnae ?? "").replace(/\D/g, "");
-  if (norm === "4711301") return "HIPERMERCADO";
-  if (norm === "4711302") return "SUPERMERCADO";
+  if (norm === "4711302" || norm === "4711301") return "SUPERMERCADO";
+  if (norm === "4721102" || norm === "4721100" || norm === "1091101" || norm === "1091102")
+    return "PADARIA";
   if (norm === "4712100") return "MINIMERCADO / MERCEARIA";
   if (norm === "4722901") return "AÇOUGUE";
   return "MINIMERCADO / MERCEARIA";
@@ -65,7 +69,9 @@ export function LeadDetailsSheet({ leadId, open, onOpenChange, onUpdated }: Lead
   const [status, setStatus] = useState<LeadStatus>("NEW");
 
   // Registro de contato
-  const [contactChannel, setContactChannel] = useState<"Telefone" | "WhatsApp" | "E-mail" | "Visita">("Telefone");
+  const [contactChannel, setContactChannel] = useState<
+    "Telefone" | "WhatsApp" | "E-mail" | "Visita"
+  >("Telefone");
   const [contactDescription, setContactDescription] = useState("");
 
   // Dados complementares em modo visualização / edição
@@ -91,7 +97,7 @@ export function LeadDetailsSheet({ leadId, open, onOpenChange, onUpdated }: Lead
 
       setLead(leadData);
       setStatus(leadData.status);
-      
+
       if (detailsData) {
         setDetailsResponse(detailsData);
         setTelefone(detailsData.details?.telefone ?? "");
@@ -106,7 +112,9 @@ export function LeadDetailsSheet({ leadId, open, onOpenChange, onUpdated }: Lead
       setIsEditingData(false);
     } catch (err) {
       if (requestId !== leadRequestSequence.current) return;
-      setError(err instanceof Error ? err.message : "Não foi possível carregar os detalhes do lead.");
+      setError(
+        err instanceof Error ? err.message : "Não foi possível carregar os detalhes do lead.",
+      );
     } finally {
       if (requestId === leadRequestSequence.current) {
         setLoading(false);
@@ -196,7 +204,7 @@ export function LeadDetailsSheet({ leadId, open, onOpenChange, onUpdated }: Lead
     const contacts = extractCompanyContacts(lead.company);
     const mobileContact = contacts.find((c) => c.type === "phone" && c.isMobile);
     const message = encodeURIComponent(
-      `Olá! Somos da Deusa Alimentos. Segue o link da nossa loja oficial B2B para pedidos: ${STORE_URL}`
+      `Olá! Somos da Deusa Alimentos. Segue o link da nossa loja oficial B2B para pedidos: ${STORE_URL}`,
     );
     if (mobileContact) {
       window.open(`https://wa.me/${mobileContact.raw}?text=${message}`, "_blank");
@@ -209,7 +217,10 @@ export function LeadDetailsSheet({ leadId, open, onOpenChange, onUpdated }: Lead
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full overflow-y-auto bg-white p-0 sm:max-w-xl text-[#0B1F33]">
+      <SheetContent
+        side="right"
+        className="w-full overflow-y-auto bg-white p-0 sm:max-w-xl text-[#0B1F33]"
+      >
         <SheetHeader className="border-b border-[#DDE5EF] bg-[#F8FAFC] px-5 py-4">
           <SheetTitle className="flex items-center gap-2 text-[#0B1F33] text-lg font-bold">
             <Building2 className="h-5 w-5 text-[#1061AF]" />
@@ -247,8 +258,12 @@ export function LeadDetailsSheet({ leadId, open, onOpenChange, onUpdated }: Lead
                 <div className="flex items-center gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-3 text-emerald-900 shadow-2xs">
                   <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
                   <div>
-                    <div className="text-xs font-bold uppercase tracking-wider">Cliente Deusa Alimentos</div>
-                    <div className="text-xs text-emerald-700">Este estabelecimento já faz parte da nossa carteira de clientes ativas.</div>
+                    <div className="text-xs font-bold uppercase tracking-wider">
+                      Cliente Deusa Alimentos
+                    </div>
+                    <div className="text-xs text-emerald-700">
+                      Este estabelecimento já faz parte da nossa carteira de clientes ativas.
+                    </div>
                   </div>
                 </div>
               )}
@@ -314,12 +329,23 @@ export function LeadDetailsSheet({ leadId, open, onOpenChange, onUpdated }: Lead
                 </div>
 
                 <div className="grid gap-2 text-xs sm:grid-cols-2">
-                  <Info label="Segmento Alvo" value={getEstablishmentSegment(company.cnaePrincipal)} />
-                  <Info label="Porte Estimado" value={company.porte || detailsResponse?.classification?.size || "Não informado"} />
+                  <Info
+                    label="Segmento Alvo"
+                    value={getEstablishmentSegment(company.cnaePrincipal)}
+                  />
+                  <Info
+                    label="Porte Estimado"
+                    value={
+                      company.porte || detailsResponse?.classification?.size || "Não informado"
+                    }
+                  />
                   <Info label="CNAE Principal" value={formatCnae(company.cnaePrincipal)} />
                   <Info label="Região comercial" value={`${company.cidade}/${company.uf}`} />
                   <Info label="Situação Cadastral" value={company.situacaoCadastral || "ATIVA"} />
-                  <Info label="Prioridade Comercial" value={`${potentialLabels[lead.potentialLevel]} (${lead.score} pts)`} />
+                  <Info
+                    label="Prioridade Comercial"
+                    value={`${potentialLabels[lead.potentialLevel]} (${lead.score} pts)`}
+                  />
                 </div>
               </section>
 
@@ -351,7 +377,9 @@ export function LeadDetailsSheet({ leadId, open, onOpenChange, onUpdated }: Lead
                 {!isEditingData ? (
                   <div className="space-y-2 text-xs">
                     <div className="rounded-lg bg-[#F8FAFC] p-3 border border-[#EEF2F7]">
-                      <div className="text-[10px] font-bold uppercase text-[#94A3B8] mb-0.5">Endereço</div>
+                      <div className="text-[10px] font-bold uppercase text-[#94A3B8] mb-0.5">
+                        Endereço
+                      </div>
                       <div className="font-medium text-[#0B1F33]">
                         {[company.logradouro, company.numero, company.bairro, company.cep]
                           .filter(Boolean)
@@ -362,16 +390,26 @@ export function LeadDetailsSheet({ leadId, open, onOpenChange, onUpdated }: Lead
 
                     <div className="grid gap-2 sm:grid-cols-2">
                       <div className="rounded-lg bg-[#F8FAFC] p-3 border border-[#EEF2F7]">
-                        <div className="text-[10px] font-bold uppercase text-[#94A3B8] mb-0.5">Telefone principal</div>
+                        <div className="text-[10px] font-bold uppercase text-[#94A3B8] mb-0.5">
+                          Telefone principal
+                        </div>
                         <div className="font-mono font-medium text-[#0B1F33]">
-                          {telefone || company.telefone || company.telefoneEncontrado || "Não informado"}
+                          {telefone ||
+                            company.telefone ||
+                            company.telefoneEncontrado ||
+                            "Não informado"}
                         </div>
                       </div>
                       <div className="rounded-lg bg-[#F8FAFC] p-3 border border-[#EEF2F7]">
-                        <div className="text-[10px] font-bold uppercase text-[#94A3B8] mb-0.5">E-mail de contato</div>
+                        <div className="text-[10px] font-bold uppercase text-[#94A3B8] mb-0.5">
+                          E-mail de contato
+                        </div>
                         <div className="font-medium text-[#0B1F33] truncate">
                           {email || company.email ? (
-                            <a href={`mailto:${email || company.email}`} className="text-[#1061AF] hover:underline">
+                            <a
+                              href={`mailto:${email || company.email}`}
+                              className="text-[#1061AF] hover:underline"
+                            >
                               {email || company.email}
                             </a>
                           ) : (
@@ -382,7 +420,9 @@ export function LeadDetailsSheet({ leadId, open, onOpenChange, onUpdated }: Lead
                     </div>
 
                     <div className="rounded-lg bg-[#F8FAFC] p-3 border border-[#EEF2F7]">
-                      <div className="text-[10px] font-bold uppercase text-[#94A3B8] mb-0.5">Natureza jurídica</div>
+                      <div className="text-[10px] font-bold uppercase text-[#94A3B8] mb-0.5">
+                        Natureza jurídica
+                      </div>
                       <div className="font-medium text-[#0B1F33]">
                         {naturezaJuridica || "Não informada"}
                       </div>
@@ -392,7 +432,9 @@ export function LeadDetailsSheet({ leadId, open, onOpenChange, onUpdated }: Lead
                   <div className="space-y-3">
                     <div className="grid gap-3 sm:grid-cols-2">
                       <label className="block">
-                        <span className="mb-1 block text-xs font-bold text-[#64748B]">Telefone</span>
+                        <span className="mb-1 block text-xs font-bold text-[#64748B]">
+                          Telefone
+                        </span>
                         <input
                           type="text"
                           value={telefone}
@@ -413,7 +455,9 @@ export function LeadDetailsSheet({ leadId, open, onOpenChange, onUpdated }: Lead
                       </label>
                     </div>
                     <label className="block">
-                      <span className="mb-1 block text-xs font-bold text-[#64748B]">Natureza Jurídica</span>
+                      <span className="mb-1 block text-xs font-bold text-[#64748B]">
+                        Natureza Jurídica
+                      </span>
                       <input
                         type="text"
                         value={naturezaJuridica}
@@ -468,11 +512,15 @@ export function LeadDetailsSheet({ leadId, open, onOpenChange, onUpdated }: Lead
                     const isDiscarded = item.id === "NOT_INTERESTED";
                     const isInactive = item.id === "INACTIVE";
 
-                    let btnStyle = "border-[#DDE5EF] bg-[#F8FAFC] text-[#475569] hover:border-[#1061AF]";
+                    let btnStyle =
+                      "border-[#DDE5EF] bg-[#F8FAFC] text-[#475569] hover:border-[#1061AF]";
                     if (isSelected) {
-                      if (isClient) btnStyle = "border-emerald-500 bg-emerald-600 text-white font-bold";
-                      else if (isDiscarded) btnStyle = "border-[#ED1C24] bg-[#ED1C24] text-white font-bold";
-                      else if (isInactive) btnStyle = "border-slate-400 bg-slate-600 text-white font-bold";
+                      if (isClient)
+                        btnStyle = "border-emerald-500 bg-emerald-600 text-white font-bold";
+                      else if (isDiscarded)
+                        btnStyle = "border-[#ED1C24] bg-[#ED1C24] text-white font-bold";
+                      else if (isInactive)
+                        btnStyle = "border-slate-400 bg-slate-600 text-white font-bold";
                       else btnStyle = "border-[#0B1F33] bg-[#0B1F33] text-white font-bold";
                     }
 
@@ -549,13 +597,17 @@ export function LeadDetailsSheet({ leadId, open, onOpenChange, onUpdated }: Lead
                 <div className="space-y-2">
                   <div className="grid gap-2 sm:grid-cols-2 text-xs mb-3">
                     <div className="rounded-lg bg-[#F8FAFC] p-2.5 border border-[#EEF2F7]">
-                      <div className="text-[10px] font-bold uppercase text-[#94A3B8]">Último contato</div>
+                      <div className="text-[10px] font-bold uppercase text-[#94A3B8]">
+                        Último contato
+                      </div>
                       <div className="font-semibold text-[#0B1F33] mt-0.5">
                         {formatDateTime(lead.lastContactAt)}
                       </div>
                     </div>
                     <div className="rounded-lg bg-[#F8FAFC] p-2.5 border border-[#EEF2F7]">
-                      <div className="text-[10px] font-bold uppercase text-[#94A3B8]">Próxima ação</div>
+                      <div className="text-[10px] font-bold uppercase text-[#94A3B8]">
+                        Próxima ação
+                      </div>
                       <div className="font-semibold text-[#0B1F33] mt-0.5">
                         {formatDateTime(lead.nextActionAt)}
                       </div>
@@ -563,14 +615,17 @@ export function LeadDetailsSheet({ leadId, open, onOpenChange, onUpdated }: Lead
                   </div>
 
                   {(lead.interactions ?? []).length === 0 ? (
-                    <p className="text-xs text-[#94A3B8] italic">Nenhum histórico registrado até o momento.</p>
+                    <p className="text-xs text-[#94A3B8] italic">
+                      Nenhum histórico registrado até o momento.
+                    </p>
                   ) : (
                     lead.interactions?.map((interaction) => (
-                      <div key={interaction.id} className="rounded-lg bg-[#F8FAFC] p-3 border border-[#EEF2F7] text-xs">
+                      <div
+                        key={interaction.id}
+                        className="rounded-lg bg-[#F8FAFC] p-3 border border-[#EEF2F7] text-xs"
+                      >
                         <div className="flex items-center justify-between gap-3">
-                          <span className="font-bold text-[#0B1F33]">
-                            {interaction.type}
-                          </span>
+                          <span className="font-bold text-[#0B1F33]">{interaction.type}</span>
                           <span className="text-[10px] text-[#64748B]">
                             {formatDateTime(interaction.createdAt)}
                           </span>

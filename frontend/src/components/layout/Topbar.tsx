@@ -13,13 +13,8 @@ import {
   User,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { useNavigate, useRouterState } from "@tanstack/react-router";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -37,6 +32,98 @@ import { toast } from "sonner";
 interface TopbarProps {
   onToggleSidebar?: () => void;
   onOpenMobile?: () => void;
+}
+
+type ScreenInfo = {
+  category: string;
+  title: string;
+  subtitle: string;
+};
+
+function getScreenInfo(pathname: string): ScreenInfo {
+  const path = pathname.toLowerCase();
+  if (path.includes("/dashboard")) {
+    return {
+      category: "COMERCIAL",
+      title: "Central Comercial",
+      subtitle: "Carteira, positivação, cobertura e expansão territorial da Deusa Alimentos.",
+    };
+  }
+  if (path.includes("/mapa-oportunidades")) {
+    return {
+      category: "INTELIGÊNCIA TERRITORIAL",
+      title: "Mapa de Oportunidades",
+      subtitle: "Visualização operacional e inteligência territorial de oportunidades B2B.",
+    };
+  }
+  if (path.includes("/funil-comercial")) {
+    return {
+      category: "OPERAÇÃO & VENDAS",
+      title: "Funil Comercial",
+      subtitle: "Acompanhamento do pipeline de vendas e fases de conversão de clientes.",
+    };
+  }
+  if (path.includes("/importar-cnpjs")) {
+    return {
+      category: "GESTÃO DE DADOS",
+      title: "Importar CNPJs",
+      subtitle: "Ingestão e enriquecimento de novos estabelecimentos e clientes.",
+    };
+  }
+  if (path.includes("/configuracoes")) {
+    return {
+      category: "SISTEMA",
+      title: "Configurações",
+      subtitle: "Parâmetros do sistema, inteligência de scoring e gestão de usuários.",
+    };
+  }
+  if (path.includes("/base-de-dados")) {
+    return {
+      category: "GESTÃO DE DADOS",
+      title: "Base de Dados",
+      subtitle: "Consulte empresas, cidades e CNAEs monitorados.",
+    };
+  }
+  if (path.includes("/recomendacoes")) {
+    return {
+      category: "INTELIGÊNCIA COMERCIAL",
+      title: "Recomendações Inteligentes",
+      subtitle: "Ações prioritárias sugeridas pelo motor de inteligência da Deusa Analytics.",
+    };
+  }
+  if (path.includes("/regioes-prioritarias")) {
+    return {
+      category: "ESTRATÉGIA",
+      title: "Regiões Prioritárias",
+      subtitle: "Ranking objetivo de onde a equipe comercial deve concentrar esforços.",
+    };
+  }
+  if (path.includes("/rotas-inteligentes")) {
+    return {
+      category: "INTELIGÊNCIA TERRITORIAL",
+      title: "Rotas Inteligentes",
+      subtitle: "Planejamento otimizado de rotas de visita comercial.",
+    };
+  }
+  if (path.includes("/leads-b2b/")) {
+    return {
+      category: "OPERAÇÃO & VENDAS",
+      title: "Detalhes da Oportunidade",
+      subtitle: "Ficha cadastral completa e ações comerciais.",
+    };
+  }
+  if (path.includes("/leads-b2b")) {
+    return {
+      category: "OPERAÇÃO & VENDAS",
+      title: "Leads B2B",
+      subtitle: "Painel comercial operacional para prospecção, qualificação e conversão.",
+    };
+  }
+  return {
+    category: "DEUSA ALIMENTOS",
+    title: "Deusa Analytics",
+    subtitle: "Plataforma de Inteligência Territorial e Comercial.",
+  };
 }
 
 function getUserInitials(name?: string): string {
@@ -59,6 +146,10 @@ function getRoleLabel(role?: string): string {
 
 export function Topbar({ onOpenMobile }: TopbarProps = {}) {
   const navigate = useNavigate();
+  const routerState = useRouterState();
+  const currentPathname = routerState?.location?.pathname || "";
+  const screenInfo = getScreenInfo(currentPathname);
+
   const user = AuthService.getUser();
   const [searchQuery, setSearchQuery] = useState("");
   const [mounted, setMounted] = useState(false);
@@ -126,7 +217,7 @@ export function Topbar({ onOpenMobile }: TopbarProps = {}) {
   function handleNotificationClick(notif: AppNotification) {
     markAsRead(notif.id);
     if (notif.targetUrl) {
-      navigate({ to: notif.targetUrl as any });
+      navigate({ to: notif.targetUrl });
     }
   }
 
@@ -159,29 +250,31 @@ export function Topbar({ onOpenMobile }: TopbarProps = {}) {
   const userRoleLabel = mounted ? getRoleLabel(user?.role) : "Consultor Comercial";
 
   return (
-    <header className="h-16 shrink-0 border-b border-[#DDE5EF] bg-white px-4 shadow-xs lg:px-8">
-      <div className="flex h-full items-center gap-3 md:gap-4">
-        {onOpenMobile && (
-          <button
-            type="button"
-            onClick={onOpenMobile}
-            className="lg:hidden flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-700 outline-none transition hover:bg-slate-100 hover:text-slate-900 cursor-pointer"
-            title="Abrir menu principal"
-          >
-            <Menu className="h-5 w-5 text-slate-700" />
-          </button>
-        )}
-
-        <form onSubmit={handleSearch} className="relative max-w-xl flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder="Buscar cidade, CNAE, CNPJ ou lead..."
-            className="h-10 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] pl-10 pr-3 text-sm text-[#0B1F33] outline-none transition placeholder:text-slate-400 focus:border-[#1061AF] focus:bg-white focus:ring-2 focus:ring-[#1061AF]/15"
-          />
-        </form>
+    <header className="h-[88px] shrink-0 border-b border-[#DDE5EF] bg-white px-4 shadow-2xs lg:px-6">
+      <div className="flex h-full items-center justify-between gap-4">
+        <div className="flex items-center gap-3 min-w-0">
+          {onOpenMobile && (
+            <button
+              type="button"
+              onClick={onOpenMobile}
+              className="lg:hidden flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-700 outline-none transition hover:bg-slate-100 hover:text-slate-900 cursor-pointer"
+              title="Abrir menu principal"
+            >
+              <Menu className="h-5 w-5 text-slate-700" />
+            </button>
+          )}
+          <div className="flex flex-col justify-center min-w-0">
+            <span className="text-[10px] font-extrabold uppercase tracking-widest text-[#1061AF] leading-none mb-0.5">
+              {screenInfo.category}
+            </span>
+            <h1 className="text-xl font-bold tracking-tight text-[#0B1F33] leading-tight truncate">
+              {screenInfo.title}
+            </h1>
+            <p className="text-xs font-medium text-[#64748B] leading-tight truncate mt-0.5 hidden sm:block">
+              {screenInfo.subtitle}
+            </p>
+          </div>
+        </div>
 
         <div className="ml-auto flex items-center gap-2.5 shrink-0">
           {/* Menu de Notificações Reais */}
@@ -200,7 +293,10 @@ export function Topbar({ onOpenMobile }: TopbarProps = {}) {
                 )}
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-80 overflow-hidden p-0 shadow-xl border border-slate-200 rounded-xl">
+            <DropdownMenuContent
+              align="end"
+              className="w-80 overflow-hidden p-0 shadow-xl border border-slate-200 rounded-xl"
+            >
               <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-4 py-3">
                 <span className="font-bold text-slate-900 text-sm">Notificações Operacionais</span>
                 {unreadCount > 0 && (
@@ -245,12 +341,18 @@ export function Topbar({ onOpenMobile }: TopbarProps = {}) {
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-1">
-                            <span className={`text-xs ${isUnread ? "font-bold text-slate-900" : "font-medium text-slate-700"}`}>
+                            <span
+                              className={`text-xs ${isUnread ? "font-bold text-slate-900" : "font-medium text-slate-700"}`}
+                            >
                               {notif.title}
                             </span>
-                            {isUnread && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#1061AF]" />}
+                            {isUnread && (
+                              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#1061AF]" />
+                            )}
                           </div>
-                          <p className="mt-0.5 text-[11px] text-slate-500 line-clamp-2">{notif.message}</p>
+                          <p className="mt-0.5 text-[11px] text-slate-500 line-clamp-2">
+                            {notif.message}
+                          </p>
                           <span className="mt-1 block text-[10px] font-semibold text-slate-400">
                             {formatRelativeTime(notif.createdAt)}
                           </span>
@@ -282,7 +384,10 @@ export function Topbar({ onOpenMobile }: TopbarProps = {}) {
               </button>
             </DropdownMenuTrigger>
 
-            <DropdownMenuContent align="end" className="w-56 p-1.5 shadow-xl border border-slate-200 rounded-xl">
+            <DropdownMenuContent
+              align="end"
+              className="w-56 p-1.5 shadow-xl border border-slate-200 rounded-xl"
+            >
               <DropdownMenuLabel className="px-2 py-1.5 text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
                 Minha Conta
               </DropdownMenuLabel>
@@ -310,7 +415,9 @@ export function Topbar({ onOpenMobile }: TopbarProps = {}) {
       <Dialog open={profileOpen} onOpenChange={setProfileOpen}>
         <DialogContent className="border border-slate-200 bg-white p-6 sm:max-w-[400px] rounded-2xl shadow-xl">
           <DialogHeader>
-            <DialogTitle className="text-center text-lg font-bold text-[#0B1F33]">Meu Perfil</DialogTitle>
+            <DialogTitle className="text-center text-lg font-bold text-[#0B1F33]">
+              Meu Perfil
+            </DialogTitle>
           </DialogHeader>
 
           {profileLoading ? (
@@ -336,7 +443,9 @@ export function Topbar({ onOpenMobile }: TopbarProps = {}) {
 
               <div className="w-full space-y-2 text-left pt-2">
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">E-mail Corporativo</div>
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    E-mail Corporativo
+                  </div>
                   <div className="mt-0.5 flex items-center gap-2 text-xs font-bold text-slate-800">
                     <Mail className="h-3.5 w-3.5 text-[#1061AF]" />
                     <span className="truncate">{profile?.email || user?.email}</span>

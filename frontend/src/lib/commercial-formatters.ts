@@ -35,7 +35,9 @@ export function formatCnae(value?: string | null) {
 
 export function formatDateTime(value?: string | null) {
   if (!value) return "Sem registro";
-  return new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(value));
+  return new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(
+    new Date(value),
+  );
 }
 
 export function companyName(company: { nomeFantasia?: string | null; razaoSocial: string }) {
@@ -62,8 +64,10 @@ export function formatNumber(value: number): string {
 }
 
 export function formatPercent(value: number, decimals: number = 1): string {
-  return new Intl.NumberFormat("pt-BR", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: decimals,
-  }).format(value) + "%";
+  return (
+    new Intl.NumberFormat("pt-BR", {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: decimals,
+    }).format(value) + "%"
+  );
 }

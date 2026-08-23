@@ -60,7 +60,9 @@ export function ScoreBreakdownTooltip({
           type="button"
           onClick={(e) => e.stopPropagation()}
           className={`inline-flex items-center gap-1 rounded-md border ${
-            variant === "subtle" ? "px-2 py-0.5 text-xs font-medium" : "px-2.5 py-1 text-xs font-bold"
+            variant === "subtle"
+              ? "px-2 py-0.5 text-xs font-medium"
+              : "px-2.5 py-1 text-xs font-bold"
           } tabular-nums transition cursor-pointer ${badgeStyle} ${className}`}
         >
           <span>{variant === "subtle" ? score : `${score}/100`}</span>
@@ -81,7 +83,8 @@ export function ScoreBreakdownTooltip({
               Score de Oportunidade
             </div>
             <div className="text-sm font-extrabold text-[#0B1F33]">
-              {score}/100 <span className="text-xs font-semibold text-slate-500">({levelLabel})</span>
+              {score}/100{" "}
+              <span className="text-xs font-semibold text-slate-500">({levelLabel})</span>
             </div>
           </div>
           <div className="flex items-center gap-1 text-[11px] font-bold text-[#1061AF] bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">

@@ -1,10 +1,6 @@
 import { useMemo } from "react";
 import type { CityExpansion } from "@/types/dashboard";
-import {
-  Building2,
-  Filter,
-  Check,
-} from "lucide-react";
+import { Building2, Filter, Check } from "lucide-react";
 import { formatNumber, formatPercent } from "@/lib/commercial-formatters";
 
 interface ExecutiveCityRankingProps {
@@ -35,9 +31,7 @@ export function ExecutiveCityRanking({
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-white px-5 py-4">
         <div>
           <div className="flex items-center gap-2.5">
-            <h3 className="text-sm font-bold text-slate-900">
-              Potencial por Município
-            </h3>
+            <h3 className="text-sm font-bold text-slate-900">Potencial por Município</h3>
             <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-semibold text-slate-600 border border-slate-200">
               {sortedCities.length} municípios
             </span>
@@ -64,7 +58,9 @@ export function ExecutiveCityRanking({
         {sortedCities.length === 0 ? (
           <div className="flex h-44 flex-col items-center justify-center text-center text-slate-400">
             <Building2 className="mb-2 h-8 w-8 text-slate-300" />
-            <p className="text-xs font-semibold">Nenhum município disponível para a amostra atual.</p>
+            <p className="text-xs font-semibold">
+              Nenhum município disponível para a amostra atual.
+            </p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -81,7 +77,10 @@ export function ExecutiveCityRanking({
               <tbody className="divide-y divide-slate-100/80">
                 {sortedCities.map((item, index) => {
                   const isSelected = selectedCity.toLowerCase() === item.city.toLowerCase();
-                  const oppPercent = Math.min(100, Math.round((item.opportunities / maxOpportunities) * 100));
+                  const oppPercent = Math.min(
+                    100,
+                    Math.round((item.opportunities / maxOpportunities) * 100),
+                  );
                   const rank = index + 1;
 
                   return (
@@ -89,14 +88,14 @@ export function ExecutiveCityRanking({
                       key={item.city}
                       onClick={() => onSelectCity(isSelected ? "Todas" : item.city)}
                       className={`group cursor-pointer transition-all ${
-                        isSelected
-                          ? "bg-blue-50/60 font-semibold"
-                          : "hover:bg-slate-50/80"
+                        isSelected ? "bg-blue-50/60 font-semibold" : "hover:bg-slate-50/80"
                       }`}
                     >
                       {/* Ranking # */}
                       <td className="py-3 pl-2 text-center">
-                        <span className={`text-[11px] font-bold ${rank <= 3 ? "text-slate-900" : "text-slate-400"}`}>
+                        <span
+                          className={`text-[11px] font-bold ${rank <= 3 ? "text-slate-900" : "text-slate-400"}`}
+                        >
                           #{rank}
                         </span>
                       </td>
@@ -127,7 +126,8 @@ export function ExecutiveCityRanking({
                             />
                           </div>
                           <span className="font-bold tabular-nums text-slate-800 text-xs">
-                            {formatNumber(item.opportunities)} <span className="font-normal text-slate-400 text-[10px]">opp</span>
+                            {formatNumber(item.opportunities)}{" "}
+                            <span className="font-normal text-slate-400 text-[10px]">opp</span>
                           </span>
                         </div>
                       </td>

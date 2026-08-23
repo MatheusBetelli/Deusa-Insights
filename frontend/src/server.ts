@@ -9,10 +9,37 @@ type ServerEntry = {
 
 let serverEntryPromise: Promise<ServerEntry> | undefined;
 
+function getContentSecurityPolicy(): string {
+  let apiOrigin: string | undefined;
+  const configuredApiUrl = import.meta.env.VITE_API_URL?.trim();
+  if (configuredApiUrl) {
+    try {
+      const parsedUrl = new URL(configuredApiUrl);
+      if (parsedUrl.protocol === "https:") apiOrigin = parsedUrl.origin;
+    } catch {
+      apiOrigin = undefined;
+    }
+  }
+
+  return [
+    "default-src 'self'",
+    "base-uri 'self'",
+    "object-src 'none'",
+    "frame-ancestors 'none'",
+    "form-action 'self'",
+    "script-src 'self' 'unsafe-inline'",
+    "style-src 'self' 'unsafe-inline'",
+    "font-src 'self' data:",
+    "img-src 'self' data: blob: https://*.tile.openstreetmap.org",
+    `connect-src 'self'${apiOrigin ? ` ${apiOrigin}` : ""}`,
+    "worker-src 'self' blob:",
+  ].join("; ");
+}
+
 async function getServerEntry(): Promise<ServerEntry> {
   if (!serverEntryPromise) {
     serverEntryPromise = import("@tanstack/react-start/server-entry").then(
-      (m) => ((m as { default?: ServerEntry }).default ?? (m as unknown as ServerEntry)),
+      (m) => (m as { default?: ServerEntry }).default ?? (m as unknown as ServerEntry),
     );
   }
   return serverEntryPromise;
@@ -32,6 +59,7 @@ function withSecurityHeaders(response: Response, request: Request): Response {
   const headers = new Headers(response.headers);
   headers.set("x-content-type-options", "nosniff");
   headers.set("x-frame-options", "DENY");
+  headers.set("content-security-policy", getContentSecurityPolicy());
   headers.set("referrer-policy", "strict-origin-when-cross-origin");
   headers.set("permissions-policy", "camera=(), microphone=()");
   if (new URL(request.url).protocol === "https:") {

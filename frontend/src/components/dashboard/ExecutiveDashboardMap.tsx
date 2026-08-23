@@ -22,7 +22,7 @@ interface ExecutiveDashboardMapProps {
 }
 
 function getCommercialCategory(item: MapOpportunity): "CLIENTE" | "CRITICO" | "PROSPECT" {
-  if (item.status === "CONVERTED") return "CLIENTE";
+  if (item.status === "CONVERTED" || item.isClient) return "CLIENTE";
   if (item.score >= 80 || item.potentialLevel === "CRITICAL") return "CRITICO";
   return "PROSPECT";
 }
@@ -57,7 +57,7 @@ export function ExecutiveDashboardMap({
 }: ExecutiveDashboardMapProps) {
   const mapElRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
-  const clusterRef = useRef<any>(null);
+  const clusterRef = useRef<L.MarkerClusterGroup | null>(null);
 
   const [opportunities, setOpportunities] = useState<MapOpportunity[]>([]);
   const [loading, setLoading] = useState(true);
@@ -86,13 +86,23 @@ export function ExecutiveDashboardMap({
   // Filtragem dos pontos pelas propriedades do Dashboard
   const filteredPoints = useMemo(() => {
     const norm = (str?: string | null) =>
-      str ? str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase() : "";
+      str
+        ? str
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .toLowerCase()
+        : "";
 
     return opportunities.filter((item) => {
       if (typeof item.latitude !== "number" || typeof item.longitude !== "number") return false;
       if (selectedUf && selectedUf !== "Todos" && item.uf !== selectedUf) return false;
-      if (selectedCity && selectedCity !== "Todas" && norm(item.city) !== norm(selectedCity)) return false;
-      if (selectedCnae && item.cnaePrincipal && !item.cnaePrincipal.includes(selectedCnae.replace(/\D/g, ""))) {
+      if (selectedCity && selectedCity !== "Todas" && norm(item.city) !== norm(selectedCity))
+        return false;
+      if (
+        selectedCnae &&
+        item.cnaePrincipal &&
+        !item.cnaePrincipal.includes(selectedCnae.replace(/\D/g, ""))
+      ) {
         return false;
       }
       return true;
@@ -127,20 +137,30 @@ export function ExecutiveDashboardMap({
         const Leaflet = LeafletModule.default || LeafletModule;
         if (cancelled || !mapElRef.current) return;
 
-        (window as any).L = Leaflet;
+        const SP_MAP_BOUNDS: [[number, number], [number, number]] = [
+          [-25.5, -53.8],
+          [-19.5, -44.0],
+        ];
+
+        window.L = Leaflet;
 
         const map = Leaflet.map(mapElRef.current, {
           center: DEFAULT_CENTER,
           zoom: DEFAULT_ZOOM,
+          minZoom: 7,
+          maxZoom: 19,
           zoomControl: true,
           scrollWheelZoom: true,
           preferCanvas: true,
+          maxBounds: SP_MAP_BOUNDS,
+          maxBoundsViscosity: 1.0,
         });
 
         Leaflet.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
           attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
           maxZoom: 19,
-          minZoom: 3,
+          minZoom: 7,
+          noWrap: true,
         }).addTo(map);
 
         mapRef.current = map;
@@ -173,14 +193,10 @@ export function ExecutiveDashboardMap({
       const LeafletModule = await import("leaflet");
       const Leaflet = LeafletModule.default || LeafletModule;
       if (cancelled || !mapRef.current) return;
-      (window as any).L = Leaflet;
+      window.L = Leaflet;
 
       if (clusterRef.current) {
-        try {
-          if (typeof clusterRef.current.clearLayers === "function") {
-            clusterRef.current.clearLayers();
-          }
-        } catch {}
+        clusterRef.current.clearLayers();
         map.removeLayer(clusterRef.current);
         clusterRef.current = null;
       }
@@ -193,12 +209,44 @@ export function ExecutiveDashboardMap({
       await import("leaflet.markercluster");
       if (cancelled || !mapRef.current) return;
 
-      const clusterGroup = (Leaflet as any).markerClusterGroup({
+      const clusterGroup = Leaflet.markerClusterGroup({
         chunkedLoading: true,
         maxClusterRadius: 40,
         spiderfyOnMaxZoom: true,
         showCoverageOnHover: false,
         zoomToBoundsOnClick: true,
+        iconCreateFunction: (cluster: L.MarkerCluster) => {
+          const n = cluster.getChildCount();
+          const childMarkers = cluster.getAllChildMarkers();
+
+          const hasClient = childMarkers.some((marker) => marker.options.commCat === "CLIENTE");
+          const hasCritical = childMarkers.some((marker) => marker.options.commCat === "CRITICO");
+
+          let bg = "#1061AF";
+          if (hasClient) {
+            bg = "#16A34A";
+          } else if (hasCritical) {
+            bg = "#ED1C24";
+          }
+
+          const border = "#FFFFFF";
+          const size = n >= 100 ? 46 : n >= 25 ? 40 : 34;
+
+          return Leaflet.divIcon({
+            className: "deusa-cluster-pin",
+            html: `<div style="
+              width:${size}px;height:${size}px;border-radius:50%;
+              background:${bg};
+              border:3px solid ${border};
+              box-shadow:0 3px 10px rgba(0,0,0,0.35);
+              display:flex;align-items:center;justify-content:center;
+              font-weight:800;font-size:13px;
+              color:#FFFFFF;font-family:Inter,system-ui,sans-serif;
+            "><span>${n}</span></div>`,
+            iconSize: [size, size],
+            iconAnchor: [size / 2, size / 2],
+          });
+        },
       });
 
       const bounds = Leaflet.latLngBounds([]);
@@ -217,7 +265,10 @@ export function ExecutiveDashboardMap({
           popupAnchor: [0, -32],
         });
 
-        const marker = Leaflet.marker([p.latitude, p.longitude], { icon: customIcon });
+        const marker = Leaflet.marker([p.latitude, p.longitude], {
+          icon: customIcon,
+          commCat: cat,
+        });
 
         const statusBadge =
           cat === "CLIENTE"
@@ -274,8 +325,12 @@ export function ExecutiveDashboardMap({
             <MapPin className="h-4 w-4" />
           </div>
           <div>
-            <h3 className="text-sm font-bold tracking-tight text-white">Análise Geográfica de Mercado</h3>
-            <p className="text-xs text-slate-400">Mapeamento territorial de clientes e oportunidades</p>
+            <h3 className="text-sm font-bold tracking-tight text-white">
+              Análise Geográfica de Mercado
+            </h3>
+            <p className="text-xs text-slate-400">
+              Mapeamento territorial de clientes e oportunidades
+            </p>
           </div>
         </div>
 
@@ -287,7 +342,9 @@ export function ExecutiveDashboardMap({
             </span>
             <span className="inline-flex items-center gap-1.5">
               <span className="h-2.5 w-2.5 rounded-full bg-amber-500" />
-              <span className="text-slate-300">Oportunidades ({stats.prospects + stats.critical})</span>
+              <span className="text-slate-300">
+                Oportunidades ({stats.prospects + stats.critical})
+              </span>
             </span>
           </div>
 

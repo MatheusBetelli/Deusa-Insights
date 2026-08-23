@@ -12,7 +12,10 @@ test("escapeHtml trata payloads XSS como texto", () => {
 });
 
 test("escapeHtmlAttribute escapa aspas e ampersands para atributos HTML", () => {
-  assert.strictEqual(escapeHtmlAttribute(`https://example.test?a=1&b="x"`), "https://example.test?a=1&amp;b=&quot;x&quot;");
+  assert.strictEqual(
+    escapeHtmlAttribute(`https://example.test?a=1&b="x"`),
+    "https://example.test?a=1&amp;b=&quot;x&quot;",
+  );
 });
 
 test("safePathSegment codifica IDs antes de montar paths internos", () => {

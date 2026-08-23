@@ -192,11 +192,7 @@ export const AuthService = {
 
       return (await response.json()) as { message: string };
     } catch (err) {
-      if (
-        err instanceof Error &&
-        err.message !== "Failed to fetch" &&
-        err.name !== "AbortError"
-      ) {
+      if (err instanceof Error && err.message !== "Failed to fetch" && err.name !== "AbortError") {
         throw err;
       }
       throw new Error("Não foi possível contatar o serviço de recuperação de senha.");

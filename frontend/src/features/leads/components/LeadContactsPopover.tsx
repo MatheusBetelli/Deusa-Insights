@@ -32,14 +32,21 @@ const CITY_DDD_MAP: Record<string, string> = {
 
 function getCityDdd(cidade?: string | null): string {
   if (!cidade) return "14";
-  const norm = cidade.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+  const norm = cidade
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
   return CITY_DDD_MAP[norm] || "14";
 }
 
 // Formata telefone para exibição
-function formatPhoneDisplay(digits: string, cityDdd: string): { display: string; fullDigits: string; isMobile: boolean } {
+function formatPhoneDisplay(
+  digits: string,
+  cityDdd: string,
+): { display: string; fullDigits: string; isMobile: boolean } {
   let clean = digits.replace(/\D/g, "");
-  
+
   // Se começar com 55 e tiver 12 ou 13 dígitos, remove o 55
   if (clean.startsWith("55") && (clean.length === 12 || clean.length === 13)) {
     clean = clean.slice(2);
@@ -154,11 +161,7 @@ export function LeadContactsPopover({ company }: LeadContactsPopoverProps) {
   const count = contacts.length;
 
   if (count === 0) {
-    return (
-      <span className="text-xs font-semibold text-[#94A3B8]">
-        Sem contatos
-      </span>
-    );
+    return <span className="text-xs font-semibold text-[#94A3B8]">Sem contatos</span>;
   }
 
   return (
@@ -195,7 +198,10 @@ export function LeadContactsPopover({ company }: LeadContactsPopoverProps) {
             if (contact.type === "phone") {
               const waUrl = contact.isMobile ? `https://wa.me/${contact.raw}` : null;
               return (
-                <div key={contact.id} className="rounded-md bg-[#F8FAFC] p-2.5 border border-[#EEF2F7]">
+                <div
+                  key={contact.id}
+                  className="rounded-md bg-[#F8FAFC] p-2.5 border border-[#EEF2F7]"
+                >
                   <div className="text-[10px] font-bold uppercase text-[#64748B] mb-0.5">
                     {contact.label}
                   </div>
@@ -227,11 +233,17 @@ export function LeadContactsPopover({ company }: LeadContactsPopoverProps) {
             }
 
             return (
-              <div key={contact.id} className="rounded-md bg-[#F8FAFC] p-2.5 border border-[#EEF2F7]">
+              <div
+                key={contact.id}
+                className="rounded-md bg-[#F8FAFC] p-2.5 border border-[#EEF2F7]"
+              >
                 <div className="text-[10px] font-bold uppercase text-[#64748B] mb-0.5">
                   {contact.label}
                 </div>
-                <div className="text-xs font-semibold text-[#0B1F33] truncate mb-2" title={contact.value}>
+                <div
+                  className="text-xs font-semibold text-[#0B1F33] truncate mb-2"
+                  title={contact.value}
+                >
                   {contact.value}
                 </div>
                 <a

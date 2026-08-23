@@ -25,7 +25,9 @@ export function PriorityBadge({ level, className = "" }: Props) {
   const key = level.toLowerCase();
   const cls = styles[key] ?? "bg-slate-100 text-slate-700 ring-1 ring-slate-200";
   return (
-    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${cls} ${className}`}>
+    <span
+      className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${cls} ${className}`}
+    >
       {labels[key] ?? level}
     </span>
   );
@@ -38,7 +40,9 @@ export function StatusBadge({ status }: { status: string }) {
   else if (s.includes("inativo")) cls = styles.inativo;
   else if (s.includes("potencial")) cls = styles.potencial;
   return (
-    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${cls}`}>
+    <span
+      className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${cls}`}
+    >
       {status}
     </span>
   );

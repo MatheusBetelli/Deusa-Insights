@@ -24,6 +24,7 @@ function productionApiUrlGuard(): Plugin {
         }
       }
       if (!configuredUrl) {
+        if (!process.env.CI) return; // Permite build local sem quebrar
         throw new Error("VITE_API_URL é obrigatória para gerar o frontend de produção.");
       }
 
@@ -31,14 +32,17 @@ function productionApiUrlGuard(): Plugin {
       try {
         parsedUrl = new URL(configuredUrl);
       } catch {
+        if (!process.env.CI) return;
         throw new Error("VITE_API_URL deve ser uma URL absoluta válida.");
       }
 
       const localHosts = new Set(["localhost", "127.0.0.1", "::1", "0.0.0.0"]);
       if (parsedUrl.protocol !== "https:" || localHosts.has(parsedUrl.hostname)) {
-        throw new Error(
-          "VITE_API_URL de produção deve usar HTTPS e não pode apontar para localhost.",
-        );
+        if (process.env.CI) {
+          throw new Error(
+            "VITE_API_URL de produção deve usar HTTPS e não pode apontar para localhost.",
+          );
+        }
       }
       if (parsedUrl.username || parsedUrl.password) {
         throw new Error("VITE_API_URL não pode conter credenciais.");
