@@ -44,6 +44,7 @@ dist-ssr
 dadosCNAE/K3241.K03200Y1.D60613.ESTABELE
 
 # Private Company Data & Imports
+dadosCNAE/*.csv
 *.xlsx
 *.xls
 *.csv
@@ -65,4 +66,8 @@ prisma.config.ts
 skills-lock.json
 *.tmp
 *.log
+
+# Scratch & Temporary Audit Scripts
+backend/scripts/*.ts
+!backend/scripts/.gitkeep
 
