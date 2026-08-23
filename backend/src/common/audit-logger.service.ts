@@ -1,11 +1,29 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { maskEmailForLogs } from "./lgpd.utils";
 
+export type AuditAction =
+  | "LOGIN"
+  | "LOGOUT"
+  | "EXPORT_DATA"
+  | "SEARCH_LEADS"
+  | "PASSWORD_RESET_REQUEST"
+  | "PASSWORD_RESET_SUCCESS"
+  | "PASSWORD_CHANGE"
+  | "DATA_MUTATION"
+  | "DATA_MUTATION_BLOCKED"
+  | "IMPORT_DATA"
+  | "OPT_OUT_REQUEST";
+
 export type AuditEvent = {
-  userId: string;
-  userEmail: string;
-  action: "LOGIN" | "LOGOUT" | "EXPORT_DATA" | "SEARCH_LEADS" | "PASSWORD_RESET_REQUEST" | "PASSWORD_RESET_SUCCESS" | "OPT_OUT_REQUEST";
+  action: AuditAction;
+  outcome?: "SUCCESS" | "FAILURE" | "BLOCKED";
+  userId?: string;
+  userEmail?: string;
   details?: string;
+  method?: string;
+  route?: string;
+  statusCode?: number;
+  durationMs?: number;
   ip?: string;
   timestamp?: Date;
 };
@@ -14,14 +32,24 @@ export type AuditEvent = {
 export class AuditLoggerService {
   private readonly logger = new Logger("LGPDAuditLogger");
 
-  logEvent(event: AuditEvent) {
-    const time = (event.timestamp || new Date()).toISOString();
-    const maskedEmail = maskEmailForLogs(event.userEmail);
-    const details = event.details ? ` | Detalhes: ${event.details}` : "";
-    const ipStr = event.ip ? ` | IP: ${event.ip}` : "";
-
+  logEvent(event: AuditEvent): void {
     this.logger.log(
-      `[AUDIT LGPD] [${time}] User: ${event.userId} (${maskedEmail}) | Ação: ${event.action}${details}${ipStr}`
+      JSON.stringify({
+        event: "security.audit",
+        timestamp: (event.timestamp ?? new Date()).toISOString(),
+        action: event.action,
+        outcome: event.outcome ?? "SUCCESS",
+        actor: {
+          id: event.userId ?? "anonymous",
+          email: maskEmailForLogs(event.userEmail),
+        },
+        method: event.method,
+        route: event.route,
+        statusCode: event.statusCode,
+        durationMs: event.durationMs,
+        ip: event.ip,
+        details: event.details,
+      }),
     );
   }
 }

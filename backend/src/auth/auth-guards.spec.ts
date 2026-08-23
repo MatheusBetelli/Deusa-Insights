@@ -17,6 +17,7 @@ import { MapOpportunitiesController } from "../map-opportunities/map-opportuniti
 import { NotificationsController } from "../notifications/notifications.controller";
 import { PipelineController } from "../pipeline/pipeline.controller";
 import { UsersController } from "../users/users.controller";
+import { DatasetFreezeGuard } from "../common/dataset-freeze.guard";
 
 const guardedControllers = [
   CitiesController,
@@ -32,12 +33,27 @@ const guardedControllers = [
   UsersController,
 ];
 
+const frozenDatasetControllers = [
+  CompaniesController,
+  ImportsController,
+  LeadInteractionsController,
+  LeadsController,
+];
+
 test("controllers de negocio exigem AuthGuard no backend", () => {
   for (const controller of guardedControllers) {
     const guards = Reflect.getMetadata(GUARDS_METADATA, controller) ?? [];
     assert.ok(
       guards.includes(AuthGuard),
       `${controller.name} deve declarar AuthGuard para nao depender apenas do frontend`,
+    );
+  }
+
+  for (const controller of frozenDatasetControllers) {
+    const guards = Reflect.getMetadata(GUARDS_METADATA, controller) ?? [];
+    assert.ok(
+      guards.includes(DatasetFreezeGuard),
+      `${controller.name} deve aplicar DatasetFreezeGuard para proteger a carteira congelada`,
     );
   }
 });

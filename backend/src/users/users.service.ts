@@ -57,10 +57,9 @@ export class UsersService {
             throw new NotFoundException("Usuário não encontrado.");
           }
           if (user.role === UserRole.ADMIN) {
-            const adminCount = await tx.user.count({ where: { role: UserRole.ADMIN } });
-            if (adminCount <= 1) {
-              throw new BadRequestException("O último administrador do sistema não pode ser excluído.");
-            }
+            throw new BadRequestException(
+              "Administradores não podem ser removidos. Apenas usuários do cargo Consultor Comercial podem ser excluídos.",
+            );
           }
 
           const mapping = await tx.userMapping.findUnique({ where: { cuid: id } });

@@ -6,11 +6,13 @@ test("AuditLoggerService - grava evento de auditoria com e-mail mascarado", () =
   const service = new AuditLoggerService();
   let loggedMsg = "";
 
-  (service as any).logger = {
-    log: (msg: string) => {
-      loggedMsg = msg;
+  Object.defineProperty(service, "logger", {
+    value: {
+      log: (msg: string) => {
+        loggedMsg = msg;
+      },
     },
-  };
+  });
 
   service.logEvent({
     userId: "usr_123",
@@ -20,8 +22,14 @@ test("AuditLoggerService - grava evento de auditoria com e-mail mascarado", () =
     ip: "127.0.0.1",
   });
 
-  assert.ok(loggedMsg.includes("[AUDIT LGPD]"));
-  assert.ok(loggedMsg.includes("User: usr_123"));
-  assert.ok(loggedMsg.includes("u***e@inovaskill.com") || loggedMsg.includes("***"));
-  assert.ok(loggedMsg.includes("Ação: LOGIN"));
+  const event = JSON.parse(loggedMsg) as {
+    event: string;
+    action: string;
+    actor: { id: string; email: string };
+  };
+  assert.equal(event.event, "security.audit");
+  assert.equal(event.action, "LOGIN");
+  assert.equal(event.actor.id, "usr_123");
+  assert.equal(event.actor.email, "u***e@inovaskill.com");
+  assert.ok(!loggedMsg.includes("usuario.teste@inovaskill.com"));
 });

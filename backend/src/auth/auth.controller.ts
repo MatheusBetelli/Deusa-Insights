@@ -6,6 +6,7 @@ import { ChangePasswordDto } from "./dto/change-password.dto";
 import { ForgotPasswordDto } from "./dto/forgot-password.dto";
 import { LoginDto } from "./dto/login.dto";
 import { ResetPasswordDto } from "./dto/reset-password.dto";
+import { AuthenticatedHttpRequest } from "../common/auditable-http.types";
 
 @Controller("auth")
 export class AuthController {
@@ -31,14 +32,14 @@ export class AuthController {
 
   @Get("me")
   @UseGuards(AuthGuard)
-  me(@Req() request: any) {
+  me(@Req() request: AuthenticatedHttpRequest) {
     return this.authService.me(request.user.sub);
   }
 
   @Patch("password")
   @UseGuards(AuthGuard)
   @Throttle({ default: { ttl: 60000, limit: 5 } })
-  changePassword(@Req() request: any, @Body() dto: ChangePasswordDto) {
+  changePassword(@Req() request: AuthenticatedHttpRequest, @Body() dto: ChangePasswordDto) {
     return this.authService.changePassword(request.user.sub, dto);
   }
 }
