@@ -3,6 +3,7 @@ import { Throttle } from "@nestjs/throttler";
 import { AuthGuard } from "../auth/auth.guard";
 import { Roles } from "../auth/roles.decorator";
 import { RolesGuard } from "../auth/roles.guard";
+import { DatasetFreezeGuard } from "../common/dataset-freeze.guard";
 import { UserRole } from "@prisma/client";
 import { CompaniesService } from "./companies.service";
 import { CompanyQueryDto } from "./dto/company-query.dto";
@@ -15,7 +16,7 @@ import { ValidateLocationDto } from "./dto/validate-location.dto";
 import { LocationCandidatesRequestDto } from "./dto/location-candidates-request.dto";
 import { UpdateCommercialProfileDto } from "./dto/update-commercial-profile.dto";
 
-@UseGuards(AuthGuard, RolesGuard)
+@UseGuards(AuthGuard, RolesGuard, DatasetFreezeGuard)
 @Controller("companies")
 export class CompaniesController {
   constructor(private readonly companiesService: CompaniesService) {}

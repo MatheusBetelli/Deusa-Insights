@@ -4,6 +4,7 @@ import { Throttle } from "@nestjs/throttler";
 import { AuthGuard } from "../auth/auth.guard";
 import { Roles } from "../auth/roles.decorator";
 import { RolesGuard } from "../auth/roles.guard";
+import { DatasetFreezeGuard } from "../common/dataset-freeze.guard";
 import { UserRole } from "@prisma/client";
 import { ImportCnpjDto } from "./dto/import-cnpj.dto";
 import { ImportsService } from "./imports.service";
@@ -24,7 +25,7 @@ type UploadedImportFile = {
 };
 
 @Roles(UserRole.ADMIN)
-@UseGuards(AuthGuard, RolesGuard)
+@UseGuards(AuthGuard, RolesGuard, DatasetFreezeGuard)
 @Controller("imports")
 export class ImportsController {
   constructor(private readonly importsService: ImportsService) {}

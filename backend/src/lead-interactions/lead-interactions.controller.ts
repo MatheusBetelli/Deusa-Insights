@@ -1,9 +1,11 @@
 import { Body, Controller, Get, Param, Post, Req, UseGuards } from "@nestjs/common";
 import { AuthGuard } from "../auth/auth.guard";
+import { DatasetFreezeGuard } from "../common/dataset-freeze.guard";
+import { AuthenticatedHttpRequest } from "../common/auditable-http.types";
 import { CreateLeadInteractionDto } from "./dto/create-lead-interaction.dto";
 import { LeadInteractionsService } from "./lead-interactions.service";
 
-@UseGuards(AuthGuard)
+@UseGuards(AuthGuard, DatasetFreezeGuard)
 @Controller("leads/:id/interactions")
 export class LeadInteractionsController {
   constructor(private readonly leadInteractionsService: LeadInteractionsService) {}
@@ -14,7 +16,11 @@ export class LeadInteractionsController {
   }
 
   @Post()
-  create(@Param("id") leadId: string, @Body() dto: CreateLeadInteractionDto, @Req() request: any) {
+  create(
+    @Param("id") leadId: string,
+    @Body() dto: CreateLeadInteractionDto,
+    @Req() request: AuthenticatedHttpRequest,
+  ) {
     return this.leadInteractionsService.create(leadId, dto, request.user.sub);
   }
 }

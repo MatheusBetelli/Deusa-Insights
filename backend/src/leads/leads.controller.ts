@@ -2,13 +2,14 @@ import { Body, Controller, Get, Header, Param, Patch, Post, Query, UseGuards } f
 import { AuthGuard } from "../auth/auth.guard";
 import { Roles } from "../auth/roles.decorator";
 import { RolesGuard } from "../auth/roles.guard";
+import { DatasetFreezeGuard } from "../common/dataset-freeze.guard";
 import { UserRole } from "@prisma/client";
 import { CreateLeadDto } from "./dto/create-lead.dto";
 import { LeadQueryDto } from "./dto/lead-query.dto";
 import { UpdateLeadDto } from "./dto/update-lead.dto";
 import { LeadsService } from "./leads.service";
 
-@UseGuards(AuthGuard, RolesGuard)
+@UseGuards(AuthGuard, RolesGuard, DatasetFreezeGuard)
 @Controller("leads")
 export class LeadsController {
   constructor(private readonly leadsService: LeadsService) {}
@@ -31,6 +32,11 @@ export class LeadsController {
     return this.leadsService.autoAssignTerritory();
   }
 
+  /**
+   * Consulta detalhada de lead por ID.
+   * Nota de Arquitetura: A inteligência comercial e o mapa de oportunidades trabalham em modelo de
+   * carteira e catálogo de oportunidades compartilhados entre a equipe comercial.
+   */
   @Get(":id")
   findById(@Param("id") id: string) {
     return this.leadsService.findById(id);
