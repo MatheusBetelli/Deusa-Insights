@@ -30,6 +30,9 @@ jobs:
           cd backend && npm ci
           cd ../frontend && npm ci
 
+      - name: Gerar Prisma Client
+        run: cd backend && npx prisma generate
+
       - name: Executar Lint do Monorepo
         run: npm run lint
 
