@@ -18,7 +18,7 @@
     "geocode": "ts-node scripts/run-google-geocoding.ts",
     "quality:report": "ts-node scripts/generate-quality-report.ts",
     "lint": "tsc --noEmit",
-    "test": "node -r reflect-metadata -r ts-node/register --test 'src/**/*.spec.ts'"
+    "test": "node -r reflect-metadata -r ts-node/register --test src/**/*.spec.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.9",
