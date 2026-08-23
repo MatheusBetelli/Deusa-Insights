@@ -3,6 +3,38 @@ import { JwtService } from "@nestjs/jwt";
 import { ConfigService } from "@nestjs/config";
 import { PrismaService } from "../prisma/prisma.service";
 
+function extractTokenFromRequest(request: any): string | undefined {
+  // 1. Cookies parseados pelo cookie-parser (httpOnly cookie)
+  if (request.cookies) {
+    if (typeof request.cookies.auth_token === "string" && request.cookies.auth_token) {
+      return request.cookies.auth_token;
+    }
+    if (typeof request.cookies.deusa_auth_token === "string" && request.cookies.deusa_auth_token) {
+      return request.cookies.deusa_auth_token;
+    }
+    if (typeof request.cookies.accessToken === "string" && request.cookies.accessToken) {
+      return request.cookies.accessToken;
+    }
+  }
+
+  // 2. Cookie header bruto (fallback se middleware não executou)
+  const rawCookieHeader = request.headers?.cookie as string | undefined;
+  if (rawCookieHeader) {
+    const match = rawCookieHeader.match(/(?:^|;\s*)(?:auth_token|deusa_auth_token|accessToken)=([^;]+)/);
+    if (match && match[1]) {
+      return decodeURIComponent(match[1].trim());
+    }
+  }
+
+  // 3. Authorization Bearer header (fallback para Swagger, scripts, CLI e integrações)
+  const authorization = request.headers?.authorization as string | undefined;
+  if (authorization?.startsWith("Bearer ")) {
+    return authorization.slice(7).trim();
+  }
+
+  return undefined;
+}
+
 @Injectable()
 export class AuthGuard implements CanActivate {
   constructor(
@@ -13,8 +45,7 @@ export class AuthGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext) {
     const request = context.switchToHttp().getRequest();
-    const authorization = request.headers.authorization as string | undefined;
-    const token = authorization?.startsWith("Bearer ") ? authorization.slice(7) : undefined;
+    const token = extractTokenFromRequest(request);
 
     if (!token) throw new UnauthorizedException("Token de autenticação não informado");
 

@@ -121,6 +121,83 @@ test("token de acesso atual permanece válido quando a versão da conta confere"
   assert.equal(request.user.role, UserRole.SALES);
 });
 
+test("token de acesso armazenado em cookie httpOnly autentica requisição com sucesso", async () => {
+  const updatedAt = new Date("2026-08-19T12:00:00.000Z");
+  const request: any = {
+    cookies: { auth_token: "valid-cookie-token" },
+    headers: {},
+  };
+  const guard = new AuthGuard(
+    {
+      verifyAsync: async (token: string) => {
+        assert.equal(token, "valid-cookie-token");
+        return {
+          sub: "user-1",
+          type: "access",
+          ver: updatedAt.getTime(),
+        };
+      },
+    } as any,
+    { get: () => "test-secret" } as any,
+    {
+      user: {
+        findUnique: async () => ({
+          id: "user-1",
+          name: "Usuário Cookie",
+          email: "usuario.cookie@example.com",
+          role: UserRole.ADMIN,
+          updatedAt,
+        }),
+      },
+    } as any,
+  );
+  const context = {
+    switchToHttp: () => ({ getRequest: () => request }),
+  } as any;
+
+  assert.equal(await guard.canActivate(context), true);
+  assert.equal(request.user.sub, "user-1");
+  assert.equal(request.user.role, UserRole.ADMIN);
+});
+
+test("token de acesso extraído de cabeçalho Cookie bruto autentica com sucesso", async () => {
+  const updatedAt = new Date("2026-08-19T12:00:00.000Z");
+  const request: any = {
+    headers: { cookie: "other_cookie=123; auth_token=raw-header-cookie-token; session=xyz" },
+  };
+  const guard = new AuthGuard(
+    {
+      verifyAsync: async (token: string) => {
+        assert.equal(token, "raw-header-cookie-token");
+        return {
+          sub: "user-2",
+          type: "access",
+          ver: updatedAt.getTime(),
+        };
+      },
+    } as any,
+    { get: () => "test-secret" } as any,
+    {
+      user: {
+        findUnique: async () => ({
+          id: "user-2",
+          name: "Usuário Header Cookie",
+          email: "header.cookie@example.com",
+          role: UserRole.MANAGER,
+          updatedAt,
+        }),
+      },
+    } as any,
+  );
+  const context = {
+    switchToHttp: () => ({ getRequest: () => request }),
+  } as any;
+
+  assert.equal(await guard.canActivate(context), true);
+  assert.equal(request.user.sub, "user-2");
+  assert.equal(request.user.role, UserRole.MANAGER);
+});
+
 test("operacoes administrativas declaram papeis no backend", () => {
   const createUserRoles = Reflect.getMetadata(ROLES_KEY, UsersController.prototype.createUser);
   const deleteUserRoles = Reflect.getMetadata(ROLES_KEY, UsersController.prototype.deleteUser);

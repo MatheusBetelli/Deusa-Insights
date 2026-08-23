@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Patch, Post, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Patch, Post, Req, Res, UseGuards } from "@nestjs/common";
+import { Response } from "express";
 import { Throttle } from "@nestjs/throttler";
 import { AuthGuard } from "./auth.guard";
 import { AuthService } from "./auth.service";
@@ -8,14 +9,40 @@ import { LoginDto } from "./dto/login.dto";
 import { ResetPasswordDto } from "./dto/reset-password.dto";
 import { AuthenticatedHttpRequest } from "../common/auditable-http.types";
 
+export const AUTH_COOKIE_NAME = "auth_token";
+const COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 dias
+
+export function getAuthCookieOptions() {
+  const isProduction = process.env.NODE_ENV === "production";
+  return {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: (isProduction ? "none" : "lax") as "none" | "lax",
+    path: "/",
+    maxAge: COOKIE_MAX_AGE_MS,
+  };
+}
+
 @Controller("auth")
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post("login")
   @Throttle({ default: { ttl: 60000, limit: 30 } })
-  login(@Body() dto: LoginDto) {
-    return this.authService.login(dto);
+  async login(
+    @Body() dto: LoginDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const result = await this.authService.login(dto);
+    response.cookie(AUTH_COOKIE_NAME, result.accessToken, getAuthCookieOptions());
+    return result;
+  }
+
+  @Post("logout")
+  logout(@Res({ passthrough: true }) response: Response) {
+    const { maxAge: _, ...clearOptions } = getAuthCookieOptions();
+    response.clearCookie(AUTH_COOKIE_NAME, clearOptions);
+    return { message: "Logout realizado com sucesso" };
   }
 
   @Post("forgot-password")

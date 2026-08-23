@@ -5,6 +5,7 @@ import { ConfigService } from "@nestjs/config";
 import { NestExpressApplication } from "@nestjs/platform-express";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import helmet from "helmet";
+import cookieParser from "cookie-parser";
 import { AppModule } from "./app.module";
 
 const DEV_JWT_SECRET = "dev-secret-change-me";
@@ -140,6 +141,9 @@ async function bootstrap() {
     next();
   });
 
+  // ── Cookie Parser — Processa cookies para autenticação httpOnly ─────────
+  app.use(cookieParser());
+
   // ── CORS — restritivo em produção, permissivo em desenvolvimento ────────
   app.enableCors({
     origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
@@ -165,7 +169,7 @@ async function bootstrap() {
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    allowedHeaders: ["Content-Type", "Authorization", "Cookie"],
     maxAge: 86400, // Cache preflight por 24h
   });
 
