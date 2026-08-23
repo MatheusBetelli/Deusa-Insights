@@ -10,14 +10,23 @@ type ServerEntry = {
 let serverEntryPromise: Promise<ServerEntry> | undefined;
 
 function getContentSecurityPolicy(): string {
-  let apiOrigin: string | undefined;
+  const connectOrigins = new Set<string>([
+    "'self'",
+    "http://localhost:*",
+    "http://127.0.0.1:*",
+    "ws:",
+    "wss:",
+  ]);
+
   const configuredApiUrl = import.meta.env.VITE_API_URL?.trim();
   if (configuredApiUrl) {
     try {
       const parsedUrl = new URL(configuredApiUrl);
-      if (parsedUrl.protocol === "https:") apiOrigin = parsedUrl.origin;
+      if (parsedUrl.protocol === "https:" || parsedUrl.protocol === "http:") {
+        connectOrigins.add(parsedUrl.origin);
+      }
     } catch {
-      apiOrigin = undefined;
+      // Ignorar URL malformada
     }
   }
 
@@ -31,7 +40,7 @@ function getContentSecurityPolicy(): string {
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self' data:",
     "img-src 'self' data: blob: https://*.tile.openstreetmap.org",
-    `connect-src 'self'${apiOrigin ? ` ${apiOrigin}` : ""}`,
+    `connect-src ${Array.from(connectOrigins).join(" ")}`,
     "worker-src 'self' blob:",
   ].join("; ");
 }

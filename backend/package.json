@@ -18,7 +18,7 @@
     "geocode": "ts-node scripts/run-google-geocoding.ts",
     "quality:report": "ts-node scripts/generate-quality-report.ts",
     "lint": "tsc --noEmit",
-    "test": "node -e \"const { readdirSync } = require('fs'), { join } = require('path'), { spawnSync } = require('child_process'); const files = readdirSync('src', { recursive: true }).filter(f => String(f).endsWith('.spec.ts')).map(f => join('src', String(f))); process.exit(spawnSync('node', ['-r', 'reflect-metadata', '-r', 'ts-node/register', '--test', ...files], { stdio: 'inherit' }).status ?? 0);\""
+    "test": "node -r reflect-metadata -r ts-node/register --test src/**/*.spec.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.9",
@@ -32,7 +32,6 @@
     "bcryptjs": "^3.0.3",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.3",
-    "cookie-parser": "^1.4.7",
     "dotenv": "^17.2.3",
     "helmet": "^8.3.0",
     "read-excel-file": "^9.3.10",
@@ -42,7 +41,6 @@
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
-    "@types/cookie-parser": "^1.4.10",
     "@types/node": "^22.16.5",
     "prisma": "6.12.0",
     "ts-node": "^10.9.2",
