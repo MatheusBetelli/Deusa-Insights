@@ -29,3 +29,24 @@ export type ImportCnpjResponse = {
   job: ImportJob;
   companies: Company[];
 };
+
+export type ImportExcelClientsResponse = {
+  success: boolean;
+  totalLinhasProcessadas: number;
+  clientesInalterados: number;
+  clientesAtualizados: number;
+  novosClientesCriados: number;
+  clientesMatcheados: number;
+  clientesSemEmpresaCorrespondente: number;
+  linhasIgnoradas: number;
+  motivosIgnoracao: Record<string, number>;
+  resumoAbateRegional: Record<
+    string,
+    {
+      clientesAtivos: number;
+      prospectsAtivos: number;
+      totalMercadosMapeados: number;
+      taxaPenetracao: string;
+    }
+  >;
+};

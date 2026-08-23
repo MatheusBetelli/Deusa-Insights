@@ -28,7 +28,9 @@ function classifyExternal(external, customerByCnpj, customersByNameCity) {
         classification: inactive ? "CLIENTE_INATIVO" : "CLIENTE_ATUAL",
         matchStrategy: "CNPJ",
         confidence: 1,
-        reason: inactive ? "CNPJ encontrado na base interna com status inativo." : "CNPJ encontrado na base interna ativa.",
+        reason: inactive
+          ? "CNPJ encontrado na base interna com status inativo."
+          : "CNPJ encontrado na base interna ativa.",
       };
     }
   }
@@ -60,14 +62,22 @@ function classifyExternal(external, customerByCnpj, customersByNameCity) {
 }
 
 function createSummary(db) {
-  const classificationRows = db.prepare(`
+  const classificationRows = db
+    .prepare(
+      `
     SELECT classification, COUNT(*) AS total
     FROM comparison_results
     GROUP BY classification
-  `).all();
+  `,
+    )
+    .all();
 
-  const classifications = Object.fromEntries(classificationRows.map((row) => [row.classification, row.total]));
-  const regionRows = db.prepare(`
+  const classifications = Object.fromEntries(
+    classificationRows.map((row) => [row.classification, row.total]),
+  );
+  const regionRows = db
+    .prepare(
+      `
     SELECT
       COALESCE(NULLIF(regiao, ''), cidade, 'Sem regiao') AS regiao,
       COUNT(*) AS opportunities
@@ -76,9 +86,13 @@ function createSummary(db) {
     GROUP BY COALESCE(NULLIF(regiao, ''), cidade, 'Sem regiao')
     ORDER BY opportunities DESC
     LIMIT 8
-  `).all();
+  `,
+    )
+    .all();
 
-  const cityRows = db.prepare(`
+  const cityRows = db
+    .prepare(
+      `
     SELECT
       cidade,
       COUNT(*) AS opportunities
@@ -87,15 +101,21 @@ function createSummary(db) {
     GROUP BY cidade
     ORDER BY opportunities DESC
     LIMIT 8
-  `).all();
+  `,
+    )
+    .all();
 
-  const unmatched = db.prepare(`
+  const unmatched = db
+    .prepare(
+      `
     SELECT nome_estabelecimento, cnpj, cidade, regiao, classification, reason
     FROM comparison_results
     WHERE classification IN ('POTENCIAL_CLIENTE', 'DADO_INCOMPLETO')
     ORDER BY classification DESC, cidade ASC
     LIMIT 12
-  `).all();
+  `,
+    )
+    .all();
 
   return {
     generatedAt: new Date().toISOString(),
@@ -119,10 +139,14 @@ export function compareData() {
   const db = openDatabase();
   resetComparisonTables(db);
 
-  const customers = db.prepare("SELECT * FROM current_customers WHERE validation_status = 'VALID'").all();
+  const customers = db
+    .prepare("SELECT * FROM current_customers WHERE validation_status = 'VALID'")
+    .all();
   const externalItems = db.prepare("SELECT * FROM external_establishments").all();
 
-  const customerByCnpj = new Map(customers.filter((item) => item.normalized_cnpj).map((item) => [item.normalized_cnpj, item]));
+  const customerByCnpj = new Map(
+    customers.filter((item) => item.normalized_cnpj).map((item) => [item.normalized_cnpj, item]),
+  );
   const customersByNameCity = new Map(
     customers
       .filter((item) => item.normalized_name && item.normalized_city)
@@ -158,7 +182,9 @@ export function compareData() {
       result.reason,
     );
 
-    if (["POTENCIAL_CLIENTE", "CLIENTE_INATIVO", "DADO_INCOMPLETO"].includes(result.classification)) {
+    if (
+      ["POTENCIAL_CLIENTE", "CLIENTE_INATIVO", "DADO_INCOMPLETO"].includes(result.classification)
+    ) {
       insertOpportunity.run(
         external.id,
         external.cnpj,

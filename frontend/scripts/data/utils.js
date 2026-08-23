@@ -35,7 +35,11 @@ export function asString(value) {
 
 export function asNumber(value) {
   if (typeof value === "number" && Number.isFinite(value)) return value;
-  const parsed = Number(String(value ?? "").replace(/\./g, "").replace(",", "."));
+  const parsed = Number(
+    String(value ?? "")
+      .replace(/\./g, "")
+      .replace(",", "."),
+  );
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
@@ -45,7 +49,12 @@ export function firstPresent(row, aliases) {
 
   for (const alias of aliases) {
     const realKey = normalizedKeyMap.get(normalizeText(alias));
-    if (realKey && row[realKey] !== undefined && row[realKey] !== null && String(row[realKey]).trim() !== "") {
+    if (
+      realKey &&
+      row[realKey] !== undefined &&
+      row[realKey] !== null &&
+      String(row[realKey]).trim() !== ""
+    ) {
       return row[realKey];
     }
   }
@@ -64,8 +73,10 @@ export function listImportFiles() {
 export function inferFileKind(filePath) {
   const name = path.basename(filePath).toLowerCase();
   if (name.includes("venda") || name.includes("sales")) return "sales";
-  if (name.includes("extern") || name.includes("estabelec") || name.includes("prospect")) return "external";
-  if (name.includes("cliente") || name.includes("customer") || name.includes("deusa")) return "customers";
+  if (name.includes("extern") || name.includes("estabelec") || name.includes("prospect"))
+    return "external";
+  if (name.includes("cliente") || name.includes("customer") || name.includes("deusa"))
+    return "customers";
   return "unknown";
 }
 

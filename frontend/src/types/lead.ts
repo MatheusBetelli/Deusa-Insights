@@ -30,11 +30,11 @@ export type LeadInteraction = {
 };
 
 export type ScoreBreakdown = {
-  perfilPts: number;     // max 30
-  potencialPts: number;  // max 25
-  logisticaPts: number;  // max 20
-  dadosPts: number;      // max 10
-  prontidaoPts: number;  // max 10
+  perfilPts: number; // max 30
+  potencialPts: number; // max 25
+  logisticaPts: number; // max 20
+  dadosPts: number; // max 10
+  prontidaoPts: number; // max 10
   territorioPts: number; // max 5
   distanceKm: number;
 };

@@ -6,7 +6,7 @@ export interface AppNotification {
   title: string;
   message: string;
   createdAt: string;
-  targetUrl: string;
+  targetUrl: "/leads-b2b" | "/importar-cnpjs";
   category: "OPPORTUNITY" | "IMPORT" | "ACTION";
 }
 

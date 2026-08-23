@@ -73,11 +73,13 @@ export async function readRowsFromFile(filePath) {
     const rows = await readSheet(filePath);
     if (rows.length === 0) return [];
 
-    const headers = rows[0].map((header, index) => String(header ?? "").trim() || `coluna_${index + 1}`);
+    const headers = rows[0].map(
+      (header, index) => String(header ?? "").trim() || `coluna_${index + 1}`,
+    );
     return rows.slice(1).map((values) =>
       headers.reduce((acc, header, index) => {
         const value = values[index];
-        acc[header] = value instanceof Date ? value.toISOString() : value ?? "";
+        acc[header] = value instanceof Date ? value.toISOString() : (value ?? "");
         return acc;
       }, {}),
     );

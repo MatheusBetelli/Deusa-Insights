@@ -6,19 +6,22 @@ import { PROCESSED_DIR, inferFileKind, listImportFiles, writeJson } from "./util
 
 function insertRegion(db, cidade, regiao) {
   if (!cidade) return;
-  db.prepare(
-    "INSERT OR IGNORE INTO regions (cidade, uf, regiao) VALUES (?, 'SP', ?)",
-  ).run(cidade, regiao || "");
+  db.prepare("INSERT OR IGNORE INTO regions (cidade, uf, regiao) VALUES (?, 'SP', ?)").run(
+    cidade,
+    regiao || "",
+  );
 }
 
 function insertCustomer(db, item) {
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO current_customers (
       cnpj, normalized_cnpj, razao_social, nome_estabelecimento, normalized_name,
       cidade, normalized_city, regiao, status_cliente, produtos_comprados,
       source_file, validation_status, validation_errors
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
+  `,
+  ).run(
     item.cnpj,
     item.normalized_cnpj,
     item.razao_social,
@@ -37,13 +40,15 @@ function insertCustomer(db, item) {
 }
 
 function insertExternal(db, item) {
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO external_establishments (
       cnpj, normalized_cnpj, nome_estabelecimento, normalized_name,
       cidade, normalized_city, regiao, segmento_cnae, endereco, telefone,
       source_file, validation_status, validation_errors
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
+  `,
+  ).run(
     item.cnpj,
     item.normalized_cnpj,
     item.nome_estabelecimento,
@@ -62,13 +67,15 @@ function insertExternal(db, item) {
 }
 
 function insertSale(db, item) {
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO sales (
       customer_cnpj, normalized_cnpj, nome_estabelecimento, normalized_name,
       cidade, normalized_city, produto, valor, data_venda,
       source_file, validation_status, validation_errors
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
+  `,
+  ).run(
     item.customer_cnpj,
     item.normalized_cnpj,
     item.nome_estabelecimento,
@@ -132,7 +139,8 @@ export async function importData() {
           kind,
           imported: 0,
           invalid: 0,
-          error: "Nome do arquivo nao indica tipo. Use clientes*, externos*/estabelecimentos* ou vendas*.",
+          error:
+            "Nome do arquivo nao indica tipo. Use clientes*, externos*/estabelecimentos* ou vendas*.",
         });
         report.totals.failedFiles += 1;
         continue;
