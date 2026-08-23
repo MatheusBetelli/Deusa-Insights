@@ -33,9 +33,10 @@ test("isValidOpportunityCnae rejeita CNAEs fora das 5 categorias autorizadas", (
 test("buildCnaeWhereInput considera CNAE principal e secundário", () => {
   const where = buildCnaeWhereInput();
   assert.ok(Array.isArray(where.OR));
-  assert.equal(where.OR.length, 2);
+  assert.equal(where.OR.length, 3);
   assert.ok("cnaePrincipal" in where.OR[0]);
   assert.ok("cnaes" in where.OR[1]);
+  assert.ok("clientAccounts" in where.OR[2]);
 });
 
 test("isRuralOrNonCommercialLocation detecta propriedades rurais pelo nome ou endereço", () => {

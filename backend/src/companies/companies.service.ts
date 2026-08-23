@@ -423,12 +423,11 @@ export class CompaniesService {
     limit?: number;
     city?: string;
     minScore?: number;
-    dryRun?: any;
+    dryRun?: boolean;
   }) {
     const limit = Math.min(query.limit ? Number(query.limit) : 50, 100);
     const minScore = query.minScore !== undefined ? Number(query.minScore) : 70;
-    const dryRun =
-      query.dryRun !== undefined ? query.dryRun === true || String(query.dryRun) === "true" : true;
+    const dryRun = query.dryRun ?? true;
     const city = query.city;
 
     // 1. Obter cidades monitoradas (ativas no banco)

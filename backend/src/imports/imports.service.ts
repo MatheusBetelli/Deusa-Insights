@@ -226,6 +226,8 @@ export class ImportsService {
 
     let matchedCount = 0;
     let createdCount = 0;
+    let updatedCount = 0;
+    let unchangedCount = 0;
     let unmatchedCount = 0;
     let ignoredCount = 0;
     const ignoredReasons: Record<string, number> = {};
@@ -282,7 +284,15 @@ export class ImportsService {
         cnpj ? this.prisma.company.findUnique({ where: { cnpj }, select: { id: true } }) : null,
         this.prisma.clientAccount.findUnique({
           where: { codigoClienteDeusa: clientCode },
-          select: { id: true, companyId: true, cnpj: true },
+          select: {
+            id: true,
+            companyId: true,
+            cnpj: true,
+            razaoSocial: true,
+            nomeFantasia: true,
+            cidade: true,
+            uf: true,
+          },
         }),
       ]);
       const existingCnpj = existingAccount?.cnpj?.replace(/\D/g, "") || null;
@@ -295,6 +305,30 @@ export class ImportsService {
       }
       const companyId = company?.id ?? existingAccount?.companyId ?? null;
       const importedAt = new Date();
+
+      const targetCnpj = cnpj || null;
+      const targetCidade = cidade || null;
+      const targetUf = uf || null;
+
+      // Se o registro já existir e for 100% IDÊNTICO, mantém intocado (sem sobrescrever nada)
+      const isIdentical =
+        existingAccount &&
+        (existingAccount.cnpj || null) === targetCnpj &&
+        existingAccount.razaoSocial === nome &&
+        (existingAccount.cidade || null) === targetCidade &&
+        (existingAccount.uf || null) === targetUf &&
+        existingAccount.companyId === companyId;
+
+      if (isIdentical) {
+        await this.prisma.clientAccount.update({
+          where: { id: existingAccount.id },
+          data: { lastImportAt: importedAt },
+        });
+        unchangedCount += 1;
+        if (companyId) matchedCount += 1;
+        else unmatchedCount += 1;
+        continue;
+      }
 
       await this.prisma.$transaction(async (transaction) => {
         if (companyId) {
@@ -336,8 +370,16 @@ export class ImportsService {
 
       if (companyId) matchedCount += 1;
       else unmatchedCount += 1;
-      if (!existingAccount) createdCount += 1;
+
+      if (existingAccount) {
+        updatedCount += 1;
+      } else {
+        createdCount += 1;
+      }
     }
+
+    // Executa a reconciliação automática para vincular novos/atualizados clientes aos mapas de oportunidades
+    await this.reconcileClientAccountsWithLeads();
 
     // Calcula resumo de Abate para a região (Ribeirão Preto & Franca)
     const targetCities = ["Ribeirão Preto", "Franca"];
@@ -372,12 +414,83 @@ export class ImportsService {
     return {
       success: true,
       totalLinhasProcessadas: rawData.length,
-      clientesMatcheados: matchedCount,
+      clientesInalterados: unchangedCount,
+      clientesAtualizados: updatedCount,
       novosClientesCriados: createdCount,
+      clientesMatcheados: matchedCount,
       clientesSemEmpresaCorrespondente: unmatchedCount,
       linhasIgnoradas: ignoredCount,
       motivosIgnoracao: ignoredReasons,
       resumoAbateRegional: abateSummary,
     };
+  }
+
+  /**
+   * Reconciliação automática entre contas de clientes da Deusa e estabelecimentos do Google/Receita
+   */
+  async reconcileClientAccountsWithLeads() {
+    const clients = await this.prisma.clientAccount.findMany({
+      include: { company: true },
+    });
+
+    const leads = await this.prisma.lead.findMany({
+      where: { company: { source: { not: "excel_client_import" } } },
+      include: { company: { include: { details: true, clientAccounts: true } } },
+    });
+
+    for (const client of clients) {
+      const cCity = (client.cidade || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+      const cCnpj = client.cnpj ? client.cnpj.replace(/\D/g, "") : "";
+      const cNameClean = (client.razaoSocial || client.nomeFantasia || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .replace(/ltda|me|eireli|s\/a|sa|supermercados|supermercado|minimercado|mercado|acougue|casa de carnes/g, "")
+        .replace(/[^a-z0-9]/g, "")
+        .trim();
+
+      for (const lead of leads) {
+        const gCity = (lead.company.cidade || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+        const gCnpj = lead.company.cnpj ? lead.company.cnpj.replace(/\D/g, "") : "";
+        const gNameClean = (lead.company.razaoSocial || lead.company.nomeFantasia || "")
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .toLowerCase()
+          .replace(/ltda|me|eireli|s\/a|sa|supermercados|supermercado|minimercado|mercado|acougue|casa de carnes/g, "")
+          .replace(/[^a-z0-9]/g, "")
+          .trim();
+
+        if (cCity && gCity && cCity === gCity) {
+          let isMatch = false;
+
+          // Match 1: CNPJ exato ou raiz (primeiros 8 dígitos)
+          if (cCnpj && gCnpj && cCnpj.length >= 8 && gCnpj.length >= 8 && cCnpj.slice(0, 8) === gCnpj.slice(0, 8)) {
+            isMatch = true;
+          }
+          // Match 2: Nome comercial exato na mesma cidade (comprimento >= 4)
+          else if (cNameClean && gNameClean && cNameClean.length >= 4 && gNameClean.length >= 4) {
+            if (cNameClean === gNameClean) {
+              isMatch = true;
+            }
+          }
+
+          if (isMatch) {
+            if (lead.status !== "CONVERTED") {
+              await this.prisma.lead.update({
+                where: { id: lead.id },
+                data: { status: "CONVERTED" },
+              });
+            }
+            const exists = lead.company.clientAccounts.some((ca) => ca.id === client.id);
+            if (!exists) {
+              await this.prisma.clientAccount.update({
+                where: { id: client.id },
+                data: { companyId: lead.companyId },
+              });
+            }
+          }
+        }
+      }
+    }
   }
 }

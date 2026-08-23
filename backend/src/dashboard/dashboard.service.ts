@@ -106,6 +106,10 @@ function periodWhere(start: Date, end: Date): Prisma.DateTimeFilter {
 export class DashboardService implements OnModuleInit {
   private summaryCache = new Map<string, { data: any; expiresAt: number }>();
 
+  clearCache() {
+    this.summaryCache.clear();
+  }
+
   constructor(private readonly prisma: PrismaService) {}
 
   async onModuleInit() {

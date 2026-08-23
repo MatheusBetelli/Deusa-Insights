@@ -61,23 +61,97 @@ export class MapOpportunitiesService implements OnModuleInit {
     if (this.mapCache && this.mapCache.expiresAt > Date.now()) {
       return this.mapCache.data;
     }
-    // Buscar apenas leads criados explicitamente pelos fluxos de ingestão autorizados.
+    // Buscar apenas leads ativos criados pelos fluxos autorizados.
     const leads = await this.prisma.lead.findMany({
       where: {
+        status: { notIn: ["NOT_INTERESTED", "INACTIVE"] },
         company: {
           situacaoCadastral: "ATIVA",
           ...buildCnaeWhereInput(),
         },
       },
       include: {
-        company: { include: { details: true, cnaes: true } },
+        company: { include: { details: true, cnaes: true, clientAccounts: true } },
         assignedTo: { select: { name: true } },
       },
       orderBy: { score: "desc" },
     });
 
     // Filtrar estritamente por geofence urbano e não-rural
-    const validLeads = leads.filter((lead) => isValidOpportunity(lead.company));
+    const rawValidLeads = leads.filter(
+      (lead: any) =>
+        lead.status !== "NOT_INTERESTED" &&
+        lead.status !== "INACTIVE" &&
+        isValidOpportunity(lead.company),
+    );
+
+    // Deduplicação inteligente automática em tempo de execução (impede pinos duplicados no mesmo local)
+    const validLeads: any[] = [];
+    const seenLocations = new Map<string, { id: string; isClient: boolean }>();
+
+    for (const lead of rawValidLeads) {
+      const comp = lead.company;
+      if (!comp.latitude || !comp.longitude) {
+        validLeads.push(lead);
+        continue;
+      }
+
+      const isClient = comp.clientAccounts?.some((ca: any) => ca.isCurrentClient);
+      const nameNorm = (comp.razaoSocial || comp.nomeFantasia || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .replace(/\b(ltda|me|eireli|s\/a|sa|supermercados|supermercado|minimercado|mini-mercado|mercado|acougue|mercearia)\b/g, "")
+        .replace(/[^a-z0-9]/g, "")
+        .trim();
+
+      const city = (comp.cidade || "").toLowerCase().trim();
+      const locKey = `${city}|${comp.latitude.toFixed(4)},${comp.longitude.toFixed(4)}|${nameNorm}`;
+
+      const existing = seenLocations.get(locKey);
+      if (existing) {
+        if (isClient && !existing.isClient) {
+          const prevIdx = validLeads.findIndex((l: any) => l.company.id === existing.id);
+          if (prevIdx !== -1) validLeads.splice(prevIdx, 1);
+          validLeads.push(lead);
+          seenLocations.set(locKey, { id: comp.id, isClient: true });
+        }
+        continue;
+      }
+
+      seenLocations.set(locKey, { id: comp.id, isClient: !!isClient });
+      validLeads.push(lead);
+    }
+
+    // Pre-carregar todas as contas de clientes da Deusa para cruzamento inteligente de redes
+    const clientAccounts = await this.prisma.clientAccount.findMany({ select: { cnpj: true, razaoSocial: true, nomeFantasia: true, cidade: true } });
+    const clientCnpjs = new Set<string>();
+    const clientKeys = new Set<string>();
+    const clientNameTokens = new Set<string>();
+
+    for (const ca of clientAccounts) {
+      if (ca.cnpj) {
+        const clean = ca.cnpj.replace(/\D/g, "");
+        if (clean.length >= 8) clientCnpjs.add(clean.slice(0, 8));
+      }
+      const name = (ca.razaoSocial || ca.nomeFantasia || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .replace(/ltda|me|eireli|s\/a|sa|supermercados|supermercado|minimercado|mercado|acougue|casa de carnes/g, "")
+        .replace(/[^a-z0-9]/g, "")
+        .trim();
+      const city = (ca.cidade || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .trim();
+
+      if (name) {
+        if (city) clientKeys.add(`${name}|${city}`);
+        clientNameTokens.add(name);
+      }
+    }
 
     // Mapear para exibição no mapa, aplicando fallback de centroide se lat/lon forem nulas ou divergentes
     const result = validLeads.map((lead) => {
@@ -116,6 +190,22 @@ export class MapOpportunitiesService implements OnModuleInit {
         }
       }
 
+      const gCity = (lead.company.cidade || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+      const gCnpj = lead.company.cnpj ? lead.company.cnpj.replace(/\D/g, "") : "";
+      const gNameClean = (lead.company.razaoSocial || lead.company.nomeFantasia || "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .replace(/ltda|me|eireli|s\/a|sa|supermercados|supermercado|minimercado|mercado|acougue|casa de carnes/g, "")
+        .replace(/[^a-z0-9]/g, "")
+        .trim();
+
+      const hasActiveClientAccount = Boolean(
+        lead.company.clientAccounts?.some((ca: any) => ca.isCurrentClient === true),
+      );
+
+      const isClient = lead.status === "CONVERTED" || hasActiveClientAccount;
+
       return {
         id: lead.id,
         companyId: lead.companyId,
@@ -130,7 +220,8 @@ export class MapOpportunitiesService implements OnModuleInit {
         latitude: lat,
         longitude: lng,
         score: lead.score,
-        status: lead.status,
+        status: isClient ? "CONVERTED" : lead.status,
+        isClient,
         potentialLevel: lead.potentialLevel,
         origemCoordenada,
         statusVerificacaoEndereco: lead.company.statusVerificacaoEndereco,
@@ -140,7 +231,8 @@ export class MapOpportunitiesService implements OnModuleInit {
         cnaePrincipal:
           (isValidOpportunityCnae(lead.company.cnaePrincipal)
             ? lead.company.cnaePrincipal
-            : lead.company.cnaes.find((item) => isValidOpportunityCnae(item.cnaeCode))?.cnaeCode) || null,
+            : lead.company.cnaes.find((item: any) => isValidOpportunityCnae(item.cnaeCode))?.cnaeCode) || null,
+        responsibleName: lead.assignedTo?.name || null,
       };
     });
 

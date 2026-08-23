@@ -31,7 +31,7 @@ async function main() {
   const adminPassword = await bcrypt.hash(getRequiredPassword("SEED_ADMIN_PASSWORD"), 12);
   const salesPassword = await bcrypt.hash(getRequiredPassword("SEED_SALES_PASSWORD"), 12);
 
-  const admin = await prisma.user.upsert({
+  await prisma.user.upsert({
     where: { email: "admin@deusa.com.br" },
     update: {},
     create: {
@@ -42,56 +42,12 @@ async function main() {
     },
   });
 
-  const deusaGmail = await prisma.user.upsert({
-    where: { email: "deusaalimentos01@gmail.com" },
-    update: {},
-    create: {
-      name: "Deusa Alimentos",
-      email: "deusaalimentos01@gmail.com",
-      passwordHash: adminPassword,
-      role: UserRole.ADMIN,
-    },
-  });
-
-  const rafael = await prisma.user.upsert({
+  await prisma.user.upsert({
     where: { email: "rafael.mendes@deusa.com.br" },
     update: {},
     create: {
       name: "Rafael Mendes",
       email: "rafael.mendes@deusa.com.br",
-      passwordHash: salesPassword,
-      role: UserRole.SALES,
-    },
-  });
-
-  const mariana = await prisma.user.upsert({
-    where: { email: "mariana.alves@deusa.com.br" },
-    update: {},
-    create: {
-      name: "Mariana Alves",
-      email: "mariana.alves@deusa.com.br",
-      passwordHash: salesPassword,
-      role: UserRole.MANAGER,
-    },
-  });
-
-  const camila = await prisma.user.upsert({
-    where: { email: "camila.rocha@deusa.com.br" },
-    update: {},
-    create: {
-      name: "Camila Rocha",
-      email: "camila.rocha@deusa.com.br",
-      passwordHash: salesPassword,
-      role: UserRole.SALES,
-    },
-  });
-
-  const felipe = await prisma.user.upsert({
-    where: { email: "felipe.lima@deusa.com.br" },
-    update: {},
-    create: {
-      name: "Felipe Lima",
-      email: "felipe.lima@deusa.com.br",
       passwordHash: salesPassword,
       role: UserRole.SALES,
     },

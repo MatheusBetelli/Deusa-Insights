@@ -144,6 +144,7 @@ export function buildCnaeWhereInput(code?: string | null) {
       OR: [
         { cnaePrincipal: { in: variants } },
         { cnaes: { some: { cnaeCode: { in: variants } } } },
+        { clientAccounts: { some: { isCurrentClient: true } } },
       ],
     };
   }
@@ -151,6 +152,7 @@ export function buildCnaeWhereInput(code?: string | null) {
     OR: [
       { cnaePrincipal: { in: getAllTargetCnaeVariants() } },
       { cnaes: { some: { cnaeCode: { in: getAllTargetCnaeVariants() } } } },
+      { clientAccounts: { some: { isCurrentClient: true } } },
     ],
   };
 }
@@ -173,17 +175,68 @@ export function isRuralOrNonCommercialLocation(company: {
   bairro?: string | null;
   complemento?: string | null;
   cnaePrincipal?: string | null;
+  categoriaEncontrada?: string | null;
 }): boolean {
   const name = [company.nomeFantasia, company.razaoSocial].filter(Boolean).join(" ");
   const address = [company.logradouro, company.bairro, company.complemento].filter(Boolean).join(" ");
   const combined = `${name} ${address}`;
 
-  // Se tem termos estritamente rurais ou de pet shop/tabacaria
+  // Se o nome indica expressamente ser um supermercado, minimercado, açougue ou mercearia, preserva
+  if (/supermercado|minimercado|açougue|acougue|mercearia/i.test(name)) {
+    return false;
+  }
+
+  // 1. Verifica se a categoria do Google indica ramo totalmente alheio (lojas de roupas, ferragens, construçao, pet shop, etc.)
+  const catFound = (company.categoriaEncontrada || "").toLowerCase().trim();
+  if (
+    catFound &&
+    [
+      "clothing_store",
+      "womens_clothing_store",
+      "men_clothing_store",
+      "shoe_store",
+      "building_materials_store",
+      "hardware_store",
+      "electronics_store",
+      "home_goods_store",
+      "furniture_store",
+      "car_repair",
+      "car_dealer",
+      "pharmacy",
+      "drugstore",
+      "beauty_salon",
+      "hair_care",
+      "spa",
+      "gym",
+      "veterinary_care",
+      "pet_store",
+      "laundry",
+      "bank",
+      "atm",
+      "accounting",
+      "lawyer",
+      "real_estate_agency",
+      "travel_agency",
+      "insurance_agency",
+      "night_club",
+      "bar",
+      "ranch",
+      "health_food_store",
+      "pastry_shop",
+      "ice_cream_shop",
+      "coffee_shop",
+    ].includes(catFound)
+  ) {
+    return true;
+  }
+
+  // 2. Se o nome contém termos não-alimentícios
+  if (isNonFoodBusiness(combined)) {
+    return true;
+  }
+
+  // 3. Se tem termos estritamente rurais ou de pet shop/tabacaria
   if (STRICT_RURAL_OR_NON_COMMERCIAL_REGEX.test(combined)) {
-    // Se o nome indica expressamente ser um supermercado, minimercado, açougue ou mercearia, preserva
-    if (/supermercado|minimercado|açougue|acougue|mercearia/i.test(name)) {
-      return false;
-    }
     return true;
   }
 
@@ -248,6 +301,8 @@ export function isValidOpportunity(company: {
   situacaoCadastral?: string | null;
   cnaePrincipal?: string | null;
   cnaes?: Array<{ cnaeCode?: string | null }> | null;
+  clientAccounts?: Array<{ isCurrentClient?: boolean }> | null;
+  isClient?: boolean;
   cidade?: string | null;
   uf?: string | null;
   latitude?: number | null;
@@ -257,7 +312,13 @@ export function isValidOpportunity(company: {
   logradouro?: string | null;
   bairro?: string | null;
   complemento?: string | null;
+  categoriaEncontrada?: string | null;
 }): boolean {
+  // 0. Se é cliente ativo da Deusa Alimentos, é SEMPRE um pino válido no mapa
+  if (company.isClient || company.clientAccounts?.some((ca) => ca.isCurrentClient)) {
+    return true;
+  }
+
   // 1. Situação cadastral deve ser ATIVA
   const status = (company.situacaoCadastral || "").toUpperCase().trim();
   if (status !== "ATIVA" && status !== "ATIVO") {
@@ -274,11 +335,6 @@ export function isValidOpportunity(company: {
 
   // 3. Não pode ser propriedade rural (fazenda, sítio, estância, etc.) nem comércio alheio (roupas, calçados, oficinas, suplementos, etc.)
   if (isRuralOrNonCommercialLocation(company)) {
-    return false;
-  }
-
-  const name = [company.nomeFantasia, company.razaoSocial].filter(Boolean).join(" ");
-  if (isNonFoodBusiness(name)) {
     return false;
   }
 

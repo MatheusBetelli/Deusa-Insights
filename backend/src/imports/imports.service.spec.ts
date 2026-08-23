@@ -58,9 +58,11 @@ test("importação Excel usa identificadores estáveis e não inventa empresas o
         where.codigoClienteDeusa === "CLI-4"
           ? { id: "account-4", companyId: "company-other", cnpj: "60701190000104" }
           : null,
+      findMany: async () => [],
     },
     lead: {
       count: async () => 0,
+      findMany: async () => [],
     },
     $transaction: async (callback: (client: typeof transactionClient) => Promise<void>) =>
       callback(transactionClient),
