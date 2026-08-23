@@ -80,3 +80,12 @@ Se uma tarefa exigir chamadas pagas a APIs externas, **NÃO execute automaticame
 3. Quantos estabelecimentos/chamadas serão processados.
 4. Se existe alternativa usando apenas a base local.
 5. Aguarde a **autorização explícita** do usuário antes de rodar.
+
+---
+
+## 7. Trava da Fonte Única da Verdade (SSOT) e Deduplicação Idempotente
+
+1. **Contagem de Clientes Ativos:** A fonte única e inquestionável da verdade sobre os clientes ativos da Deusa Alimentos é a tabela `ClientAccount` com `isCurrentClient = true` (fixado na carteira física real das 6 cidades em ~374 estabelecimentos).
+2. **Proibição de Heurísticas de Expansão por Raiz de CNPJ ou Nome:** É expressamente PROIBIDO alterar o status de estabelecimentos no Mapa ou Dashboard usando raízes de CNPJ de 8 dígitos ou buscas flexíveis por nome de rede. Cada filial física é tratada de forma individual e estrita.
+3. **Idempotência no Upsert:** Toda importação ou sincronização de dados DEVE ser realizada via `upsert` com base no `codigoClienteDeusa` ou no CNPJ formatado de 14 dígitos. Nunca duplicar registros no banco.
+4. **Alinhamento entre Módulos:** Os contadores no Dashboard, Mapa de Oportunidades, Funil de Vendas e Carteira DEVEM apresentar 100% de consistência.
