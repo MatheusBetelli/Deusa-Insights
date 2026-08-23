@@ -45,11 +45,15 @@ function buildUrl(path: string, query?: Record<string, string | number | undefin
 }
 
 async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit): Promise<Response> {
-  if (init.signal) return fetch(input, init);
+  const mergedInit: RequestInit = {
+    credentials: "include",
+    ...init,
+  };
+  if (mergedInit.signal) return fetch(input, mergedInit);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
-    return await fetch(input, { ...init, signal: controller.signal });
+    return await fetch(input, { ...mergedInit, signal: controller.signal });
   } finally {
     clearTimeout(timeout);
   }

@@ -45,11 +45,15 @@ async function fetchWithTimeout(
   input: RequestInfo | URL,
   init: RequestInit = {},
 ): Promise<Response> {
-  if (init.signal) return fetch(input, init);
+  const mergedInit: RequestInit = {
+    credentials: "include",
+    ...init,
+  };
+  if (mergedInit.signal) return fetch(input, mergedInit);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
-    return await fetch(input, { ...init, signal: controller.signal });
+    return await fetch(input, { ...mergedInit, signal: controller.signal });
   } finally {
     clearTimeout(timeout);
   }
@@ -83,7 +87,7 @@ export const AuthService = {
     }
 
     const data = (await response.json()) as {
-      accessToken: string;
+      accessToken?: string;
       user: { id: string; name: string; email: string; role: string };
     };
 
@@ -101,7 +105,9 @@ export const AuthService = {
       sessionStorage.removeItem(USER_DATA_KEY);
 
       const targetStorage = rememberMe ? localStorage : sessionStorage;
-      targetStorage.setItem(AUTH_TOKEN_KEY, data.accessToken);
+      if (data.accessToken) {
+        targetStorage.setItem(AUTH_TOKEN_KEY, data.accessToken);
+      }
       targetStorage.setItem(USER_DATA_KEY, JSON.stringify(user));
     }
 
@@ -114,6 +120,14 @@ export const AuthService = {
   },
 
   logout: () => {
+    try {
+      fetchWithTimeout(buildAuthUrl("auth/logout"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      }).catch(() => {});
+    } catch {
+      // Silently handle error if URL build fails during offline/shutdown
+    }
     if (!hasBrowserStorage()) return;
     localStorage.removeItem(AUTH_TOKEN_KEY);
     localStorage.removeItem(USER_DATA_KEY);
@@ -123,7 +137,12 @@ export const AuthService = {
 
   isAuthenticated: () => {
     if (!hasBrowserStorage()) return false;
-    return !!(localStorage.getItem(AUTH_TOKEN_KEY) || sessionStorage.getItem(AUTH_TOKEN_KEY));
+    return !!(
+      localStorage.getItem(USER_DATA_KEY) ||
+      sessionStorage.getItem(USER_DATA_KEY) ||
+      localStorage.getItem(AUTH_TOKEN_KEY) ||
+      sessionStorage.getItem(AUTH_TOKEN_KEY)
+    );
   },
 
   getUser: (): User | null => {
