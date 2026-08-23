@@ -19,7 +19,7 @@
     "data:import": "node --experimental-sqlite scripts/data/import-data.js",
     "data:compare": "node --experimental-sqlite scripts/data/compare-data.js",
     "data:prepare": "node --experimental-sqlite scripts/data/prepare-data.js",
-    "test": "tsx --test 'src/**/*.spec.ts'",
+    "test": "node -e \"const { readdirSync } = require('fs'), { join } = require('path'), { spawnSync } = require('child_process'); const files = readdirSync('src', { recursive: true }).filter(f => String(f).endsWith('.spec.ts')).map(f => join('src', String(f))); process.exit(spawnSync('npx', ['tsx', '--test', ...files], { stdio: 'inherit' }).status ?? 0);\"",
     "test:e2e": "tsx --test src/e2e.test.ts"
   },
   "dependencies": {
