@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   build-and-test:
-    name: Build, Typecheck & Test
+    name: Lint, Typecheck, Audit, Test & Build
     runs-on: ubuntu-latest
 
     steps:
@@ -30,14 +30,20 @@ jobs:
           cd backend && npm ci
           cd ../frontend && npm ci
 
+      - name: Executar Lint do Monorepo
+        run: npm run lint
+
       - name: Executar Typecheck do Monorepo
         run: npm run typecheck
+
+      - name: Auditar Dependencias de Producao
+        run: npm run audit --omit=dev
+
+      - name: Executar Testes Unitarios
+        run: npm run test
 
       - name: Compilar Backend e Frontend
         env:
           # URL não roteável usada somente para validar o bundle; deploys reais devem fornecer sua API HTTPS.
           VITE_API_URL: https://api.deusa-ci.invalid
         run: npm run build
-
-      - name: Executar Testes Unitários
-        run: npm run test
