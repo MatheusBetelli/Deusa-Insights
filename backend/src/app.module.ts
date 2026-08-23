@@ -1,6 +1,6 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
-import { APP_GUARD } from "@nestjs/core";
+import { APP_GUARD, APP_INTERCEPTOR } from "@nestjs/core";
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 import { AuthModule } from "./auth/auth.module";
 import { CitiesModule } from "./cities/cities.module";
@@ -15,6 +15,8 @@ import { PipelineModule } from "./pipeline/pipeline.module";
 import { PrismaModule } from "./prisma/prisma.module";
 import { UsersModule } from "./users/users.module";
 import { ClassificationModule } from "./classification/classification.module";
+import { AuditInterceptor } from "./common/audit.interceptor";
+import { CommonModule } from "./common/common.module";
 
 import { NotificationsModule } from "./notifications/notifications.module";
 
@@ -30,6 +32,7 @@ import { HealthModule } from "./health/health.module";
       },
     ]),
     PrismaModule,
+    CommonModule,
     HealthModule,
     AuthModule,
     UsersModule,
@@ -49,6 +52,10 @@ import { HealthModule } from "./health/health.module";
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: AuditInterceptor,
     },
   ],
 })

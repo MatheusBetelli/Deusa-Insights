@@ -2,6 +2,7 @@ import "reflect-metadata";
 import { Logger, ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { ConfigService } from "@nestjs/config";
+import { NestExpressApplication } from "@nestjs/platform-express";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import helmet from "helmet";
 import { AppModule } from "./app.module";
@@ -99,8 +100,11 @@ function validateEnv(configService: ConfigService, logger: Logger): void {
 
 async function bootstrap() {
   const logger = new Logger("Bootstrap");
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const configService = app.get(ConfigService);
+
+  app.set("trust proxy", 1);
+  app.enableShutdownHooks();
 
   // ── Validação de Segurança de Variáveis de Ambiente ──────────────────────
   validateEnv(configService, logger);
@@ -113,16 +117,26 @@ async function bootstrap() {
   // ── Helmet — Headers de Segurança HTTP (substitui headers manuais) ──────
   app.use(
     helmet({
-      contentSecurityPolicy: isProduction ? undefined : false, // desabilitar CSP em dev (Swagger)
+      contentSecurityPolicy: isProduction
+        ? {
+            directives: {
+              defaultSrc: ["'none'"],
+              baseUri: ["'none'"],
+              formAction: ["'none'"],
+              frameAncestors: ["'none'"],
+              objectSrc: ["'none'"],
+            },
+          }
+        : false,
       crossOriginEmbedderPolicy: false, // necessário para mapas Leaflet
       hsts: isProduction ? { maxAge: 31536000, includeSubDomains: true, preload: true } : false,
     }),
   );
 
   // Headers customizados de conformidade LGPD
-  app.use((req: any, res: any, next: any) => {
-    res.setHeader("Permissions-Policy", "geolocation=(), camera=(), microphone=()");
-    res.setHeader("X-LGPD-Compliance", "Enforced (Lei 13.709/2018)");
+  app.use((_request: unknown, response: { setHeader(name: string, value: string): void }, next: () => void) => {
+    response.setHeader("Permissions-Policy", "geolocation=(), camera=(), microphone=()");
+    response.setHeader("X-LGPD-Compliance", "Enforced (Lei 13.709/2018)");
     next();
   });
 
