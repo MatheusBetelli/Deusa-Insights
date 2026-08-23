@@ -128,17 +128,18 @@ export function Sidebar({
       {mobileOpen && (
         <aside className="fixed inset-y-0 left-0 z-50 w-[280px] flex flex-col bg-[#0B1726] text-slate-200 shadow-2xl lg:hidden select-none animate-in slide-in-from-left duration-300">
           {/* Header Mobile */}
-          <div className="pt-5 pb-4 px-5 border-b border-slate-800/70 flex items-start justify-between gap-2">
-            <div className="flex flex-col gap-1 min-w-0">
-              <DeusaLogo className="h-10 w-auto max-w-[170px] object-contain" />
-              <div className="text-[11px] font-extrabold uppercase tracking-wider text-slate-300">
+          <div className="h-[88px] shrink-0 px-5 border-b border-slate-800/80 flex items-center justify-between gap-2">
+            <div className="flex flex-col gap-0.5 min-w-0 justify-center">
+              <DeusaLogo className="h-9 w-auto max-w-[160px] object-contain" />
+              <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-300 leading-none">
                 Deusa Analytics
               </div>
             </div>
 
             <button
               onClick={onMobileClose}
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-700/80 bg-slate-800/90 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
+              type="button"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-700/80 bg-slate-800/90 text-slate-300 hover:bg-slate-700 hover:text-white transition-colors cursor-pointer"
               title="Fechar menu"
             >
               <X className="h-5 w-5 text-slate-300" />
@@ -232,13 +233,14 @@ export function Sidebar({
           collapsed ? "w-[76px]" : "w-[280px]"
         }`}
       >
-        {/* Header do Sidebar */}
-        <div className={`pt-4 pb-3 border-b border-slate-800/70 ${collapsed ? "px-2" : "px-5"}`}>
+        <div
+          className={`h-[88px] shrink-0 flex items-center border-b border-slate-800/80 ${collapsed ? "px-2 justify-center" : "px-5"}`}
+        >
           {!collapsed ? (
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex flex-col gap-1 min-w-0">
-                <DeusaLogo className="h-10 w-auto max-w-[170px] object-contain" />
-                <div className="text-[11px] font-extrabold uppercase tracking-wider text-slate-300">
+            <div className="flex items-center justify-between gap-3 w-full">
+              <div className="flex flex-col gap-0.5 min-w-0 justify-center">
+                <DeusaLogo className="h-9 w-auto max-w-[160px] object-contain" />
+                <div className="text-[10px] font-extrabold uppercase tracking-wider text-slate-300 leading-none">
                   Deusa Analytics
                 </div>
               </div>
@@ -246,25 +248,27 @@ export function Sidebar({
               {onToggle && (
                 <button
                   onClick={onToggle}
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white transition-colors mt-0.5"
+                  type="button"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-700/70 bg-slate-800/70 text-slate-300 hover:bg-slate-700 hover:text-white hover:border-slate-600 transition-all shadow-xs cursor-pointer"
                   title="Recolher menu"
                 >
-                  <PanelLeftClose className="h-4 w-4" />
+                  <PanelLeftClose className="h-5 w-5 text-slate-200" />
                 </button>
               )}
             </div>
           ) : (
-            <div className="flex flex-col items-center gap-2.5 py-1">
-              <DeusaLogo className="h-7 w-auto max-w-[46px] object-contain" />
+            <div className="flex flex-col items-center justify-center gap-2 py-1">
+              <DeusaLogo className="h-6 w-auto max-w-[42px] object-contain" />
 
               {/* Botão de expandir posicionado entre a logo e a navegação */}
               {onToggle && (
                 <button
                   onClick={onToggle}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-700/80 bg-slate-800/90 text-[#FFF200] hover:bg-slate-700 hover:text-white transition-all shadow-xs"
+                  type="button"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-700/80 bg-slate-800 text-[#FFF200] hover:bg-slate-700 hover:text-white transition-all shadow-xs cursor-pointer"
                   title="Expandir menu"
                 >
-                  <PanelLeftOpen className="h-4 w-4 text-[#FFF200]" />
+                  <PanelLeftOpen className="h-5 w-5 text-[#FFF200]" />
                 </button>
               )}
             </div>
