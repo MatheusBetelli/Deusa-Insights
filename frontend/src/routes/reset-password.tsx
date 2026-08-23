@@ -99,9 +99,7 @@ function ResetPasswordPage() {
             <div className="h-12 w-12 rounded-full bg-blue-50 flex items-center justify-center text-[#1061AF] mb-4">
               <KeyRound className="h-6 w-6" />
             </div>
-            <h2 className="text-xl font-bold tracking-tight text-slate-900">
-              Redefinir Senha
-            </h2>
+            <h2 className="text-xl font-bold tracking-tight text-slate-900">Redefinir Senha</h2>
             <p className="mt-2 text-center text-sm text-slate-500 font-medium leading-relaxed">
               Crie uma nova senha segura para acessar sua conta no Deusa Analytics.
             </p>
@@ -114,7 +112,8 @@ function ResetPasswordPage() {
                 <div>
                   <p className="font-bold">Link de redefinição ausente</p>
                   <p className="text-xs text-amber-700 mt-1">
-                    Não encontramos um token válido no link acessado. Por favor, solicite um novo link de recuperação.
+                    Não encontramos um token válido no link acessado. Por favor, solicite um novo
+                    link de recuperação.
                   </p>
                 </div>
               </div>
@@ -180,11 +179,7 @@ function ResetPasswordPage() {
                     className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none transition-colors p-1 rounded"
                     title={showNewPassword ? "Ocultar senha" : "Exibir senha"}
                   >
-                    {showNewPassword ? (
-                      <EyeOff className="h-4 w-4" />
-                    ) : (
-                      <Eye className="h-4 w-4" />
-                    )}
+                    {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
               </div>

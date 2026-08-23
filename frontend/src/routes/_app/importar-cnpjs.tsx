@@ -9,7 +9,7 @@ import { importsService } from "@/services/importsService";
 import type { City } from "@/types/city";
 import type { Cnae } from "@/types/cnae";
 import type { Company } from "@/types/company";
-import type { ImportJob } from "@/types/importJob";
+import type { ImportExcelClientsResponse, ImportJob } from "@/types/importJob";
 import { CheckCircle2, FileUp, Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
 
@@ -53,7 +53,7 @@ function ImportCnpjs() {
   const [imports, setImports] = useState<ImportJob[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [lastJob, setLastJob] = useState<ImportJob | null>(null);
-  const [excelResult, setExcelResult] = useState<any | null>(null);
+  const [excelResult, setExcelResult] = useState<ImportExcelClientsResponse | null>(null);
   const [form, setForm] = useState({
     estado: "SP",
     cidade: "Tupã",
@@ -76,8 +76,14 @@ function ImportCnpjs() {
       setCities(cityData);
       setCnaes(cnaeData);
       setImports(importData);
-      if (cityData[0]) setForm((current) => ({ ...current, cidade: current.cidade || cityData[0].name, estado: cityData[0].uf }));
-      if (cnaeData[0]) setForm((current) => ({ ...current, cnae: current.cnae || cnaeData[0].code }));
+      if (cityData[0])
+        setForm((current) => ({
+          ...current,
+          cidade: current.cidade || cityData[0].name,
+          estado: cityData[0].uf,
+        }));
+      if (cnaeData[0])
+        setForm((current) => ({ ...current, cnae: current.cnae || cnaeData[0].code }));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Não foi possível carregar dados de apoio.");
     }
@@ -110,7 +116,9 @@ function ImportCnpjs() {
     } finally {
       try {
         setImports(await importsService.getImports());
-      } catch {}
+      } catch {
+        // The primary import result remains available if history refresh fails.
+      }
     }
   }
 
@@ -124,7 +132,7 @@ function ImportCnpjs() {
       setExcelResult(result);
       setState("success");
       toast.success(
-        `Planilha processada! ${result.clientesMatcheados} clientes mapeados e ${result.novosClientesCriados} novos clientes cadastrados como ativos.`,
+        `Planilha processada com sucesso! ${result.clientesInalterados ?? 0} inalterados (dados idênticos), ${result.clientesAtualizados ?? 0} atualizados e ${result.novosClientesCriados ?? 0} novos cadastrados.`,
       );
       setImports(await importsService.getImports());
     } catch (err) {
@@ -138,14 +146,7 @@ function ImportCnpjs() {
   return (
     <div className="space-y-5">
       {/* ── Page Header ── */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-widest text-[#1061AF]">Comercial</p>
-          <h1 className="mt-0.5 text-2xl font-bold tracking-tight text-[#0B1F33]">Importar CNPJs e Clientes</h1>
-          <p className="mt-0.5 text-sm text-[#64748B]">
-            Busque estabelecimentos ativos na Receita Federal ou importe a carteira de clientes via Excel.
-          </p>
-        </div>
+      <div className="flex items-center justify-end">
         <div className="flex items-center gap-1.5 rounded-lg border border-[#DDE5EF] bg-white p-1 shadow-2xs">
           <button
             onClick={() => setImportTab("search")}
@@ -172,7 +173,17 @@ function ImportCnpjs() {
 
       {error && state !== "error" && (
         <div className="mb-4">
-          <ErrorState description={error} action={<button onClick={loadReferenceData} className="h-9 rounded-lg bg-[#0B1F33] px-3 text-xs font-bold text-white">Tentar novamente</button>} />
+          <ErrorState
+            description={error}
+            action={
+              <button
+                onClick={loadReferenceData}
+                className="h-9 rounded-lg bg-[#0B1F33] px-3 text-xs font-bold text-white"
+              >
+                Tentar novamente
+              </button>
+            }
+          />
         </div>
       )}
 
@@ -180,37 +191,80 @@ function ImportCnpjs() {
       {importTab === "search" && (
         <section className="rounded-xl border border-[#DDE5EF] bg-white p-4 shadow-sm">
           <div className="grid gap-3 lg:grid-cols-[110px_minmax(160px,1.2fr)_minmax(220px,1.4fr)_100px_auto] lg:items-end">
-          <label className="block">
-            <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-[#64748B]">UF</span>
-            <select value={form.estado} onChange={(event) => updateForm("estado", event.target.value)} className="h-9 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-xs text-[#0B1F33] outline-none focus:border-[#1061AF]">
-              {Array.from(new Set(cities.map((city) => city.uf))).map((uf) => <option key={uf}>{uf}</option>)}
-              {cities.length === 0 && <option>SP</option>}
-            </select>
-          </label>
-          <label className="block">
-            <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-[#64748B]">Cidade</span>
-            <select value={form.cidade} onChange={(event) => updateForm("cidade", event.target.value)} className="h-9 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-xs text-[#0B1F33] outline-none focus:border-[#1061AF]">
-              {cities.map((city) => <option key={city.id}>{city.name}</option>)}
-              {cities.length === 0 && <option>Tupã</option>}
-            </select>
-          </label>
-          <label className="block">
-            <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-[#64748B]">CNAE</span>
-            <select value={form.cnae} onChange={(event) => updateForm("cnae", event.target.value)} className="h-9 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-xs text-[#0B1F33] outline-none focus:border-[#1061AF]">
-              {cnaes.map((cnae) => <option key={cnae.id} value={cnae.code}>{formatCnae(cnae.code)} - {cnae.description}</option>)}
-              {cnaes.length === 0 && <option value="4712100">4712-1/00 - Minimercados</option>}
-            </select>
-          </label>
-          <label className="block">
-            <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-[#64748B]">Limite</span>
-            <input value={form.limite} onChange={(event) => updateForm("limite", event.target.value)} type="number" min="1" max="5000" className="h-9 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-xs text-[#0B1F33] outline-none focus:border-[#1061AF]" />
-          </label>
-          <button onClick={handleSearch} disabled={state === "loading"} className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-[#0B1F33] px-4 text-xs font-bold text-white transition hover:bg-[#1061AF] disabled:cursor-not-allowed disabled:opacity-70">
-            {state === "loading" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4 text-[#FFF200]" />}
-            Buscar empresas ativas
-          </button>
-        </div>
-      </section>
+            <label className="block">
+              <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-[#64748B]">
+                UF
+              </span>
+              <select
+                value={form.estado}
+                onChange={(event) => updateForm("estado", event.target.value)}
+                className="h-9 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-xs text-[#0B1F33] outline-none focus:border-[#1061AF]"
+              >
+                {Array.from(new Set(cities.map((city) => city.uf))).map((uf) => (
+                  <option key={uf}>{uf}</option>
+                ))}
+                {cities.length === 0 && <option>SP</option>}
+              </select>
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-[#64748B]">
+                Cidade
+              </span>
+              <select
+                value={form.cidade}
+                onChange={(event) => updateForm("cidade", event.target.value)}
+                className="h-9 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-xs text-[#0B1F33] outline-none focus:border-[#1061AF]"
+              >
+                {cities.map((city) => (
+                  <option key={city.id}>{city.name}</option>
+                ))}
+                {cities.length === 0 && <option>Tupã</option>}
+              </select>
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-[#64748B]">
+                CNAE
+              </span>
+              <select
+                value={form.cnae}
+                onChange={(event) => updateForm("cnae", event.target.value)}
+                className="h-9 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-xs text-[#0B1F33] outline-none focus:border-[#1061AF]"
+              >
+                {cnaes.map((cnae) => (
+                  <option key={cnae.id} value={cnae.code}>
+                    {formatCnae(cnae.code)} - {cnae.description}
+                  </option>
+                ))}
+                {cnaes.length === 0 && <option value="4712100">4712-1/00 - Minimercados</option>}
+              </select>
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-[#64748B]">
+                Limite
+              </span>
+              <input
+                value={form.limite}
+                onChange={(event) => updateForm("limite", event.target.value)}
+                type="number"
+                min="1"
+                max="5000"
+                className="h-9 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-xs text-[#0B1F33] outline-none focus:border-[#1061AF]"
+              />
+            </label>
+            <button
+              onClick={handleSearch}
+              disabled={state === "loading"}
+              className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-[#0B1F33] px-4 text-xs font-bold text-white transition hover:bg-[#1061AF] disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              {state === "loading" ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Search className="h-4 w-4 text-[#FFF200]" />
+              )}
+              Buscar empresas ativas
+            </button>
+          </div>
+        </section>
       )}
 
       {/* ── Excel Upload (Aba 2) ── */}
@@ -220,9 +274,13 @@ function ImportCnpjs() {
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-50 text-[#1061AF]">
               <FileUp className="h-6 w-6" />
             </div>
-            <h3 className="mt-3 text-sm font-bold text-[#0B1F33]">Importar Planilha de Clientes (.xlsx, .xls, .csv)</h3>
+            <h3 className="mt-3 text-sm font-bold text-[#0B1F33]">
+              Importar Planilha de Clientes (.xlsx, .xls, .csv)
+            </h3>
             <p className="mt-1 max-w-md text-xs text-[#64748B]">
-              Selecione o arquivo Excel com a lista de clientes atuais da empresa. O sistema fará a correspondência automática por CNPJ ou Razão Social e atualizará os marcadores do Mapa de Oportunidades.
+              Selecione o arquivo Excel com a lista de clientes atuais da empresa. O sistema fará a
+              correspondência automática por CNPJ ou Razão Social e atualizará os marcadores do Mapa
+              de Oportunidades.
             </p>
             <label className="mt-4 inline-flex cursor-pointer items-center gap-2 rounded-lg bg-[#0B1F33] px-4 py-2.5 text-xs font-bold text-white transition hover:bg-[#1061AF]">
               <FileUp className="h-4 w-4 text-[#FFF200]" />
@@ -260,8 +318,12 @@ function ImportCnpjs() {
           <div className="overflow-hidden rounded-xl border border-[#DDE5EF] bg-white shadow-sm">
             <div className="flex flex-col gap-3 border-b border-[#DDE5EF] px-5 py-3 sm:flex-row sm:items-center sm:justify-between bg-[#F8FAFC]">
               <div>
-                <h2 className="text-sm font-bold text-[#0B1F33]">Resultado do Processamento da Planilha</h2>
-                <p className="text-[11px] text-[#64748B]">Planilha enviada e salva com sucesso no banco de dados</p>
+                <h2 className="text-sm font-bold text-[#0B1F33]">
+                  Resultado do Processamento da Planilha
+                </h2>
+                <p className="text-[11px] text-[#64748B]">
+                  Planilha enviada e salva com sucesso no banco de dados
+                </p>
               </div>
               <div className="flex items-center gap-2">
                 <Link
@@ -271,7 +333,11 @@ function ImportCnpjs() {
                 >
                   Ver no Funil (Convertidos)
                 </Link>
-                <Link to="/mapa-oportunidades" search={{ uf: "Todos", city: "Todas" }} className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-[#0B1F33] px-3 text-xs font-bold text-white transition hover:bg-[#1061AF]">
+                <Link
+                  to="/mapa-oportunidades"
+                  search={{ uf: "Todos", city: "Todas" }}
+                  className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-[#0B1F33] px-3 text-xs font-bold text-white transition hover:bg-[#1061AF]"
+                >
                   <CheckCircle2 className="h-4 w-4 text-[#FFF200]" />
                   Ver no mapa
                 </Link>
@@ -282,22 +348,34 @@ function ImportCnpjs() {
               <div className="relative overflow-hidden rounded-xl border border-[#DDE5EF] bg-[#F8FAFC] p-4 shadow-xs">
                 <span className="absolute inset-y-0 left-0 w-[3px] bg-[#1061AF]" />
                 <div className="pl-1">
-                  <div className="text-2xl font-bold text-[#0B1F33] tabular-nums">{excelResult.totalLinhasProcessadas}</div>
-                  <div className="mt-1 text-[11px] font-semibold text-[#64748B]">Linhas Processadas</div>
+                  <div className="text-2xl font-bold text-[#0B1F33] tabular-nums">
+                    {excelResult.totalLinhasProcessadas}
+                  </div>
+                  <div className="mt-1 text-[11px] font-semibold text-[#64748B]">
+                    Linhas Processadas
+                  </div>
                 </div>
               </div>
               <div className="relative overflow-hidden rounded-xl border border-[#DDE5EF] bg-emerald-50/70 p-4 shadow-xs">
                 <span className="absolute inset-y-0 left-0 w-[3px] bg-[#16A34A]" />
                 <div className="pl-1">
-                  <div className="text-2xl font-bold text-[#16A34A] tabular-nums">{excelResult.clientesMatcheados}</div>
-                  <div className="mt-1 text-[11px] font-semibold text-[#16A34A]">Clientes Mapeados (Existentes)</div>
+                  <div className="text-2xl font-bold text-[#16A34A] tabular-nums">
+                    {excelResult.clientesMatcheados}
+                  </div>
+                  <div className="mt-1 text-[11px] font-semibold text-[#16A34A]">
+                    Clientes Mapeados (Existentes)
+                  </div>
                 </div>
               </div>
               <div className="relative overflow-hidden rounded-xl border border-[#DDE5EF] bg-blue-50/70 p-4 shadow-xs">
                 <span className="absolute inset-y-0 left-0 w-[3px] bg-[#1061AF]" />
                 <div className="pl-1">
-                  <div className="text-2xl font-bold text-[#1061AF] tabular-nums">{excelResult.novosClientesCriados}</div>
-                  <div className="mt-1 text-[11px] font-semibold text-[#1061AF]">Novos Clientes Cadastrados</div>
+                  <div className="text-2xl font-bold text-[#1061AF] tabular-nums">
+                    {excelResult.novosClientesCriados}
+                  </div>
+                  <div className="mt-1 text-[11px] font-semibold text-[#1061AF]">
+                    Novos Clientes Cadastrados
+                  </div>
                 </div>
               </div>
             </div>
@@ -309,9 +387,14 @@ function ImportCnpjs() {
             <div className="flex flex-col gap-3 border-b border-[#DDE5EF] px-5 py-3 sm:flex-row sm:items-center sm:justify-between bg-[#F8FAFC]">
               <div>
                 <h2 className="text-sm font-bold text-[#0B1F33]">Resultado da importação</h2>
-                <p className="text-[11px] text-[#64748B]">{form.cidade}/{form.estado} · {formatCnae(form.cnae)}</p>
+                <p className="text-[11px] text-[#64748B]">
+                  {form.cidade}/{form.estado} · {formatCnae(form.cnae)}
+                </p>
               </div>
-              <Link to="/leads-b2b" className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-[#0B1F33] px-3.5 text-xs font-bold text-white transition hover:bg-[#1061AF]">
+              <Link
+                to="/leads-b2b"
+                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-[#0B1F33] px-3.5 text-xs font-bold text-white transition hover:bg-[#1061AF]"
+              >
                 <CheckCircle2 className="h-4 w-4 text-[#FFF200]" />
                 Ver leads
               </Link>
@@ -323,21 +406,31 @@ function ImportCnpjs() {
                 { label: "Empresas importadas", value: lastJob.totalSaved, accent: "#16A34A" },
                 { label: "Já existentes na base", value: ignored, accent: "#64748B" },
               ].map((item) => (
-                <div key={item.label} className="relative overflow-hidden rounded-xl border border-[#DDE5EF] bg-[#F8FAFC] p-4 shadow-sm">
+                <div
+                  key={item.label}
+                  className="relative overflow-hidden rounded-xl border border-[#DDE5EF] bg-[#F8FAFC] p-4 shadow-sm"
+                >
                   <span
                     className="absolute inset-y-0 left-0 w-[3px]"
                     style={{ background: item.accent }}
                   />
                   <div className="pl-1">
-                    <div className="text-2xl font-bold text-[#0B1F33] tabular-nums">{item.value.toLocaleString("pt-BR")}</div>
-                    <div className="mt-1 text-[11px] font-semibold text-[#64748B]">{item.label}</div>
+                    <div className="text-2xl font-bold text-[#0B1F33] tabular-nums">
+                      {item.value.toLocaleString("pt-BR")}
+                    </div>
+                    <div className="mt-1 text-[11px] font-semibold text-[#64748B]">
+                      {item.label}
+                    </div>
                   </div>
                 </div>
               ))}
             </div>
 
             {companies.length === 0 ? (
-              <EmptyState title="Nenhuma empresa nova salva" description="A importação foi concluída, mas todas as empresas encontradas já estavam cadastradas." />
+              <EmptyState
+                title="Nenhuma empresa nova salva"
+                description="A importação foi concluída, mas todas as empresas encontradas já estavam cadastradas."
+              />
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[760px] text-left text-sm">
@@ -353,11 +446,21 @@ function ImportCnpjs() {
                   <tbody className="divide-y divide-[#EEF2F7]">
                     {companies.slice(0, 8).map((company) => (
                       <tr key={company.id} className="hover:bg-[#F8FAFC]">
-                        <td className="px-4 py-3 font-bold text-[#0B1F33]">{companyName(company)}</td>
-                        <td className="px-4 py-3 font-mono text-xs text-[#475569]">{formatCnpj(company.cnpj)}</td>
+                        <td className="px-4 py-3 font-bold text-[#0B1F33]">
+                          {companyName(company)}
+                        </td>
+                        <td className="px-4 py-3 font-mono text-xs text-[#475569]">
+                          {formatCnpj(company.cnpj)}
+                        </td>
                         <td className="px-4 py-3 text-[#475569]">{company.cidade}</td>
-                        <td className="px-4 py-3 text-[#475569]">{formatCnae(company.cnaePrincipal)}</td>
-                        <td className="px-4 py-3"><span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 ring-1 ring-emerald-200">{company.situacaoCadastral}</span></td>
+                        <td className="px-4 py-3 text-[#475569]">
+                          {formatCnae(company.cnaePrincipal)}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 ring-1 ring-emerald-200">
+                            {company.situacaoCadastral}
+                          </span>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -379,7 +482,10 @@ function ImportCnpjs() {
             {imports.slice(0, 5).map((job) => {
               const statusInfo = formatJobStatus(job.status);
               return (
-                <div key={job.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-4 py-3 transition hover:border-[#1061AF]">
+                <div
+                  key={job.id}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-4 py-3 transition hover:border-[#1061AF]"
+                >
                   <div>
                     <div className="text-xs font-bold text-[#0B1F33]">
                       {job.cityName}/{job.uf} · {formatCnae(job.cnaeCode)}
@@ -389,7 +495,9 @@ function ImportCnpjs() {
                     </div>
                   </div>
                   <div className="text-right text-xs">
-                    <span className="font-bold text-[#0B1F33]">{job.totalSaved} empresas importadas</span>
+                    <span className="font-bold text-[#0B1F33]">
+                      {job.totalSaved} empresas importadas
+                    </span>
                     <span className="mx-1.5 text-slate-300">·</span>
                     <span className={statusInfo.class}>{statusInfo.label}</span>
                   </div>

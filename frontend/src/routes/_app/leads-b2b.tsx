@@ -47,12 +47,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 export type LeadsB2BSearch = {
   search?: string;
@@ -85,7 +80,9 @@ function setStoredB2BFilters(filters: LeadsB2BSearch) {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(B2B_STORAGE_KEY, JSON.stringify(filters));
-  } catch {}
+  } catch {
+    // Storage can be unavailable in private browsing or restricted contexts.
+  }
 }
 
 export const Route = createFileRoute("/_app/leads-b2b")({
@@ -96,12 +93,23 @@ export const Route = createFileRoute("/_app/leads-b2b")({
     cnae: typeof search.cnae === "string" ? search.cnae : undefined,
     status: typeof search.status === "string" ? search.status : undefined,
     potentialLevel: typeof search.potentialLevel === "string" ? search.potentialLevel : undefined,
-    statusVerificacaoEndereco: typeof search.statusVerificacaoEndereco === "string" ? search.statusVerificacaoEndereco : undefined,
-    pendenteValidacao: typeof search.pendenteValidacao === "string" ? search.pendenteValidacao : undefined,
-    situacaoCadastral: typeof search.situacaoCadastral === "string" ? search.situacaoCadastral : undefined,
+    statusVerificacaoEndereco:
+      typeof search.statusVerificacaoEndereco === "string"
+        ? search.statusVerificacaoEndereco
+        : undefined,
+    pendenteValidacao:
+      typeof search.pendenteValidacao === "string" ? search.pendenteValidacao : undefined,
+    situacaoCadastral:
+      typeof search.situacaoCadastral === "string" ? search.situacaoCadastral : undefined,
     sortBy: typeof search.sortBy === "string" ? search.sortBy : undefined,
-    sortOrder: search.sortOrder === "asc" || search.sortOrder === "desc" ? search.sortOrder : undefined,
-    page: typeof search.page === "number" ? search.page : typeof search.page === "string" ? parseInt(search.page, 10) || 1 : undefined,
+    sortOrder:
+      search.sortOrder === "asc" || search.sortOrder === "desc" ? search.sortOrder : undefined,
+    page:
+      typeof search.page === "number"
+        ? search.page
+        : typeof search.page === "string"
+          ? parseInt(search.page, 10) || 1
+          : undefined,
   }),
   component: LeadsB2B,
 });
@@ -123,7 +131,8 @@ function statusBadgeStyle(status: LeadStatus) {
   if (status === "NEGOTIATION") return "border-amber-300 bg-amber-50 text-amber-800 font-semibold";
   if (status === "CONTACTED") return "border-slate-300 bg-slate-100 text-slate-800 font-medium";
   if (status === "NOT_INTERESTED") return "border-red-200 bg-red-50 text-red-700 font-medium";
-  if (status === "INACTIVE") return "border-slate-300 bg-slate-100 text-slate-500 font-medium line-through";
+  if (status === "INACTIVE")
+    return "border-slate-300 bg-slate-100 text-slate-500 font-medium line-through";
   return "border-[#DDE5EF] bg-[#F8FAFC] text-[#475569] font-medium";
 }
 
@@ -147,12 +156,20 @@ function LeadsB2B() {
   const initialCity = routeSearch.city ?? storedFilters.city ?? "Todas";
   const initialCnae = routeSearch.cnae ?? storedFilters.cnae ?? "Todos";
   const initialStatus = routeSearch.status ?? storedFilters.status ?? "Todos";
-  const initialPotentialLevel = routeSearch.potentialLevel ?? storedFilters.potentialLevel ?? "Todos";
-  const initialStatusVerificacao = routeSearch.statusVerificacaoEndereco ?? storedFilters.statusVerificacaoEndereco ?? "Todos";
-  const initialPendenteValidacao = routeSearch.pendenteValidacao ?? storedFilters.pendenteValidacao ?? "Todos";
-  const initialSituacaoCadastral = routeSearch.situacaoCadastral ?? storedFilters.situacaoCadastral ?? "ATIVA";
-  const initialSortBy = (routeSearch.sortBy as SortBy) ?? (storedFilters.sortBy as SortBy) ?? "score";
-  const initialSortOrder = (routeSearch.sortOrder as "asc" | "desc") ?? (storedFilters.sortOrder as "asc" | "desc") ?? "desc";
+  const initialPotentialLevel =
+    routeSearch.potentialLevel ?? storedFilters.potentialLevel ?? "Todos";
+  const initialStatusVerificacao =
+    routeSearch.statusVerificacaoEndereco ?? storedFilters.statusVerificacaoEndereco ?? "Todos";
+  const initialPendenteValidacao =
+    routeSearch.pendenteValidacao ?? storedFilters.pendenteValidacao ?? "Todos";
+  const initialSituacaoCadastral =
+    routeSearch.situacaoCadastral ?? storedFilters.situacaoCadastral ?? "ATIVA";
+  const initialSortBy =
+    (routeSearch.sortBy as SortBy) ?? (storedFilters.sortBy as SortBy) ?? "score";
+  const initialSortOrder =
+    (routeSearch.sortOrder as "asc" | "desc") ??
+    (storedFilters.sortOrder as "asc" | "desc") ??
+    "desc";
   const initialPage = routeSearch.page ?? storedFilters.page ?? 1;
 
   const [query, setQuery] = useState(initialSearch);
@@ -161,7 +178,8 @@ function LeadsB2B() {
   const [cnae, setCnae] = useState(initialCnae);
   const [status, setStatus] = useState(initialStatus);
   const [potentialLevel, setPotentialLevel] = useState(initialPotentialLevel);
-  const [statusVerificacaoEndereco, setStatusVerificacaoEndereco] = useState(initialStatusVerificacao);
+  const [statusVerificacaoEndereco, setStatusVerificacaoEndereco] =
+    useState(initialStatusVerificacao);
   const [pendenteValidacao, setPendenteValidacao] = useState(initialPendenteValidacao);
   const [situacaoCadastral, setSituacaoCadastral] = useState(initialSituacaoCadastral);
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -182,7 +200,8 @@ function LeadsB2B() {
       cnae: cnae !== "Todos" ? cnae : undefined,
       status: status !== "Todos" ? status : undefined,
       potentialLevel: potentialLevel !== "Todos" ? potentialLevel : undefined,
-      statusVerificacaoEndereco: statusVerificacaoEndereco !== "Todos" ? statusVerificacaoEndereco : undefined,
+      statusVerificacaoEndereco:
+        statusVerificacaoEndereco !== "Todos" ? statusVerificacaoEndereco : undefined,
       pendenteValidacao: pendenteValidacao !== "Todos" ? pendenteValidacao : undefined,
       situacaoCadastral: situacaoCadastral !== "ATIVA" ? situacaoCadastral : undefined,
       sortBy: sortBy !== "score" ? sortBy : undefined,
@@ -190,7 +209,7 @@ function LeadsB2B() {
       page: page > 1 ? page : undefined,
     };
     setStoredB2BFilters(currentParams);
-    void navigate({ search: currentParams as any, replace: true });
+    void navigate({ search: currentParams, replace: true });
   }, [
     query,
     uf,
@@ -357,7 +376,9 @@ function LeadsB2B() {
   async function quickUpdateStatus(lead: Lead, nextStatus: LeadStatus) {
     try {
       await leadsService.updateLead(lead.id, { status: nextStatus });
-      toast.success(`Status de "${companyName(lead.company)}" atualizado para ${statusLabels[nextStatus]}.`);
+      toast.success(
+        `Status de "${companyName(lead.company)}" atualizado para ${statusLabels[nextStatus]}.`,
+      );
       await loadLeads();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Não foi possível atualizar o lead.");
@@ -423,33 +444,19 @@ function LeadsB2B() {
     <TooltipProvider>
       <div className="space-y-5 text-[#0B1F33]">
         {/* Header da Tela */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-[#FFF200]" />
-              <p className="text-[11px] font-bold uppercase tracking-widest text-[#1061AF]">
-                Deusa Alimentos · Inteligência Comercial
-              </p>
-            </div>
-            <h1 className="mt-0.5 text-2xl font-bold tracking-tight text-[#0B1F33]">Leads B2B</h1>
-            <p className="mt-0.5 text-sm text-[#64748B]">
-              Painel comercial operacional para priorização, qualificação e prospecção de estabelecimentos.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => void handleExportCsv()}
-              disabled={exporting}
-              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#DDE5EF] bg-white px-3.5 text-sm font-semibold text-[#0B1F33] transition hover:border-[#1061AF] hover:text-[#1061AF] disabled:opacity-60 cursor-pointer shadow-2xs"
-            >
-              {exporting ? (
-                <Loader2 className="h-4 w-4 animate-spin text-[#1061AF]" />
-              ) : (
-                <Download className="h-4 w-4 text-[#1061AF]" />
-              )}
-              Exportar CSV
-            </button>
-          </div>
+        <div className="flex items-center justify-end">
+          <button
+            onClick={() => void handleExportCsv()}
+            disabled={exporting}
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#DDE5EF] bg-white px-3.5 text-sm font-semibold text-[#0B1F33] transition hover:border-[#1061AF] hover:text-[#1061AF] disabled:opacity-60 cursor-pointer shadow-2xs"
+          >
+            {exporting ? (
+              <Loader2 className="h-4 w-4 animate-spin text-[#1061AF]" />
+            ) : (
+              <Download className="h-4 w-4 text-[#1061AF]" />
+            )}
+            Exportar CSV
+          </button>
         </div>
 
         {/* Métricas Principais */}
@@ -472,7 +479,9 @@ function LeadsB2B() {
         <section className="rounded-xl border border-[#DDE5EF] bg-white p-4 shadow-2xs">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
             <label className="block">
-              <span className="mb-1 block text-[11px] font-bold uppercase text-[#64748B]">Busca</span>
+              <span className="mb-1 block text-[11px] font-bold uppercase text-[#64748B]">
+                Busca
+              </span>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#94A3B8]" />
                 <input
@@ -503,12 +512,12 @@ function LeadsB2B() {
             <FilterSelect label="Cidade" value={city} onChange={setCity}>
               <option value="Todas">Todas</option>
               {cities
-                .filter(c => uf === "Todos" || c.uf === uf)
+                .filter((c) => uf === "Todos" || c.uf === uf)
                 .map((option) => (
-                <option key={option.id} value={option.name}>
-                  {option.name}
-                </option>
-              ))}
+                  <option key={option.id} value={option.name}>
+                    {option.name}
+                  </option>
+                ))}
             </FilterSelect>
 
             <FilterSelect label="Segmento / CNAE" value={cnae} onChange={setCnae}>
@@ -689,12 +698,14 @@ function LeadsB2B() {
                 <tbody className="divide-y divide-[#EEF2F7]">
                   {leads.map((lead) => {
                     const leadName = companyName(lead.company);
-                    const isCadastralPending = lead.company.pendenteValidacao || lead.company.statusVerificacaoEndereco === "divergente";
+                    const isCadastralPending =
+                      lead.company.pendenteValidacao ||
+                      lead.company.statusVerificacaoEndereco === "divergente";
                     const pendingReason = lead.company.pendenteValidacao
                       ? "Validação cadastral pendente"
                       : lead.company.statusVerificacaoEndereco === "divergente"
-                      ? "Endereço com divergência no mapa"
-                      : "Inconsistência cadastral";
+                        ? "Endereço com divergência no mapa"
+                        : "Inconsistência cadastral";
 
                     return (
                       <tr key={lead.id} className="transition-colors hover:bg-[#F8FAFC]">
@@ -716,7 +727,10 @@ function LeadsB2B() {
                                       <AlertTriangle className="h-3.5 w-3.5 text-[#ED1C24]" />
                                     </span>
                                   </TooltipTrigger>
-                                  <TooltipContent side="top" className="bg-[#0B1F33] text-white text-xs">
+                                  <TooltipContent
+                                    side="top"
+                                    className="bg-[#0B1F33] text-white text-xs"
+                                  >
                                     {pendingReason}
                                   </TooltipContent>
                                 </Tooltip>
@@ -733,7 +747,10 @@ function LeadsB2B() {
                           <div className="font-semibold leading-snug text-[#0B1F33]">
                             {lead.company.cidade}/{lead.company.uf}
                           </div>
-                          <div className="max-w-[220px] truncate text-[11px] text-[#64748B] mt-0.5" title={formatCnae(lead.company.cnaePrincipal)}>
+                          <div
+                            className="max-w-[220px] truncate text-[11px] text-[#64748B] mt-0.5"
+                            title={formatCnae(lead.company.cnaePrincipal)}
+                          >
                             {formatCnae(lead.company.cnaePrincipal)}
                           </div>
                         </td>
@@ -777,7 +794,11 @@ function LeadsB2B() {
                         <td className="px-4 py-3 text-center">
                           <Link
                             to="/mapa-oportunidades"
-                            search={{ companyId: lead.companyId, city: lead.company.cidade, uf: lead.company.uf }}
+                            search={{
+                              companyId: lead.companyId,
+                              city: lead.company.cidade,
+                              uf: lead.company.uf,
+                            }}
                             className="inline-flex h-8 items-center gap-1 rounded-md border border-[#DDE5EF] bg-white px-2.5 text-xs font-semibold text-[#0B1F33] transition hover:border-[#1061AF] hover:text-[#1061AF] cursor-pointer"
                             title="Visualizar este estabelecimento no mapa"
                           >

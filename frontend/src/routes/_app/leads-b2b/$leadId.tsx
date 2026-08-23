@@ -10,7 +10,14 @@ import {
   SituacaoCadastralBadge,
   StatusVerificacaoBadge,
 } from "@/components/common/QualityBadges";
-import { companyName, formatCnae, formatCnpj, formatDateTime, potentialLabels, statusLabels } from "@/lib/commercial-formatters";
+import {
+  companyName,
+  formatCnae,
+  formatCnpj,
+  formatDateTime,
+  potentialLabels,
+  statusLabels,
+} from "@/lib/commercial-formatters";
 import { leadsService } from "@/services/leadsService";
 import { companiesService } from "@/services/companiesService";
 import type { Lead, LeadInteraction, LeadStatus } from "@/types/lead";
@@ -173,7 +180,8 @@ function LeadDetail() {
         break;
       case "CONVERTED":
         newStatus = "CONVERTED";
-        if (!descriptionText) descriptionText = "Oportunidade convertida! Cliente ativo cadastrado.";
+        if (!descriptionText)
+          descriptionText = "Oportunidade convertida! Cliente ativo cadastrado.";
         break;
       case "NOT_INTERESTED":
         newStatus = "NOT_INTERESTED";
@@ -190,12 +198,19 @@ function LeadDetail() {
         type: interactionForm.type,
         description: descriptionText,
         newStatus,
-        nextActionAt: interactionForm.nextActionDate ? new Date(interactionForm.nextActionDate).toISOString() : undefined,
+        nextActionAt: interactionForm.nextActionDate
+          ? new Date(interactionForm.nextActionDate).toISOString()
+          : undefined,
       });
 
       toast.success("Interação registrada e status comercial atualizado!");
       setShowInteractionModal(false);
-      setInteractionForm({ type: "Ligação comercial", result: "CONTACTED", description: "", nextActionDate: "" });
+      setInteractionForm({
+        type: "Ligação comercial",
+        result: "CONTACTED",
+        description: "",
+        nextActionDate: "",
+      });
       await loadLead();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Falha ao registrar interação.");
@@ -236,8 +251,21 @@ function LeadDetail() {
   if (error) {
     return (
       <div>
-        <PageHeader title="Erro ao carregar oportunidade" subtitle="Não foi possível buscar os dados no backend." />
-        <ErrorState description={error} action={<button onClick={loadLead} className="h-9 rounded-lg bg-[#0B1F33] px-3 text-xs font-bold text-white">Tentar novamente</button>} />
+        <PageHeader
+          title="Erro ao carregar oportunidade"
+          subtitle="Não foi possível buscar os dados no backend."
+        />
+        <ErrorState
+          description={error}
+          action={
+            <button
+              onClick={loadLead}
+              className="h-9 rounded-lg bg-[#0B1F33] px-3 text-xs font-bold text-white"
+            >
+              Tentar novamente
+            </button>
+          }
+        />
       </div>
     );
   }
@@ -245,26 +273,53 @@ function LeadDetail() {
   if (!lead) {
     return (
       <div>
-        <PageHeader title="Oportunidade não encontrada" subtitle="O registro solicitado não existe no sistema." />
-        <EmptyState title="Lead indisponível" description="Volte para a lista de leads B2B e selecione uma oportunidade válida." action={<Link to="/leads-b2b" className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#0B1F33] px-4 text-sm font-bold text-white"><ArrowLeft className="h-4 w-4" />Voltar para leads</Link>} />
+        <PageHeader
+          title="Oportunidade não encontrada"
+          subtitle="O registro solicitado não existe no sistema."
+        />
+        <EmptyState
+          title="Lead indisponível"
+          description="Volte para a lista de leads B2B e selecione uma oportunidade válida."
+          action={
+            <Link
+              to="/leads-b2b"
+              className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#0B1F33] px-4 text-sm font-bold text-white"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Voltar para leads
+            </Link>
+          }
+        />
       </div>
     );
   }
 
   const company = lead.company;
-  const isRealCnpj = /^\d{14}$/.test(company.cnpj.replace(/\D/g, "")) && !company.cnpj.startsWith("G-") && !company.cnpj.startsWith("GOOGLE-");
+  const isRealCnpj =
+    /^\d{14}$/.test(company.cnpj.replace(/\D/g, "")) &&
+    !company.cnpj.startsWith("G-") &&
+    !company.cnpj.startsWith("GOOGLE-");
   const phone = company.details?.telefone || company.telefoneEncontrado || company.telefone || null;
   const email = company.details?.email || company.email || null;
   const website = null;
 
   const phoneDigits = phone ? phone.replace(/\D/g, "") : "";
-  const waUrl = phoneDigits.length >= 10 ? `https://wa.me/55${phoneDigits}?text=${encodeURIComponent(`Olá, gostaria de apresentar as soluções comerciais da Deusa Alimentos para o ${companyName(company)}.`)}` : null;
+  const waUrl =
+    phoneDigits.length >= 10
+      ? `https://wa.me/55${phoneDigits}?text=${encodeURIComponent(`Olá, gostaria de apresentar as soluções comerciais da Deusa Alimentos para o ${companyName(company)}.`)}`
+      : null;
   const telUrl = phone ? `tel:${phoneDigits}` : null;
   const mailUrl = email ? `mailto:${email}` : null;
   const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${companyName(company)}, ${company.logradouro || ""} ${company.numero || ""}, ${company.cidade}/${company.uf}`)}`;
 
-  const scoreColor = lead.score >= 80 ? "text-[#ED1C24]" : lead.score >= 65 ? "text-[#C2410C]" : "text-[#1061AF]";
-  const levelBadgeClass = lead.potentialLevel === "CRITICAL" ? "bg-red-50 text-red-700 border-red-200" : lead.potentialLevel === "HIGH" ? "bg-amber-50 text-amber-800 border-amber-200" : "bg-blue-50 text-blue-800 border-blue-200";
+  const scoreColor =
+    lead.score >= 80 ? "text-[#ED1C24]" : lead.score >= 65 ? "text-[#C2410C]" : "text-[#1061AF]";
+  const levelBadgeClass =
+    lead.potentialLevel === "CRITICAL"
+      ? "bg-red-50 text-red-700 border-red-200"
+      : lead.potentialLevel === "HIGH"
+        ? "bg-amber-50 text-amber-800 border-amber-200"
+        : "bg-blue-50 text-blue-800 border-blue-200";
 
   return (
     <div className="space-y-6">
@@ -272,12 +327,18 @@ function LeadDetail() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-[11px] font-bold uppercase tracking-widest text-[#1061AF]">Oportunidade Comercial</span>
-            <span className={`rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase ${levelBadgeClass}`}>
+            <span className="text-[11px] font-bold uppercase tracking-widest text-[#1061AF]">
+              Oportunidade Comercial
+            </span>
+            <span
+              className={`rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase ${levelBadgeClass}`}
+            >
               {potentialLabels[lead.potentialLevel]}
             </span>
           </div>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight text-[#0B1F33]">{companyName(company)}</h1>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-[#0B1F33]">
+            {companyName(company)}
+          </h1>
           <p className="mt-0.5 text-sm text-[#64748B]">
             {company.cidade}/{company.uf} · CNAE {formatCnae(company.cnaePrincipal)}
           </p>
@@ -325,30 +386,52 @@ function LeadDetail() {
 
           <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <div className="rounded-lg bg-[#F8FAFC] p-3">
-              <span className="block text-[10px] font-bold uppercase tracking-wide text-[#64748B]">Cidade / UF</span>
-              <span className="mt-0.5 block text-xs font-semibold text-[#0B1F33]">{company.cidade}/{company.uf}</span>
+              <span className="block text-[10px] font-bold uppercase tracking-wide text-[#64748B]">
+                Cidade / UF
+              </span>
+              <span className="mt-0.5 block text-xs font-semibold text-[#0B1F33]">
+                {company.cidade}/{company.uf}
+              </span>
             </div>
             <div className="rounded-lg bg-[#F8FAFC] p-3">
-              <span className="block text-[10px] font-bold uppercase tracking-wide text-[#64748B]">Bairro</span>
-              <span className="mt-0.5 block text-xs font-semibold text-[#0B1F33]">{company.bairro || "-"}</span>
+              <span className="block text-[10px] font-bold uppercase tracking-wide text-[#64748B]">
+                Bairro
+              </span>
+              <span className="mt-0.5 block text-xs font-semibold text-[#0B1F33]">
+                {company.bairro || "-"}
+              </span>
             </div>
             <div className="rounded-lg bg-[#F8FAFC] p-3">
-              <span className="block text-[10px] font-bold uppercase tracking-wide text-[#64748B]">Endereço</span>
+              <span className="block text-[10px] font-bold uppercase tracking-wide text-[#64748B]">
+                Endereço
+              </span>
               <span className="mt-0.5 block truncate text-xs font-semibold text-[#0B1F33]">
                 {company.logradouro ? `${company.logradouro}, ${company.numero || "S/N"}` : "-"}
               </span>
             </div>
             <div className="rounded-lg bg-[#F8FAFC] p-3">
-              <span className="block text-[10px] font-bold uppercase tracking-wide text-[#64748B]">CNAE Principal</span>
-              <span className="mt-0.5 block text-xs font-semibold text-[#0B1F33]">{formatCnae(company.cnaePrincipal)}</span>
+              <span className="block text-[10px] font-bold uppercase tracking-wide text-[#64748B]">
+                CNAE Principal
+              </span>
+              <span className="mt-0.5 block text-xs font-semibold text-[#0B1F33]">
+                {formatCnae(company.cnaePrincipal)}
+              </span>
             </div>
             <div className="rounded-lg bg-[#F8FAFC] p-3">
-              <span className="block text-[10px] font-bold uppercase tracking-wide text-[#64748B]">Porte</span>
-              <span className="mt-0.5 block text-xs font-semibold text-[#0B1F33]">{company.porte || "-"}</span>
+              <span className="block text-[10px] font-bold uppercase tracking-wide text-[#64748B]">
+                Porte
+              </span>
+              <span className="mt-0.5 block text-xs font-semibold text-[#0B1F33]">
+                {company.porte || "-"}
+              </span>
             </div>
             <div className="rounded-lg bg-[#F8FAFC] p-3">
-              <span className="block text-[10px] font-bold uppercase tracking-wide text-[#64748B]">Situação Cadastral</span>
-              <span className="mt-0.5 block text-xs font-semibold text-emerald-700">{company.situacaoCadastral}</span>
+              <span className="block text-[10px] font-bold uppercase tracking-wide text-[#64748B]">
+                Situação Cadastral
+              </span>
+              <span className="mt-0.5 block text-xs font-semibold text-emerald-700">
+                {company.situacaoCadastral}
+              </span>
             </div>
           </div>
         </div>
@@ -374,13 +457,16 @@ function LeadDetail() {
                   {potentialLabels[lead.potentialLevel]} Potencial ({lead.score}/100)
                 </div>
                 <div className="mt-0.5 text-xs text-[#475569]">
-                  Etapa atual: <strong className="text-[#0B1F33]">{statusLabels[lead.status]}</strong>
+                  Etapa atual:{" "}
+                  <strong className="text-[#0B1F33]">{statusLabels[lead.status]}</strong>
                 </div>
               </div>
             </div>
 
             <div className="mt-4 space-y-1.5 border-t border-[#E2E8F0] pt-3">
-              <div className="text-[11px] font-bold uppercase text-[#64748B]">Responsável Atual</div>
+              <div className="text-[11px] font-bold uppercase text-[#64748B]">
+                Responsável Atual
+              </div>
               <div className="flex items-center gap-2 text-xs font-semibold text-[#0B1F33]">
                 <UserCheck className="h-4 w-4 text-[#1061AF]" />
                 {lead.assignedTo?.name || "Não atribuído"}
@@ -406,17 +492,24 @@ function LeadDetail() {
       <section className="rounded-xl border border-[#DDE5EF] bg-white p-5 shadow-sm">
         <h2 className="text-base font-bold text-[#0B1F33]">Contatos & Ações Comerciais</h2>
         <p className="mt-0.5 text-xs text-[#64748B]">
-          Utilize os canais abaixo para abordagem comercial direta ou agendamento de visita presencial.
+          Utilize os canais abaixo para abordagem comercial direta ou agendamento de visita
+          presencial.
         </p>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {/* Canal WhatsApp */}
-          <div className={`rounded-xl border p-4 transition ${waUrl ? "border-emerald-200 bg-emerald-50/40" : "border-[#E2E8F0] bg-[#F8FAFC] opacity-60"}`}>
+          <div
+            className={`rounded-xl border p-4 transition ${waUrl ? "border-emerald-200 bg-emerald-50/40" : "border-[#E2E8F0] bg-[#F8FAFC] opacity-60"}`}
+          >
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold uppercase text-[#0B1F33]">WhatsApp</span>
-              <MessageSquare className={`h-4 w-4 ${waUrl ? "text-emerald-600" : "text-[#94A3B8]"}`} />
+              <MessageSquare
+                className={`h-4 w-4 ${waUrl ? "text-emerald-600" : "text-[#94A3B8]"}`}
+              />
             </div>
-            <div className="mt-2 text-xs font-semibold text-[#0B1F33]">{phone || "Não cadastrado"}</div>
+            <div className="mt-2 text-xs font-semibold text-[#0B1F33]">
+              {phone || "Não cadastrado"}
+            </div>
             {waUrl ? (
               <a
                 href={waUrl}
@@ -427,17 +520,23 @@ function LeadDetail() {
                 Iniciar conversa no WhatsApp
               </a>
             ) : (
-              <span className="mt-3 block text-center text-[11px] text-[#64748B]">Canal indisponível</span>
+              <span className="mt-3 block text-center text-[11px] text-[#64748B]">
+                Canal indisponível
+              </span>
             )}
           </div>
 
           {/* Canal Telefone */}
-          <div className={`rounded-xl border p-4 transition ${telUrl ? "border-blue-200 bg-blue-50/40" : "border-[#E2E8F0] bg-[#F8FAFC] opacity-60"}`}>
+          <div
+            className={`rounded-xl border p-4 transition ${telUrl ? "border-blue-200 bg-blue-50/40" : "border-[#E2E8F0] bg-[#F8FAFC] opacity-60"}`}
+          >
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold uppercase text-[#0B1F33]">Telefone / Ligação</span>
               <Phone className={`h-4 w-4 ${telUrl ? "text-[#1061AF]" : "text-[#94A3B8]"}`} />
             </div>
-            <div className="mt-2 text-xs font-semibold text-[#0B1F33]">{phone || "Não cadastrado"}</div>
+            <div className="mt-2 text-xs font-semibold text-[#0B1F33]">
+              {phone || "Não cadastrado"}
+            </div>
             {telUrl ? (
               <a
                 href={telUrl}
@@ -446,17 +545,23 @@ function LeadDetail() {
                 Fazer ligação
               </a>
             ) : (
-              <span className="mt-3 block text-center text-[11px] text-[#64748B]">Canal indisponível</span>
+              <span className="mt-3 block text-center text-[11px] text-[#64748B]">
+                Canal indisponível
+              </span>
             )}
           </div>
 
           {/* Canal E-mail */}
-          <div className={`rounded-xl border p-4 transition ${mailUrl ? "border-sky-200 bg-sky-50/40" : "border-[#E2E8F0] bg-[#F8FAFC] opacity-60"}`}>
+          <div
+            className={`rounded-xl border p-4 transition ${mailUrl ? "border-sky-200 bg-sky-50/40" : "border-[#E2E8F0] bg-[#F8FAFC] opacity-60"}`}
+          >
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold uppercase text-[#0B1F33]">E-mail Comercial</span>
               <Mail className={`h-4 w-4 ${mailUrl ? "text-sky-600" : "text-[#94A3B8]"}`} />
             </div>
-            <div className="mt-2 truncate text-xs font-semibold text-[#0B1F33]">{email || "Não cadastrado"}</div>
+            <div className="mt-2 truncate text-xs font-semibold text-[#0B1F33]">
+              {email || "Não cadastrado"}
+            </div>
             {mailUrl ? (
               <a
                 href={mailUrl}
@@ -465,7 +570,9 @@ function LeadDetail() {
                 Enviar e-mail
               </a>
             ) : (
-              <span className="mt-3 block text-center text-[11px] text-[#64748B]">Canal indisponível</span>
+              <span className="mt-3 block text-center text-[11px] text-[#64748B]">
+                Canal indisponível
+              </span>
             )}
           </div>
 
@@ -497,9 +604,13 @@ function LeadDetail() {
             </div>
 
             <div className="mt-4 rounded-xl border border-[#FFF200]/80 bg-[#FFFBEB] p-4">
-              <div className="text-xs font-bold uppercase text-amber-900">Agendamento Comercial</div>
+              <div className="text-xs font-bold uppercase text-amber-900">
+                Agendamento Comercial
+              </div>
               <div className="mt-1 text-sm font-bold text-[#0B1F33]">
-                {lead.nextActionAt ? formatDateTime(lead.nextActionAt) : "Sem próxima ação definida"}
+                {lead.nextActionAt
+                  ? formatDateTime(lead.nextActionAt)
+                  : "Sem próxima ação definida"}
               </div>
               <p className="mt-1 text-xs text-[#64748B]">
                 Último contato registrado: {formatDateTime(lead.lastContactAt)}
@@ -521,19 +632,31 @@ function LeadDetail() {
         {/* Histórico Comercial */}
         <div className="rounded-xl border border-[#DDE5EF] bg-white p-5 shadow-sm lg:col-span-2">
           <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-3">
-            <h2 className="text-base font-bold text-[#0B1F33]">Histórico Comercial de Interações</h2>
-            <span className="text-xs font-bold text-[#64748B]">{interactions.length} registro(s)</span>
+            <h2 className="text-base font-bold text-[#0B1F33]">
+              Histórico Comercial de Interações
+            </h2>
+            <span className="text-xs font-bold text-[#64748B]">
+              {interactions.length} registro(s)
+            </span>
           </div>
 
           <div className="mt-4 space-y-3 max-h-[360px] overflow-y-auto pr-1">
             {interactions.length === 0 ? (
-              <EmptyState title="Sem interações registradas" description="Abra uma conversa ou registe o primeiro contato para iniciar o histórico comercial." />
+              <EmptyState
+                title="Sem interações registradas"
+                description="Abra uma conversa ou registe o primeiro contato para iniciar o histórico comercial."
+              />
             ) : (
               interactions.map((item) => (
-                <div key={item.id} className="rounded-xl border border-[#DDE5EF] bg-[#F8FAFC] p-3.5">
+                <div
+                  key={item.id}
+                  className="rounded-xl border border-[#DDE5EF] bg-[#F8FAFC] p-3.5"
+                >
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-xs font-bold text-[#0B1F33]">{item.type}</span>
-                    <span className="text-[11px] text-[#64748B]">{formatDateTime(item.createdAt)}</span>
+                    <span className="text-[11px] text-[#64748B]">
+                      {formatDateTime(item.createdAt)}
+                    </span>
                   </div>
                   <p className="mt-1 text-xs leading-relaxed text-[#475569]">{item.description}</p>
                   {item.user && (
@@ -551,19 +674,25 @@ function LeadDetail() {
       {/* ── Seção de Qualidade dos Dados ── */}
       <section className="rounded-xl border border-[#DDE5EF] bg-white p-5 shadow-sm">
         <h2 className="text-base font-bold text-[#0B1F33]">Verificação e Integridade Cadastral</h2>
-        <p className="mt-0.5 text-xs text-[#64748B]">Qualidade dos dados e transparência das coordenadas no mapa.</p>
+        <p className="mt-0.5 text-xs text-[#64748B]">
+          Qualidade dos dados e transparência das coordenadas no mapa.
+        </p>
 
         <AvisoLocalizacaoAproximada origemCoordenada={company.origemCoordenada} className="mt-3" />
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-lg bg-[#F8FAFC] p-3">
-            <span className="block text-[10px] font-bold uppercase text-[#64748B]">Confiança Cadastral</span>
+            <span className="block text-[10px] font-bold uppercase text-[#64748B]">
+              Confiança Cadastral
+            </span>
             <div className="mt-1 flex items-center justify-between">
               <ConfiancaBadge confianca={company.confiancaVerificacao} />
             </div>
           </div>
           <div className="rounded-lg bg-[#F8FAFC] p-3">
-            <span className="block text-[10px] font-bold uppercase text-[#64748B]">Status Verificação</span>
+            <span className="block text-[10px] font-bold uppercase text-[#64748B]">
+              Status Verificação
+            </span>
             <div className="mt-1 flex items-center justify-between">
               <StatusVerificacaoBadge status={company.statusVerificacaoEndereco} />
             </div>
@@ -575,8 +704,12 @@ function LeadDetail() {
             </div>
           </div>
           <div className="rounded-lg bg-[#F8FAFC] p-3">
-            <span className="block text-[10px] font-bold uppercase text-[#64748B]">Origem da Coordenada</span>
-            <span className="mt-1 block text-xs font-semibold text-[#0B1F33]">{company.origemCoordenada || "Receita Federal"}</span>
+            <span className="block text-[10px] font-bold uppercase text-[#64748B]">
+              Origem da Coordenada
+            </span>
+            <span className="mt-1 block text-xs font-semibold text-[#0B1F33]">
+              {company.origemCoordenada || "Receita Federal"}
+            </span>
           </div>
         </div>
       </section>
@@ -587,17 +720,24 @@ function LeadDetail() {
           <div className="w-full max-w-md rounded-2xl border border-[#DDE5EF] bg-white p-6 shadow-xl">
             <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-3">
               <h3 className="text-base font-bold text-[#0B1F33]">Registrar Interação Comercial</h3>
-              <button onClick={() => setShowInteractionModal(false)} className="rounded-lg p-1 text-[#64748B] hover:bg-[#F1F5F9]">
+              <button
+                onClick={() => setShowInteractionModal(false)}
+                className="rounded-lg p-1 text-[#64748B] hover:bg-[#F1F5F9]"
+              >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
             <form onSubmit={handleSaveInteraction} className="mt-4 space-y-4">
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wide text-[#64748B]">Tipo de Contato</label>
+                <label className="block text-xs font-bold uppercase tracking-wide text-[#64748B]">
+                  Tipo de Contato
+                </label>
                 <select
                   value={interactionForm.type}
-                  onChange={(e) => setInteractionForm((prev) => ({ ...prev, type: e.target.value }))}
+                  onChange={(e) =>
+                    setInteractionForm((prev) => ({ ...prev, type: e.target.value }))
+                  }
                   className="mt-1.5 h-9 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-xs text-[#0B1F33] outline-none focus:border-[#1061AF]"
                 >
                   <option>Ligação comercial</option>
@@ -609,10 +749,14 @@ function LeadDetail() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wide text-[#64748B]">Resultado / Etapa do Funil</label>
+                <label className="block text-xs font-bold uppercase tracking-wide text-[#64748B]">
+                  Resultado / Etapa do Funil
+                </label>
                 <select
                   value={interactionForm.result}
-                  onChange={(e) => setInteractionForm((prev) => ({ ...prev, result: e.target.value }))}
+                  onChange={(e) =>
+                    setInteractionForm((prev) => ({ ...prev, result: e.target.value }))
+                  }
                   className="mt-1.5 h-9 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-xs font-bold text-[#0B1F33] outline-none focus:border-[#1061AF]"
                 >
                   <option value="CONTACTED">Contato realizado (Mover para Contatado)</option>
@@ -625,21 +769,29 @@ function LeadDetail() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wide text-[#64748B]">Próxima Ação (Data / Hora)</label>
+                <label className="block text-xs font-bold uppercase tracking-wide text-[#64748B]">
+                  Próxima Ação (Data / Hora)
+                </label>
                 <input
                   type="datetime-local"
                   value={interactionForm.nextActionDate}
-                  onChange={(e) => setInteractionForm((prev) => ({ ...prev, nextActionDate: e.target.value }))}
+                  onChange={(e) =>
+                    setInteractionForm((prev) => ({ ...prev, nextActionDate: e.target.value }))
+                  }
                   className="mt-1.5 h-9 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-xs text-[#0B1F33] outline-none focus:border-[#1061AF]"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wide text-[#64748B]">Observações do Vendedor</label>
+                <label className="block text-xs font-bold uppercase tracking-wide text-[#64748B]">
+                  Observações do Vendedor
+                </label>
                 <textarea
                   rows={3}
                   value={interactionForm.description}
-                  onChange={(e) => setInteractionForm((prev) => ({ ...prev, description: e.target.value }))}
+                  onChange={(e) =>
+                    setInteractionForm((prev) => ({ ...prev, description: e.target.value }))
+                  }
                   placeholder="Detalhe o que foi conversado ou combinado..."
                   className="mt-1.5 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] p-3 text-xs text-[#0B1F33] outline-none focus:border-[#1061AF]"
                 />
@@ -671,7 +823,10 @@ function LeadDetail() {
           <div className="w-full max-w-md rounded-2xl border border-[#DDE5EF] bg-white p-6 shadow-xl">
             <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-3">
               <h3 className="text-base font-bold text-[#0B1F33]">Planejar Visita Presencial</h3>
-              <button onClick={() => setShowVisitModal(false)} className="rounded-lg p-1 text-[#64748B] hover:bg-[#F1F5F9]">
+              <button
+                onClick={() => setShowVisitModal(false)}
+                className="rounded-lg p-1 text-[#64748B] hover:bg-[#F1F5F9]"
+              >
                 <X className="h-5 w-5" />
               </button>
             </div>
@@ -680,11 +835,18 @@ function LeadDetail() {
               <div className="rounded-lg bg-[#F8FAFC] p-3 border border-[#E2E8F0]">
                 <div className="text-[11px] font-bold text-[#64748B]">Destino da Visita:</div>
                 <div className="text-xs font-bold text-[#0B1F33]">{companyName(company)}</div>
-                <div className="text-[11px] text-[#64748B]">{company.logradouro ? `${company.logradouro}, ${company.numero || "S/N"}` : company.cidade} · {company.cidade}/{company.uf}</div>
+                <div className="text-[11px] text-[#64748B]">
+                  {company.logradouro
+                    ? `${company.logradouro}, ${company.numero || "S/N"}`
+                    : company.cidade}{" "}
+                  · {company.cidade}/{company.uf}
+                </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wide text-[#64748B]">Data e Hora Planejada</label>
+                <label className="block text-xs font-bold uppercase tracking-wide text-[#64748B]">
+                  Data e Hora Planejada
+                </label>
                 <input
                   type="datetime-local"
                   required
@@ -695,7 +857,9 @@ function LeadDetail() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wide text-[#64748B]">Observações da Rota / Visita</label>
+                <label className="block text-xs font-bold uppercase tracking-wide text-[#64748B]">
+                  Observações da Rota / Visita
+                </label>
                 <textarea
                   rows={3}
                   value={visitForm.notes}
@@ -732,9 +896,14 @@ function LeadDetail() {
             <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-3">
               <div>
                 <h3 className="text-base font-bold text-[#0B1F33]">Editar Cadastro do Mercado</h3>
-                <p className="text-xs text-[#64748B]">Atualize manualmente telefone, e-mail e dados de localização.</p>
+                <p className="text-xs text-[#64748B]">
+                  Atualize manualmente telefone, e-mail e dados de localização.
+                </p>
               </div>
-              <button onClick={() => setShowEditModal(false)} className="rounded-lg p-1 text-[#64748B] hover:bg-[#F1F5F9]">
+              <button
+                onClick={() => setShowEditModal(false)}
+                className="rounded-lg p-1 text-[#64748B] hover:bg-[#F1F5F9]"
+              >
                 <X className="h-5 w-5" />
               </button>
             </div>
@@ -742,7 +911,9 @@ function LeadDetail() {
             <form onSubmit={handleSaveCompanyDetails} className="mt-4 space-y-4">
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wide text-[#64748B]">Telefone Principal</label>
+                  <label className="block text-xs font-bold uppercase tracking-wide text-[#64748B]">
+                    Telefone Principal
+                  </label>
                   <input
                     type="text"
                     placeholder="(16) 99999-9999"
@@ -753,7 +924,9 @@ function LeadDetail() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wide text-[#64748B]">E-mail Comercial</label>
+                  <label className="block text-xs font-bold uppercase tracking-wide text-[#64748B]">
+                    E-mail Comercial
+                  </label>
                   <input
                     type="email"
                     placeholder="comercial@mercado.com.br"
@@ -766,38 +939,52 @@ function LeadDetail() {
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wide text-[#64748B]">Nome Fantasia</label>
+                  <label className="block text-xs font-bold uppercase tracking-wide text-[#64748B]">
+                    Nome Fantasia
+                  </label>
                   <input
                     type="text"
                     placeholder="Supermercado Exemplo"
                     value={editForm.nomeFantasia}
-                    onChange={(e) => setEditForm((prev) => ({ ...prev, nomeFantasia: e.target.value }))}
+                    onChange={(e) =>
+                      setEditForm((prev) => ({ ...prev, nomeFantasia: e.target.value }))
+                    }
                     className="mt-1.5 h-9 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-xs text-[#0B1F33] outline-none focus:border-[#1061AF]"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wide text-[#64748B]">Razão Social</label>
+                  <label className="block text-xs font-bold uppercase tracking-wide text-[#64748B]">
+                    Razão Social
+                  </label>
                   <input
                     type="text"
                     placeholder="Razão Social LTDA"
                     value={editForm.razaoSocial}
-                    onChange={(e) => setEditForm((prev) => ({ ...prev, razaoSocial: e.target.value }))}
+                    onChange={(e) =>
+                      setEditForm((prev) => ({ ...prev, razaoSocial: e.target.value }))
+                    }
                     className="mt-1.5 h-9 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-xs text-[#0B1F33] outline-none focus:border-[#1061AF]"
                   />
                 </div>
               </div>
 
               <div className="border-t border-[#E2E8F0] pt-3">
-                <span className="block text-xs font-bold uppercase tracking-wide text-[#0B1F33]">Endereço & Localização</span>
-                
+                <span className="block text-xs font-bold uppercase tracking-wide text-[#0B1F33]">
+                  Endereço & Localização
+                </span>
+
                 <div className="mt-2 grid gap-3 sm:grid-cols-3">
                   <div className="sm:col-span-2">
-                    <label className="block text-[11px] font-semibold text-[#64748B]">Logradouro / Rua</label>
+                    <label className="block text-[11px] font-semibold text-[#64748B]">
+                      Logradouro / Rua
+                    </label>
                     <input
                       type="text"
                       value={editForm.logradouro}
-                      onChange={(e) => setEditForm((prev) => ({ ...prev, logradouro: e.target.value }))}
+                      onChange={(e) =>
+                        setEditForm((prev) => ({ ...prev, logradouro: e.target.value }))
+                      }
                       className="mt-1 h-9 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-xs text-[#0B1F33] outline-none focus:border-[#1061AF]"
                     />
                   </div>
@@ -837,7 +1024,9 @@ function LeadDetail() {
                       type="text"
                       maxLength={2}
                       value={editForm.uf}
-                      onChange={(e) => setEditForm((prev) => ({ ...prev, uf: e.target.value.toUpperCase() }))}
+                      onChange={(e) =>
+                        setEditForm((prev) => ({ ...prev, uf: e.target.value.toUpperCase() }))
+                      }
                       className="mt-1 h-9 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-xs text-[#0B1F33] outline-none focus:border-[#1061AF]"
                     />
                   </div>

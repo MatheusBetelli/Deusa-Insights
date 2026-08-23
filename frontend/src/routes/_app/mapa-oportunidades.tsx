@@ -12,7 +12,18 @@ import { escapeHtml, escapeHtmlAttribute, safePathSegment } from "@/lib/html-saf
 import { mapService } from "@/services/mapService";
 import type { LeadStatus } from "@/types/lead";
 import type { MapOpportunity } from "@/types/mapOpportunity";
-import { AlertTriangle, Building2, FileUp, Filter, Layers, RotateCcw, MapPin, Loader2, Search, Navigation } from "lucide-react";
+import {
+  AlertTriangle,
+  Building2,
+  FileUp,
+  Filter,
+  Layers,
+  RotateCcw,
+  MapPin,
+  Loader2,
+  Search,
+  Navigation,
+} from "lucide-react";
 
 export type MapSearch = {
   uf?: string;
@@ -41,7 +52,9 @@ function setStoredMapFilters(filters: MapSearch) {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(MAP_STORAGE_KEY, JSON.stringify(filters));
-  } catch {}
+  } catch {
+    // Storage can be unavailable in private browsing or restricted contexts.
+  }
 }
 
 export const Route = createFileRoute("/_app/mapa-oportunidades")({
@@ -64,15 +77,16 @@ const DEFAULT_ZOOM = 12;
 type CommercialCategory = "CLIENTE" | "CRITICO" | "PROSPECT";
 
 function getCommercialCategory(item: MapOpportunity): CommercialCategory {
-  if (item.status === "CONVERTED") return "CLIENTE";
+  if (item.status === "CONVERTED" || item.isClient) return "CLIENTE";
   if (item.score >= 80 || item.potentialLevel === "CRITICAL") return "CRITICO";
   return "PROSPECT";
 }
 
 function getEstablishmentType(cnae?: string | null): string {
   const norm = (cnae ?? "").replace(/\D/g, "");
-  if (norm === "4711301") return "Hipermercado";
-  if (norm === "4711302") return "Supermercado";
+  if (norm === "4711302" || norm === "4711301") return "Supermercado";
+  if (norm === "4721102" || norm === "4721100" || norm === "1091101" || norm === "1091102")
+    return "Padaria";
   if (norm === "4712100") return "Minimercado / Mercearia";
   if (norm === "4722901") return "Açougue";
   return "Minimercado / Mercearia";
@@ -85,32 +99,32 @@ function getEstablishmentIconSvg(cnae?: string | null): string {
     // Carrinho para Supermercado
     return `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>`;
   }
+  if (
+    normCnae === "4721102" ||
+    normCnae === "4721100" ||
+    normCnae === "1091101" ||
+    normCnae === "1091102"
+  ) {
+    // Pão / Bakery para Padaria
+    return `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 13.87A4 4 0 0 1 7.41 6a5.11 5.11 0 0 1 10.38 0A4 4 0 0 1 19.5 14H4.5z"/><line x1="9" y1="18" x2="15" y2="18"/></svg>`;
+  }
   if (normCnae === "4712100") {
     // Storefront para Minimercado / Mercearia
     return `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1.5-5h15L21 9"/><path d="M3 9v11a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1V9"/><path d="M9 22V12h6v10"/></svg>`;
-  }
-  if (normCnae === "4721102" || normCnae === "4721100") {
-    // Pão para Padaria
-    return `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 13.87A4 4 0 0 1 7.41 6a5.11 5.11 0 0 1 10.38 0A4 4 0 0 1 19.5 14H4.5z"/><line x1="9" y1="18" x2="15" y2="18"/></svg>`;
-  }
-  if (normCnae === "4639701" || normCnae === "4639702") {
-    // Caixas / Warehouse para Atacadista
-    return `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>`;
   }
   if (normCnae === "4722901") {
     // Carne para Açougue
     return `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 14a4 4 0 1 1 4-4 4 4 0 0 1-4 4z"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
   }
-  if (normCnae === "4724500") {
-    // Folha / Fruta para Hortifruti
-    return `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.4 19 2c1 2 2 4.1 2 7 0 6-4.5 11-10 11z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></svg>`;
-  }
-  // Sacola / Storefront genérico para Varejo Alimentício Geral
   return `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>`;
 }
 
 // Visual config para marcadores operacionais limpos
-function makePinHtml(category: CommercialCategory, cnae: string | null | undefined, isAprox: boolean): string {
+function makePinHtml(
+  category: CommercialCategory,
+  cnae: string | null | undefined,
+  isAprox: boolean,
+): string {
   let bg = "#1061AF"; // Navy institucional para Prospect
   if (category === "CLIENTE") {
     bg = "#16A34A"; // Verde para Cliente Ativo
@@ -152,8 +166,7 @@ function OpportunityMap() {
 
   const mapRef = useRef<L.Map | null>(null);
   const mapElRef = useRef<HTMLDivElement | null>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const clusterRef = useRef<any>(null);
+  const clusterRef = useRef<L.LayerGroup | L.MarkerClusterGroup | null>(null);
   const markerById = useRef<Map<string, L.Marker>>(new Map());
 
   const [mapStatus, setMapStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -162,11 +175,21 @@ function OpportunityMap() {
   const [opportunities, setOpportunities] = useState<MapOpportunity[]>([]);
   const [searchQuery, setSearchQuery] = useState(routeSearch.search ?? storedFilters.search ?? "");
   const [selectedUf, setSelectedUf] = useState(routeSearch.uf ?? storedFilters.uf ?? "SP");
-  const [selectedCity, setSelectedCity] = useState(routeSearch.city ?? storedFilters.city ?? "Todas");
-  const [selectedCategory, setSelectedCategory] = useState(routeSearch.category ?? storedFilters.category ?? "Todas");
-  const [selectedEstablishmentType, setSelectedEstablishmentType] = useState(routeSearch.type ?? storedFilters.type ?? "Todos");
-  const [selectedPrecision, setSelectedPrecision] = useState(routeSearch.precision ?? storedFilters.precision ?? "Todas");
-  const [clustersOn, setClustersOn] = useState(routeSearch.clusters ?? storedFilters.clusters ?? true);
+  const [selectedCity, setSelectedCity] = useState(
+    routeSearch.city ?? storedFilters.city ?? "Todas",
+  );
+  const [selectedCategory, setSelectedCategory] = useState(
+    routeSearch.category ?? storedFilters.category ?? "Todas",
+  );
+  const [selectedEstablishmentType, setSelectedEstablishmentType] = useState(
+    routeSearch.type ?? storedFilters.type ?? "Todos",
+  );
+  const [selectedPrecision, setSelectedPrecision] = useState(
+    routeSearch.precision ?? storedFilters.precision ?? "Todas",
+  );
+  const [clustersOn, setClustersOn] = useState(
+    routeSearch.clusters ?? storedFilters.clusters ?? true,
+  );
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [isDiscovering, setIsDiscovering] = useState(false);
   const [selectedOpportunity, setSelectedOpportunity] = useState<MapOpportunity | null>(null);
@@ -182,7 +205,7 @@ function OpportunityMap() {
       clusters: clustersOn !== true ? clustersOn : undefined,
     };
     setStoredMapFilters(params);
-    void navigate({ search: params as any, replace: true });
+    void navigate({ search: params, replace: true });
   }, [
     selectedUf,
     selectedCity,
@@ -243,7 +266,9 @@ function OpportunityMap() {
     try {
       const result = await mapService.discoverRegion(cidade, uf);
       setOptimizeMessage({
-        text: result.message || `Descoberta concluída: ${result.discovered} novo(s), ${result.existing} já existente(s).`,
+        text:
+          result.message ||
+          `Descoberta concluída: ${result.discovered} novo(s), ${result.existing} já existente(s).`,
         type: result.success ? "success" : "error",
       });
       if (result.discovered > 0) await loadData();
@@ -291,52 +316,64 @@ function OpportunityMap() {
     storedFilters.city,
   ]);
 
-  const filtered = useMemo(
-    () => {
-      const norm = (str?: string | null) => (str ? str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase() : "");
-      return opportunities.filter((p) => {
-        const ufOk = !selectedUf || selectedUf === "Todos" || p.uf === selectedUf;
-        const cityOk = selectedCity === "Todas" || norm(p.city) === norm(selectedCity);
-        const commCat = getCommercialCategory(p);
-        const catOk =
-          selectedCategory === "Todas" || commCat === selectedCategory;
+  const filtered = useMemo(() => {
+    const norm = (str?: string | null) =>
+      str
+        ? str
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .toLowerCase()
+        : "";
+    return opportunities.filter((p) => {
+      const ufOk = !selectedUf || selectedUf === "Todos" || p.uf === selectedUf;
+      const cityOk = selectedCity === "Todas" || norm(p.city) === norm(selectedCity);
+      const commCat = getCommercialCategory(p);
+      const catOk = selectedCategory === "Todas" || commCat === selectedCategory;
 
-        const estType = getEstablishmentType(p.cnaePrincipal);
-        const estTypeOk =
-          selectedEstablishmentType === "Todos" || estType === selectedEstablishmentType;
+      const estType = getEstablishmentType(p.cnaePrincipal);
+      const estTypeOk =
+        selectedEstablishmentType === "Todos" || estType === selectedEstablishmentType;
 
-        // Filtro de pesquisa por comércio, CNPJ ou endereço
-        let searchOk = true;
-        if (searchQuery.trim()) {
-          const q = searchQuery.trim();
-          const qNorm = norm(q);
-          const qClean = q.replace(/\D/g, "");
-          const cnpjClean = p.cnpj ? p.cnpj.replace(/\D/g, "") : "";
+      // Filtro de pesquisa por comércio, CNPJ ou endereço
+      let searchOk = true;
+      if (searchQuery.trim()) {
+        const q = searchQuery.trim();
+        const qNorm = norm(q);
+        const qClean = q.replace(/\D/g, "");
+        const cnpjClean = p.cnpj ? p.cnpj.replace(/\D/g, "") : "";
 
-          const matchName = p.companyName ? norm(p.companyName).includes(qNorm) : false;
-          const matchCnpj = qClean.length >= 3 && cnpjClean.includes(qClean);
-          const matchLogradouro = p.logradouro ? norm(p.logradouro).includes(qNorm) : false;
-          const matchBairro = p.bairro ? norm(p.bairro).includes(qNorm) : false;
-          const matchCity = p.city ? norm(p.city).includes(qNorm) : false;
+        const matchName = p.companyName ? norm(p.companyName).includes(qNorm) : false;
+        const matchCnpj = qClean.length >= 3 && cnpjClean.includes(qClean);
+        const matchLogradouro = p.logradouro ? norm(p.logradouro).includes(qNorm) : false;
+        const matchBairro = p.bairro ? norm(p.bairro).includes(qNorm) : false;
+        const matchCity = p.city ? norm(p.city).includes(qNorm) : false;
 
-          searchOk = matchName || matchCnpj || matchLogradouro || matchBairro || matchCity;
-        }
+        searchOk = matchName || matchCnpj || matchLogradouro || matchBairro || matchCity;
+      }
 
-        // Filtro de precisão
-        let precOk = true;
-        if (selectedPrecision !== "Todas") {
-          const conf = p.confiancaVerificacao ?? 0;
-          const isAprox = !!(p.origemCoordenada?.includes("centroide") || p.origemCoordenada?.includes("jitter"));
-          if (selectedPrecision === "verificado") precOk = conf >= 90 && !isAprox;
-          else if (selectedPrecision === "provavel") precOk = conf >= 60 && conf < 90 && !isAprox;
-          else if (selectedPrecision === "aproximado") precOk = isAprox || conf < 60;
-        }
+      // Filtro de precisão
+      let precOk = true;
+      if (selectedPrecision !== "Todas") {
+        const conf = p.confiancaVerificacao ?? 0;
+        const isAprox = !!(
+          p.origemCoordenada?.includes("centroide") || p.origemCoordenada?.includes("jitter")
+        );
+        if (selectedPrecision === "verificado") precOk = conf >= 90 && !isAprox;
+        else if (selectedPrecision === "provavel") precOk = conf >= 60 && conf < 90 && !isAprox;
+        else if (selectedPrecision === "aproximado") precOk = isAprox || conf < 60;
+      }
 
-        return ufOk && cityOk && catOk && estTypeOk && precOk && searchOk;
-      });
-    },
-    [opportunities, selectedUf, selectedCity, selectedCategory, selectedEstablishmentType, selectedPrecision, searchQuery],
-  );
+      return ufOk && cityOk && catOk && estTypeOk && precOk && searchOk;
+    });
+  }, [
+    opportunities,
+    selectedUf,
+    selectedCity,
+    selectedCategory,
+    selectedEstablishmentType,
+    selectedPrecision,
+    searchQuery,
+  ]);
 
   const withCoords = useMemo(
     () =>
@@ -344,10 +381,10 @@ function OpportunityMap() {
         (p) =>
           typeof p.latitude === "number" &&
           typeof p.longitude === "number" &&
-          p.latitude >= -23.10 &&
-          p.latitude <= -20.10 &&
-          p.longitude >= -51.90 &&
-          p.longitude <= -47.10,
+          p.latitude >= -23.1 &&
+          p.latitude <= -20.1 &&
+          p.longitude >= -51.9 &&
+          p.longitude <= -47.1,
       ),
     [filtered],
   );
@@ -371,25 +408,29 @@ function OpportunityMap() {
         const Leaflet = LeafletModule.default || LeafletModule;
         if (cancelled || !mapElRef.current) return;
 
-        (window as any).L = Leaflet;
+        const SP_MAP_BOUNDS: [[number, number], [number, number]] = [
+          [-25.5, -53.8],
+          [-19.5, -44.0],
+        ];
+
+        window.L = Leaflet;
 
         const map = Leaflet.map(mapElRef.current, {
           center: DEFAULT_CENTER,
           zoom: DEFAULT_ZOOM,
+          minZoom: 7,
+          maxZoom: 19,
           zoomControl: true,
           scrollWheelZoom: true,
           preferCanvas: true,
-          maxBounds: [
-            [-90, -180],
-            [90, 180],
-          ],
+          maxBounds: SP_MAP_BOUNDS,
           maxBoundsViscosity: 1.0,
         });
 
         Leaflet.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
           attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
           maxZoom: 19,
-          minZoom: 3,
+          minZoom: 7,
           noWrap: true,
         }).addTo(map);
 
@@ -421,11 +462,7 @@ function OpportunityMap() {
     let cancelled = false;
 
     if (clusterRef.current) {
-      try {
-        if (typeof clusterRef.current.clearLayers === "function") {
-          clusterRef.current.clearLayers();
-        }
-      } catch {}
+      clusterRef.current.clearLayers();
       map.removeLayer(clusterRef.current);
       clusterRef.current = null;
     }
@@ -440,59 +477,62 @@ function OpportunityMap() {
       const LeafletModule = await import("leaflet");
       const Leaflet = LeafletModule.default || LeafletModule;
       if (cancelled || !mapRef.current) return;
-      (window as any).L = Leaflet;
+      window.L = Leaflet;
 
-      let group: any;
+      let group: L.LayerGroup | L.MarkerClusterGroup;
 
       if (clustersOn) {
         try {
           await import("leaflet.markercluster");
           if (cancelled || !mapRef.current) return;
-          const MarkerClusterGroup =
-            (Leaflet as any).markerClusterGroup ||
-            (Leaflet as any).MarkerClusterGroup ||
-            (window as any).L?.markerClusterGroup ||
-            (window as any).L?.MarkerClusterGroup;
+          group = Leaflet.markerClusterGroup({
+            maxClusterRadius: 80,
+            spiderfyOnMaxZoom: true,
+            spiderfyDistanceMultiplier: 1.5,
+            showCoverageOnHover: false,
+            zoomToBoundsOnClick: true,
+            disableClusteringAtZoom: 14,
+            chunkedLoading: true,
+            chunkInterval: 100,
+            chunkDelay: 10,
+            removeOutsideVisibleBounds: true,
+            animate: true,
+            animateAddingMarkers: false,
+            iconCreateFunction: (cluster: L.MarkerCluster) => {
+              const n = cluster.getChildCount();
+              const childMarkers = cluster.getAllChildMarkers();
 
-          if (typeof MarkerClusterGroup === "function") {
-            group = MarkerClusterGroup({
-              maxClusterRadius: 80,
-              spiderfyOnMaxZoom: true,
-              spiderfyDistanceMultiplier: 1.5,
-              showCoverageOnHover: false,
-              zoomToBoundsOnClick: true,
-              disableClusteringAtZoom: 14,
-              chunkedLoading: true,
-              chunkInterval: 100,
-              chunkDelay: 10,
-              removeOutsideVisibleBounds: true,
-              animate: true,
-              animateAddingMarkers: false,
-              iconCreateFunction: (cluster: any) => {
-                const n = cluster.getChildCount();
-                const bg = n >= 100 ? "#0B1F33" : n >= 25 ? "#1061AF" : "#16A34A";
-                const border = "#FFFFFF";
-                const size = n >= 100 ? 46 : n >= 25 ? 40 : 34;
+              const hasClient = childMarkers.some((marker) => marker.options.commCat === "CLIENTE");
+              const hasCritical = childMarkers.some(
+                (marker) => marker.options.commCat === "CRITICO",
+              );
 
-                return Leaflet.divIcon({
-                  className: "deusa-cluster-pin",
-                  html: `<div style="
-                    width:${size}px;height:${size}px;border-radius:50%;
-                    background:${bg};
-                    border:3px solid ${border};
-                    box-shadow:0 3px 10px rgba(0,0,0,0.35);
-                    display:flex;align-items:center;justify-content:center;
-                    font-weight:800;font-size:13px;
-                    color:#FFFFFF;font-family:Inter,system-ui,sans-serif;
-                  "><span>${n}</span></div>`,
-                  iconSize: [size, size],
-                  iconAnchor: [size / 2, size / 2],
-                });
-              },
-            });
-          } else {
-            group = Leaflet.layerGroup();
-          }
+              let bg = "#1061AF"; // Azul para cluster de Prospects
+              if (hasClient) {
+                bg = "#16A34A"; // Verde EXCLUSIVAMENTE se contiver ao menos 1 Cliente Ativo
+              } else if (hasCritical) {
+                bg = "#ED1C24"; // Vermelho se contiver Oportunidade Crítica (e nenhum cliente)
+              }
+
+              const border = "#FFFFFF";
+              const size = n >= 100 ? 46 : n >= 25 ? 40 : 34;
+
+              return Leaflet.divIcon({
+                className: "deusa-cluster-pin",
+                html: `<div style="
+                  width:${size}px;height:${size}px;border-radius:50%;
+                  background:${bg};
+                  border:3px solid ${border};
+                  box-shadow:0 3px 10px rgba(0,0,0,0.35);
+                  display:flex;align-items:center;justify-content:center;
+                  font-weight:800;font-size:13px;
+                  color:#FFFFFF;font-family:Inter,system-ui,sans-serif;
+                "><span>${n}</span></div>`,
+                iconSize: [size, size],
+                iconAnchor: [size / 2, size / 2],
+              });
+            },
+          });
         } catch {
           group = Leaflet.layerGroup();
         }
@@ -505,25 +545,29 @@ function OpportunityMap() {
       // Renderiza a totalidade dos pontos tanto em modo Cluster ON quanto Cluster OFF
       const pointsToRender = withCoords;
 
-      const iconCache = new Map<string, any>();
-      const getIcon = (commCat: CommercialCategory, cnae: string | null | undefined, isAprox: boolean) => {
+      const iconCache = new Map<string, L.DivIcon>();
+      const getIcon = (
+        commCat: CommercialCategory,
+        cnae: string | null | undefined,
+        isAprox: boolean,
+      ) => {
         const key = `${commCat}_${cnae ?? ""}_${isAprox}`;
-        if (!iconCache.has(key)) {
-          iconCache.set(
-            key,
-            Leaflet.divIcon({
-              className: "",
-              html: makePinHtml(commCat, cnae, isAprox),
-              iconSize: [30, 38],
-              iconAnchor: [15, 38],
-              popupAnchor: [0, -34],
-            })
-          );
-        }
-        return iconCache.get(key);
+        const cachedIcon = iconCache.get(key);
+        if (cachedIcon) return cachedIcon;
+
+        const icon = Leaflet.divIcon({
+          className: "",
+          html: makePinHtml(commCat, cnae, isAprox),
+          iconSize: [30, 38],
+          iconAnchor: [15, 38],
+          popupAnchor: [0, -34],
+        });
+        iconCache.set(key, icon);
+        return icon;
       };
 
-      const markersToBatch: any[] = [];
+      const markersToBatch: L.Marker[] = [];
+      const coordCounts = new Map<string, number>();
 
       pointsToRender.forEach((point, idx) => {
         const commCat = getCommercialCategory(point);
@@ -534,11 +578,20 @@ function OpportunityMap() {
 
         let lat = point.latitude!;
         let lng = point.longitude!;
+        const coordKey = `${lat.toFixed(5)},${lng.toFixed(5)}`;
+        const dupCount = coordCounts.get(coordKey) || 0;
+        coordCounts.set(coordKey, dupCount + 1);
+
         if (isAprox && withCoords.length > 1) {
           const angle = (idx * 137.5 * Math.PI) / 180;
           const radius = 0.0012 * Math.sqrt((idx % 12) + 1);
           lat += Math.sin(angle) * radius;
           lng += Math.cos(angle) * radius;
+        } else if (dupCount > 0) {
+          const angle = (dupCount * 120 * Math.PI) / 180;
+          const offset = 0.00015;
+          lat += Math.sin(angle) * offset;
+          lng += Math.cos(angle) * offset;
         }
 
         boundPoints.push([lat, lng]);
@@ -546,12 +599,16 @@ function OpportunityMap() {
         const icon = getIcon(commCat, point.cnaePrincipal, isAprox);
 
         // Avaliação tardia (lazy) do conteúdo HTML do popup ao clicar
-        const marker = Leaflet.marker([lat, lng], { icon }).bindPopup(
+        const marker = Leaflet.marker([lat, lng], { icon, commCat }).bindPopup(
           () => {
             const gmapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${point.companyName} ${point.city} ${point.uf}`)}`;
-            const levelText = potentialLabels[point.potentialLevel as keyof typeof potentialLabels] || point.potentialLevel;
-            const statusText = statusLabels[point.status as keyof typeof statusLabels] || point.status;
-            const levelColor = point.score >= 80 ? "#ED1C24" : point.score >= 65 ? "#C2410C" : "#1061AF";
+            const levelText =
+              potentialLabels[point.potentialLevel as keyof typeof potentialLabels] ||
+              point.potentialLevel;
+            const statusText =
+              statusLabels[point.status as keyof typeof statusLabels] || point.status;
+            const levelColor =
+              point.score >= 80 ? "#ED1C24" : point.score >= 65 ? "#C2410C" : "#1061AF";
             const phoneDisplay = point.telefone || "Não identificado";
             const emailDisplay = point.email || "Não identificado";
             const leadHref = `/leads-b2b/${safePathSegment(point.id)}`;
@@ -590,10 +647,10 @@ function OpportunityMap() {
         }
       });
 
-      if (typeof group.addLayers === "function") {
+      if ("addLayers" in group) {
         group.addLayers(markersToBatch);
       } else {
-        markersToBatch.forEach((m) => group.addLayer(m));
+        markersToBatch.forEach((marker) => group.addLayer(marker));
       }
 
       if (cancelled || !mapRef.current) return;
@@ -607,7 +664,9 @@ function OpportunityMap() {
             p.companyId === cleanCompanyId ||
             p.id === cleanCompanyId ||
             (p.cnpj && p.cnpj === cleanCompanyId) ||
-            (p.cnpj && cleanCompanyId && p.cnpj.replace(/\D/g, "") === cleanCompanyId.replace(/\D/g, ""))
+            (p.cnpj &&
+              cleanCompanyId &&
+              p.cnpj.replace(/\D/g, "") === cleanCompanyId.replace(/\D/g, "")),
         );
 
         if (target && mapRef.current) {
@@ -618,8 +677,8 @@ function OpportunityMap() {
             (target.companyId ? markerById.current.get(target.companyId) : null);
 
           if (m) {
-            if (group && typeof (group as any).zoomToShowLayer === "function") {
-              (group as any).zoomToShowLayer(m, () => {
+            if ("zoomToShowLayer" in group) {
+              group.zoomToShowLayer(m, () => {
                 setTimeout(() => {
                   m.openPopup();
                 }, 150);
@@ -660,43 +719,14 @@ function OpportunityMap() {
   return (
     <div>
       <PageHeader
-        title="Mapa"
-        subtitle="Visualização operacional e inteligência territorial de oportunidades B2B."
         actions={
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleDiscoverMarkets}
-              disabled={isDiscovering}
-              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#DDE5EF] bg-white px-3 text-xs font-bold text-[#0B1F33] transition hover:border-[#1061AF] disabled:opacity-50"
-              title="Selecione UF e Cidade nos filtros para descobrir mercados via Google Places"
-            >
-              {isDiscovering ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin text-[#1061AF]" />
-              ) : (
-                <Search className="h-3.5 w-3.5 text-[#1061AF]" />
-              )}
-              {isDiscovering ? "Descobrindo..." : "Descobrir Mercados"}
-            </button>
-            <button
-              onClick={handleOptimizeLocations}
-              disabled={isOptimizing}
-              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#DDE5EF] bg-white px-3 text-xs font-bold text-[#0B1F33] transition hover:border-[#1061AF] disabled:opacity-50"
-            >
-              {isOptimizing ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin text-[#1061AF]" />
-              ) : (
-                <MapPin className="h-3.5 w-3.5 text-[#1061AF]" />
-              )}
-              {isOptimizing ? "Otimizando..." : "Otimizar Localizações"}
-            </button>
-            <Link
-              to="/importar-cnpjs"
-              className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#0B1F33] px-3.5 text-xs font-bold text-white transition hover:bg-[#1061AF]"
-            >
-              <FileUp className="h-3.5 w-3.5 text-[#FFF200]" />
-              Importar CNPJs
-            </Link>
-          </div>
+          <Link
+            to="/importar-cnpjs"
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#0B1F33] px-3.5 text-xs font-bold text-white transition hover:bg-[#1061AF]"
+          >
+            <FileUp className="h-3.5 w-3.5 text-[#FFF200]" />
+            Importar CNPJs
+          </Link>
         }
       />
 
@@ -797,12 +827,35 @@ function OpportunityMap() {
               className="h-10 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-sm text-[#0B1F33] outline-none focus:border-[#1061AF]"
             >
               <option>Todas</option>
-              {Array.from(new Set(opportunities.filter((p) => selectedUf === "Todos" || p.uf === selectedUf).map((p) => p.city)))
-                .filter(Boolean)
-                .sort()
-                .map((city) => (
-                  <option key={city}>{city}</option>
-                ))}
+              {(() => {
+                const cityMap = new Map<string, string>();
+                const norm = (s: string) =>
+                  s
+                    .normalize("NFD")
+                    .replace(/[\u0300-\u036f]/g, "")
+                    .toLowerCase()
+                    .trim();
+                opportunities
+                  .filter((p) => selectedUf === "Todos" || p.uf === selectedUf)
+                  .forEach((p) => {
+                    if (!p.city) return;
+                    const key = norm(p.city);
+                    const existing = cityMap.get(key);
+                    if (!existing) {
+                      cityMap.set(key, p.city.trim());
+                    } else if (/[a-z]/.test(p.city) && !/[a-z]/.test(existing)) {
+                      cityMap.set(key, p.city.trim());
+                    } else if (
+                      /[\u00C0-\u024F]/.test(p.city) &&
+                      !/[\u00C0-\u024F]/.test(existing)
+                    ) {
+                      cityMap.set(key, p.city.trim());
+                    }
+                  });
+                return Array.from(cityMap.values())
+                  .sort((a, b) => a.localeCompare(b, "pt-BR"))
+                  .map((city) => <option key={city}>{city}</option>);
+              })()}
             </select>
           </label>
 
@@ -834,7 +887,7 @@ function OpportunityMap() {
             >
               <option value="Todos">Todos os Tipos</option>
               <option value="Supermercado">🛒 Supermercado</option>
-              <option value="Hipermercado">🏬 Hipermercado</option>
+              <option value="Padaria">🥖 Padaria</option>
               <option value="Minimercado / Mercearia">🏪 Minimercado / Mercado</option>
               <option value="Açougue">🥩 Açougue</option>
             </select>
@@ -898,7 +951,9 @@ function OpportunityMap() {
         <div className="flex flex-wrap items-center justify-between gap-4">
           {/* Status (Cores dos Pinos) */}
           <div className="flex flex-wrap items-center gap-3.5 text-xs">
-            <span className="font-bold text-[#0B1F33] uppercase text-[11px] tracking-wider">Status (Cor do Pin):</span>
+            <span className="font-bold text-[#0B1F33] uppercase text-[11px] tracking-wider">
+              Status (Cor do Pin):
+            </span>
             <div className="flex items-center gap-1.5">
               <span className="h-3 w-3 rounded-full bg-[#16A34A] shadow-xs" />
               <span className="font-medium text-slate-700">Cliente Ativo</span>
@@ -915,17 +970,31 @@ function OpportunityMap() {
 
           {/* Tipo de Comércio (Ícones Internos) */}
           <div className="flex flex-wrap items-center gap-2 text-xs border-t md:border-t-0 md:border-l border-slate-200 pt-2 md:pt-0 md:pl-4">
-            <span className="font-bold text-[#0B1F33] uppercase text-[11px] tracking-wider">Tipo (Ícone):</span>
-            <span className="inline-flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-emerald-800 font-semibold" title="Supermercados">
+            <span className="font-bold text-[#0B1F33] uppercase text-[11px] tracking-wider">
+              Tipo (Ícone):
+            </span>
+            <span
+              className="inline-flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-emerald-800 font-semibold"
+              title="Supermercados"
+            >
               🛒 Supermercado
             </span>
-            <span className="inline-flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-emerald-800 font-semibold" title="Hipermercados">
-              🏬 Hipermercado
+            <span
+              className="inline-flex items-center gap-1 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 text-amber-800 font-semibold"
+              title="Padarias"
+            >
+              🥖 Padaria
             </span>
-            <span className="inline-flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-emerald-800 font-semibold" title="Minimercados e Mercados">
+            <span
+              className="inline-flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-emerald-800 font-semibold"
+              title="Minimercados e Mercados"
+            >
               🏪 Minimercado / Mercado
             </span>
-            <span className="inline-flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-emerald-800 font-semibold" title="Açougues">
+            <span
+              className="inline-flex items-center gap-1 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 text-emerald-800 font-semibold"
+              title="Açougues"
+            >
               🥩 Açougue
             </span>
           </div>
@@ -1011,7 +1080,7 @@ function OpportunityMap() {
             )}
 
             {/* Map container */}
-            <div className="relative h-[680px] bg-[#E8EEF5]">
+            <div className="relative z-0 isolate h-[680px] bg-[#E8EEF5]">
               <div ref={mapElRef} className="h-full w-full" />
 
               {mapStatus === "loading" && (

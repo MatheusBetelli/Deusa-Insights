@@ -13,4 +13,3 @@ export const Route = createFileRoute("/login/reset-password")({
     };
   },
 });
-

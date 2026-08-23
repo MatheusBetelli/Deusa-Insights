@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { EmptyState, ErrorState, LoadingState } from "@/components/common/InterfaceStates";
 import { PaginationBar } from "@/components/common/PaginationBar";
@@ -46,12 +46,17 @@ function setStoredDatabaseFilters(filters: DatabaseSearch) {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(DATABASE_STORAGE_KEY, JSON.stringify(filters));
-  } catch {}
+  } catch {
+    // Storage can be unavailable in private browsing or restricted contexts.
+  }
 }
 
 export const Route = createFileRoute("/_app/base-de-dados")({
   validateSearch: (search: Record<string, unknown>): DatabaseSearch => ({
-    tab: search.tab === "companies" || search.tab === "cities" || search.tab === "cnaes" ? search.tab : undefined,
+    tab:
+      search.tab === "companies" || search.tab === "cities" || search.tab === "cnaes"
+        ? search.tab
+        : undefined,
     search: typeof search.search === "string" ? search.search : undefined,
     uf: typeof search.uf === "string" ? search.uf : undefined,
     page:
@@ -82,11 +87,13 @@ function emptyPage<T>(): PaginatedResponse<T> {
 }
 
 function BaseDeDados() {
-  const navigate = useNavigate();
+  const navigate = Route.useNavigate();
   const routeSearch = Route.useSearch();
   const storedFilters = useMemo(() => getStoredDatabaseFilters(), []);
 
-  const [activeTab, setActiveTab] = useState<Tab>(routeSearch.tab ?? storedFilters.tab ?? "companies");
+  const [activeTab, setActiveTab] = useState<Tab>(
+    routeSearch.tab ?? storedFilters.tab ?? "companies",
+  );
   const [search, setSearch] = useState(routeSearch.search ?? storedFilters.search ?? "");
   const [uf, setUf] = useState(routeSearch.uf ?? storedFilters.uf ?? "Todos");
   const [page, setPage] = useState(routeSearch.page ?? storedFilters.page ?? 1);
@@ -109,7 +116,7 @@ function BaseDeDados() {
       page: page > 1 ? page : undefined,
     };
     setStoredDatabaseFilters(params);
-    void navigate({ search: params as any, replace: true });
+    void navigate({ search: params, replace: true });
   }, [activeTab, search, uf, page, navigate]);
   const [companies, setCompanies] = useState<PaginatedResponse<Company>>(emptyPage);
   const [cities, setCities] = useState<PaginatedResponse<City>>(emptyPage);
@@ -237,14 +244,7 @@ function BaseDeDados() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-widest text-[#1061AF]">Dados</p>
-          <h1 className="mt-0.5 text-2xl font-bold tracking-tight text-[#0B1F33]">Base de Dados</h1>
-          <p className="mt-0.5 text-sm text-[#64748B]">
-            Consulte empresas, cidades e CNAEs monitorados.
-          </p>
-        </div>
+      <div className="flex items-center justify-end">
         <Link
           to="/importar-cnpjs"
           className="inline-flex h-9 w-fit items-center gap-1.5 rounded-lg bg-[#0B1F33] px-3.5 text-sm font-bold text-white transition hover:bg-[#1061AF]"
@@ -458,7 +458,10 @@ function BaseDeDados() {
                             </button>
                             <button
                               onClick={() =>
-                                navigate({ to: "/mapa-oportunidades", search: { uf: "Todos", city: city.name } })
+                                navigate({
+                                  to: "/mapa-oportunidades",
+                                  search: { uf: "Todos", city: city.name },
+                                })
                               }
                               className="inline-flex h-8 items-center gap-1 rounded-md border border-[#DDE5EF] bg-white px-2.5 text-xs font-bold text-[#0B1F33] hover:border-[#1061AF]"
                             >

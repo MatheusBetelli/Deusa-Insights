@@ -76,21 +76,21 @@ const POSITIVATION_COLORS: Record<string, string> = {
 
 const POTENTIAL_COLORS: Record<string, string> = {
   "Oportunidades Críticas": "#EF4444",
-  "CRITICAL": "#EF4444",
-  "Crítica": "#EF4444",
-  "Crítico": "#EF4444",
+  CRITICAL: "#EF4444",
+  Crítica: "#EF4444",
+  Crítico: "#EF4444",
 
   "Alto Potencial": "#F59E0B",
-  "HIGH": "#F59E0B",
-  "Alta": "#F59E0B",
+  HIGH: "#F59E0B",
+  Alta: "#F59E0B",
 
   "Médio Potencial": "#3B82F6",
-  "MEDIUM": "#3B82F6",
-  "Média": "#3B82F6",
+  MEDIUM: "#3B82F6",
+  Média: "#3B82F6",
 
   "Baixo Potencial": "#9CA3AF",
-  "LOW": "#9CA3AF",
-  "Baixa": "#9CA3AF",
+  LOW: "#9CA3AF",
+  Baixa: "#9CA3AF",
 };
 
 function getSegmentColor(key: string, colors: Record<string, string>): string {
@@ -305,9 +305,7 @@ function Dashboard() {
       filters.push({
         label: "Carteira",
         value: selectedPortfolioKeys
-          .map(
-            (key) => portfolioSegments.find((item) => item.key === key)?.name ?? key,
-          )
+          .map((key) => portfolioSegments.find((item) => item.key === key)?.name ?? key)
           .join(", "),
         clear: () => setSelectedPortfolioKeys([]),
       });
@@ -317,8 +315,7 @@ function Dashboard() {
         label: "Positivação",
         value: selectedPositivationKeys
           .map(
-            (key) =>
-              positivationComparisonSegments.find((item) => item.key === key)?.name ?? key,
+            (key) => positivationComparisonSegments.find((item) => item.key === key)?.name ?? key,
           )
           .join(", "),
         clear: () => setSelectedPositivationKeys([]),
@@ -328,9 +325,7 @@ function Dashboard() {
       filters.push({
         label: "Potencial",
         value: selectedPotentialKeys
-          .map(
-            (key) => potentialSegments.find((item) => item.key === key)?.name ?? key,
-          )
+          .map((key) => potentialSegments.find((item) => item.key === key)?.name ?? key)
           .join(", "),
         clear: () => setSelectedPotentialKeys([]),
       });
@@ -379,36 +374,23 @@ function Dashboard() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-widest text-[#1061AF]">
-            Comercial
-          </p>
-          <h1 className="mt-0.5 text-2xl font-bold tracking-tight text-[#0B1F33]">
-            Central Comercial
-          </h1>
-          <p className="mt-0.5 text-sm text-[#64748B]">
-            Carteira, positivação, cobertura e expansão territorial da Deusa Alimentos.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Link
-            to="/leads-b2b"
-            search={{ ...leadSearchBase, status: "CONVERTED" }}
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#DDE5EF] bg-white px-3 text-xs font-bold text-[#0B1F33] transition hover:border-[#1061AF]"
-          >
-            <Building2 className="h-3.5 w-3.5 text-[#1061AF]" />
-            Ver clientes
-          </Link>
-          <Link
-            to="/mapa-oportunidades"
-            search={mapSearchBase}
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#0B1F33] px-3 text-xs font-bold text-white transition hover:bg-[#1061AF]"
-          >
-            <MapPinned className="h-3.5 w-3.5 text-[#FFF200]" />
-            Mapa de oportunidades
-          </Link>
-        </div>
+      <div className="flex items-center justify-end gap-2">
+        <Link
+          to="/leads-b2b"
+          search={{ ...leadSearchBase, status: "CONVERTED" }}
+          className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#DDE5EF] bg-white px-3 text-xs font-bold text-[#0B1F33] transition hover:border-[#1061AF]"
+        >
+          <Building2 className="h-3.5 w-3.5 text-[#1061AF]" />
+          Ver clientes
+        </Link>
+        <Link
+          to="/mapa-oportunidades"
+          search={mapSearchBase}
+          className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#0B1F33] px-3 text-xs font-bold text-white transition hover:bg-[#1061AF]"
+        >
+          <MapPinned className="h-3.5 w-3.5 text-[#FFF200]" />
+          Mapa de oportunidades
+        </Link>
       </div>
 
       <section className="rounded-lg border border-[#DDE5EF] bg-white p-4 shadow-sm">
@@ -622,7 +604,8 @@ function Dashboard() {
                   <CalendarRange className="mb-2.5 h-8 w-8 text-slate-400" />
                   <h4 className="text-sm font-bold text-slate-800">Histórico Mensal em Formação</h4>
                   <p className="mt-1 max-w-xs text-xs text-slate-500">
-                    Os indicadores consolidados de positivação e ativação dos próximos ciclos mensais alimentarão este gráfico automaticamente.
+                    Os indicadores consolidados de positivação e ativação dos próximos ciclos
+                    mensais alimentarão este gráfico automaticamente.
                   </p>
                   <span className="mt-3.5 rounded-full bg-slate-200/70 px-3 py-1 text-[11px] font-semibold text-slate-700">
                     Módulo Analítico Deusa Insights
@@ -928,10 +911,7 @@ function SegmentLegend(props: {
             } ${isEmpty ? "cursor-not-allowed" : ""}`}
           >
             <span className="flex min-w-0 items-center gap-2">
-              <span
-                className="h-3 w-3 shrink-0 rounded-full"
-                style={{ backgroundColor: color }}
-              />
+              <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: color }} />
               <span
                 className={`truncate text-xs font-bold ${
                   isEmpty ? "text-slate-400" : "text-slate-700"
@@ -1086,9 +1066,7 @@ function EvolutionChart(props: {
   return (
     <div className="space-y-2">
       <div className="flex w-full items-center justify-between gap-2 border-b border-slate-100 pb-2">
-        <span className="text-[11px] font-semibold text-slate-500">
-          Séries Analíticas
-        </span>
+        <span className="text-[11px] font-semibold text-slate-500">Séries Analíticas</span>
         <SeriesLegend active={props.activeSeries} onToggle={props.onToggleSeries} />
       </div>
 
@@ -1131,7 +1109,10 @@ function EvolutionChart(props: {
                     </div>
                     <div className="space-y-1.5">
                       {payload.map((entry) => (
-                        <div key={String(entry.dataKey)} className="flex items-center justify-between gap-4">
+                        <div
+                          key={String(entry.dataKey)}
+                          className="flex items-center justify-between gap-4"
+                        >
                           <span className="flex items-center gap-1.5 font-semibold text-slate-200">
                             <span
                               className="h-2.5 w-2.5 rounded-full"

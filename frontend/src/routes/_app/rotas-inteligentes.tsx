@@ -9,19 +9,15 @@ export const Route = createFileRoute("/_app/rotas-inteligentes")({
 function RotasFuturas() {
   return (
     <div>
-      <PageHeader
-        title="Rotas Comerciais"
-        subtitle="Funcionalidade planejada para uma etapa futura do produto."
-      />
-
       <section className="max-w-3xl rounded-xl border border-[#DDE5EF] bg-white p-6 shadow-sm">
         <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-[#1061AF]/10">
           <RouteIcon className="h-6 w-6 text-[#1061AF]" />
         </div>
         <h2 className="mt-5 text-2xl font-bold text-[#0B1F33]">Fora do escopo do MVP principal</h2>
         <p className="mt-3 text-sm leading-relaxed text-[#64748B]">
-          O MVP atual prioriza comparação de bases, identificação de potenciais clientes, mapa de oportunidades e recomendações comerciais.
-          A geração automática de rotas poderá ser adicionada depois que o fluxo territorial estiver validado.
+          O MVP atual prioriza comparação de bases, identificação de potenciais clientes, mapa de
+          oportunidades e recomendações comerciais. A geração automática de rotas poderá ser
+          adicionada depois que o fluxo territorial estiver validado.
         </p>
         <Link
           to="/mapa-oportunidades"

@@ -29,7 +29,7 @@ function LoginPage() {
   const navigate = useNavigate();
   const [mode, setMode] = useState<"login" | "forgot">("login");
   const [loading, setLoading] = useState(false);
-  
+
   // Login form states
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -71,7 +71,9 @@ function LoginPage() {
       const res = await AuthService.forgotPassword(forgotEmail);
       setForgotSuccess(res.message);
     } catch (err) {
-      setForgotError(err instanceof Error ? err.message : "Não foi possível processar a solicitação.");
+      setForgotError(
+        err instanceof Error ? err.message : "Não foi possível processar a solicitação.",
+      );
     } finally {
       setForgotLoading(false);
     }
@@ -96,20 +98,18 @@ function LoginPage() {
           {/* Linha fina azul no topo */}
           <div className="absolute inset-x-0 top-0 h-[2px] bg-[#1061AF]" />
 
-            {mode === "login" ? (
-              <>
-                <div className="mb-8 flex flex-col items-center">
-                  <DeusaLogo className="h-10 w-auto mb-6" />
-                  <span className="mb-3 inline-flex items-center rounded-full bg-blue-50/90 px-3 py-1 text-[10px] font-bold tracking-widest text-[#1061AF] uppercase border border-blue-200/70">
-                    Deusa Analytics
-                  </span>
-                  <h2 className="text-xl font-bold tracking-tight text-slate-900">
-                    Acesso interno
-                  </h2>
-                  <p className="mt-1.5 text-center text-sm text-slate-500 font-medium">
-                    Entre com seu e-mail corporativo para acessar a plataforma.
-                  </p>
-                </div>
+          {mode === "login" ? (
+            <>
+              <div className="mb-8 flex flex-col items-center">
+                <DeusaLogo className="h-10 w-auto mb-6" />
+                <span className="mb-3 inline-flex items-center rounded-full bg-blue-50/90 px-3 py-1 text-[10px] font-bold tracking-widest text-[#1061AF] uppercase border border-blue-200/70">
+                  Deusa Analytics
+                </span>
+                <h2 className="text-xl font-bold tracking-tight text-slate-900">Acesso interno</h2>
+                <p className="mt-1.5 text-center text-sm text-slate-500 font-medium">
+                  Entre com seu e-mail corporativo para acessar a plataforma.
+                </p>
+              </div>
 
               <form onSubmit={submitLogin} className="space-y-6">
                 <div className="space-y-2.5">
@@ -159,11 +159,7 @@ function LoginPage() {
                       className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none transition-colors p-1 rounded"
                       title={showPassword ? "Ocultar senha" : "Exibir senha"}
                     >
-                      {showPassword ? (
-                        <EyeOff className="h-4 w-4" />
-                      ) : (
-                        <Eye className="h-4 w-4" />
-                      )}
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
                   </div>
                 </div>
@@ -221,9 +217,7 @@ function LoginPage() {
             <>
               <div className="mb-8 flex flex-col items-center">
                 <DeusaLogo className="h-9 w-auto mb-8" />
-                <h2 className="text-xl font-bold tracking-tight text-slate-900">
-                  Recuperar senha
-                </h2>
+                <h2 className="text-xl font-bold tracking-tight text-slate-900">Recuperar senha</h2>
                 <p className="mt-2 text-center text-sm text-slate-500 font-medium leading-relaxed">
                   Informe seu e-mail corporativo abaixo para receber o link de redefinição de senha.
                 </p>
@@ -236,9 +230,7 @@ function LoginPage() {
                       <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
                       Instruções enviadas!
                     </div>
-                    <p className="text-xs text-emerald-700 leading-relaxed">
-                      {forgotSuccess}
-                    </p>
+                    <p className="text-xs text-emerald-700 leading-relaxed">{forgotSuccess}</p>
                   </div>
 
                   <button
