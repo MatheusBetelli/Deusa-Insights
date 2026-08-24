@@ -103,6 +103,83 @@ function findReportDir(): string {
   return fallback;
 }
 
+function buildProcessedRecord(row: string[]): ProcessedRecord {
+  const cnpj =
+    (row[0] || "").padStart(8, "0") +
+    (row[1] || "").padStart(4, "0") +
+    (row[2] || "").padStart(2, "0");
+  const situacaoCadastral = SITUACAO_MAP[row[5]] ?? "DESCONHECIDA";
+  const nomeFantasia = row[4]?.trim() || null;
+  const logradouro = [row[13], row[14]].filter(Boolean).join(" ").trim() || null;
+  const numero = row[15]?.trim() || null;
+  const bairro = row[17]?.trim() || null;
+  const cep = row[18]?.replace(/\D/g, "") || null;
+  const municipioCodigo = row[20] || "";
+  const municipioNome = TOM_CITY_MAP[municipioCodigo] || `Municipio ${municipioCodigo}`;
+  const municipioMapeado = CITY_NAMES.has(municipioNome);
+  const ddd1 = row[21]?.trim();
+  const fone1 = row[22]?.trim();
+  const telefone = ddd1 && fone1 ? `(${ddd1}) ${fone1}` : fone1 || null;
+  const email = row[27]?.trim() || null;
+  const cnaePrincipal = row[11]?.replace(/\D/g, "") || null;
+  const enderecoCompleto = Boolean(logradouro && numero && bairro && cep);
+  const origemCoordenada = municipioMapeado ? "municipio_centroide_jitter" : "sem_coordenada";
+  const cnpjValido = isValidCnpj(cnpj);
+  const qualityInput = {
+    cnpj,
+    situacaoCadastral,
+    nomeFantasia,
+    logradouro,
+    numero,
+    bairro,
+    cep,
+    telefone,
+    email,
+    cidade: municipioNome,
+    cnaePrincipal,
+    origemCoordenada,
+    latitude: municipioMapeado ? -22.0 : null,
+    longitude: municipioMapeado ? -50.0 : null,
+  };
+  const { score: confianca, statusVerificacaoEndereco } =
+    calcularConfiancaCadastral(qualityInput);
+  const { score: pontuacao, nivelOportunidade } = calcularPontuacaoOportunidade(
+    qualityInput,
+    TARGET_CNAES,
+    PRIORITY_CITIES,
+    confianca,
+  );
+  const { pendenteValidacao, motivosPendencia } = avaliarPendencias(qualityInput);
+
+  return {
+    cnpj,
+    cnpjFormatado: formatCnpj(cnpj),
+    nomeFantasia,
+    situacaoCadastral,
+    logradouro,
+    numero,
+    bairro,
+    cep,
+    municipioCodigo,
+    municipioNome,
+    telefone,
+    email,
+    enderecoCompleto,
+    municipioMapeado,
+    cnpjValido,
+    confiancaVerificacao: confianca,
+    statusVerificacaoEndereco,
+    pontuacaoOportunidade: pontuacao,
+    nivelOportunidade,
+    pendenteValidacao,
+    motivosPendencia: [
+      ...motivosPendencia,
+      ...(!cnpjValido ? ["CNPJ com dígito verificador inválido"] : []),
+    ],
+    origemCoordenada,
+  };
+}
+
 // ─── Processamento ────────────────────────────────────────────────────────────
 
 async function processRecords(): Promise<{
@@ -123,54 +200,14 @@ async function processRecords(): Promise<{
     if (!line.trim()) continue;
     totalLidos++;
 
-    const row = parseLine(line);
-    const cnpj = (row[0] || "").padStart(8, "0") + (row[1] || "").padStart(4, "0") + (row[2] || "").padStart(2, "0");
+    const record = buildProcessedRecord(parseLine(line));
 
-    if (seenCnpjs.has(cnpj)) {
+    if (seenCnpjs.has(record.cnpj)) {
       cnpjsDuplicados++;
       continue;
     }
-    seenCnpjs.add(cnpj);
-
-    const situacaoCadastral = SITUACAO_MAP[row[5]] ?? "DESCONHECIDA";
-    const nomeFantasia = row[4]?.trim() || null;
-    const logradouro = [row[13], row[14]].filter(Boolean).join(" ").trim() || null;
-    const numero = row[15]?.trim() || null;
-    const bairro = row[17]?.trim() || null;
-    const cep = row[18]?.replace(/\D/g, "") || null;
-    const municipioCodigo = row[20] || "";
-    const municipioNome = TOM_CITY_MAP[municipioCodigo] || `Municipio ${municipioCodigo}`;
-    const municipioMapeado = CITY_NAMES.has(municipioNome);
-    const ddd1 = row[21]?.trim();
-    const fone1 = row[22]?.trim();
-    const telefone = ddd1 && fone1 ? `(${ddd1}) ${fone1}` : fone1 || null;
-    const email = row[27]?.trim() || null;
-    const cnaePrincipal = row[11]?.replace(/\D/g, "") || null;
-    const enderecoCompleto = !!(logradouro && numero && bairro && cep);
-    const origemCoordenada = municipioMapeado ? "municipio_centroide_jitter" : "sem_coordenada";
-    const cnpjValido = isValidCnpj(cnpj);
-
-    const qualInput = {
-      cnpj, situacaoCadastral, nomeFantasia, logradouro, numero, bairro, cep,
-      telefone, email, cidade: municipioNome, cnaePrincipal, origemCoordenada,
-      latitude: municipioMapeado ? -22.0 : null,
-      longitude: municipioMapeado ? -50.0 : null,
-    };
-
-    const { score: confianca, statusVerificacaoEndereco } = calcularConfiancaCadastral(qualInput);
-    const { score: pontuacao, nivelOportunidade, motivos: motivoPontuacao } =
-      calcularPontuacaoOportunidade(qualInput, TARGET_CNAES, PRIORITY_CITIES, confianca);
-    const { pendenteValidacao, motivosPendencia } = avaliarPendencias(qualInput);
-
-    records.push({
-      cnpj, cnpjFormatado: formatCnpj(cnpj), nomeFantasia, situacaoCadastral,
-      logradouro, numero, bairro, cep, municipioCodigo, municipioNome,
-      telefone, email, enderecoCompleto, municipioMapeado, cnpjValido,
-      confiancaVerificacao: confianca, statusVerificacaoEndereco,
-      pontuacaoOportunidade: pontuacao, nivelOportunidade,
-      pendenteValidacao, motivosPendencia: [...motivosPendencia, ...(!cnpjValido ? ["CNPJ com dígito verificador inválido"] : [])],
-      origemCoordenada,
-    });
+    seenCnpjs.add(record.cnpj);
+    records.push(record);
   }
 
   return { records, totalLidos, cnpjsDuplicados };

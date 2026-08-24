@@ -3,7 +3,6 @@ import { CNPJ_PROVIDER } from "../imports/providers/cnpj-provider.interface";
 import { ReceitaFederalProvider } from "../imports/providers/receita-federal.provider";
 import { CompaniesController } from "./companies.controller";
 import { CompaniesService } from "./companies.service";
-import { GeocodingService } from "../common/geocoding.service";
 import { ClassificationModule } from "../classification/classification.module";
 
 @Module({
@@ -11,10 +10,8 @@ import { ClassificationModule } from "../classification/classification.module";
   controllers: [CompaniesController],
   providers: [
     CompaniesService,
-    GeocodingService,
     { provide: CNPJ_PROVIDER, useClass: ReceitaFederalProvider },
   ],
-  exports: [CompaniesService],
+  exports: [CompaniesService, CNPJ_PROVIDER],
 })
 export class CompaniesModule {}
-

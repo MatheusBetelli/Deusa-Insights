@@ -4,11 +4,11 @@ import { BadRequestException } from "@nestjs/common";
 import { CompaniesService } from "./companies.service";
 
 function makeService(existing: Record<string, unknown> | null) {
-  let upsertArgs: Record<string, any> | undefined;
+  let upsertArgs: Record<string, unknown> | undefined;
   const prisma = {
     company: {
       findUnique: async () => existing,
-      upsert: async (args: Record<string, any>) => {
+      upsert: async (args: Record<string, unknown>) => {
         upsertArgs = args;
         return { id: "company-1", cnaes: [], lead: null };
       },
@@ -16,7 +16,6 @@ function makeService(existing: Record<string, unknown> | null) {
   };
   const service = new CompaniesService(
     prisma as never,
-    {} as never,
     {} as never,
     {} as never,
     {} as never,
@@ -131,7 +130,6 @@ test("updateCommercialProfile grava cadastro e contatos na mesma transação", a
     {} as never,
     {} as never,
     {} as never,
-    {} as never,
   );
 
   const result = await service.updateCommercialProfile("company-1", {
@@ -148,4 +146,47 @@ test("updateCommercialProfile grava cadastro e contatos na mesma transação", a
     "transaction-finish",
   ]);
   assert.equal(result?.id, "company-1");
+});
+
+test("candidatos de localização exigem confirmação explícita", async () => {
+  const { service } = makeService(null);
+
+  await assert.rejects(
+    () => service.getLocationCandidates("company-1", false),
+    BadRequestException,
+  );
+});
+
+test("candidatos de localização não chamam Google Places sem chave configurada", async () => {
+  const company = {
+    id: "company-1",
+    cnpj: "11222333000181",
+    razaoSocial: "Mercado Teste",
+    nomeFantasia: "Mercado Teste",
+    logradouro: "Rua Um",
+    numero: "10",
+    bairro: "Centro",
+    cidade: "Garça",
+    uf: "SP",
+    cep: "17400000",
+    situacaoCadastral: "ATIVA",
+    cnaePrincipal: "4711302",
+    latitude: null,
+    longitude: null,
+    details: null,
+  };
+  const prisma = { company: { findUnique: async () => company } };
+  const config = { get: () => undefined };
+  const service = new CompaniesService(
+    prisma as never,
+    {} as never,
+    {} as never,
+    config as never,
+  );
+
+  const result = await service.getLocationCandidates("company-1", true);
+
+  assert.equal(result.apiKeyConfigured, false);
+  assert.deepEqual(result.candidates, []);
+  assert.equal(result.queriesExecuted.length, 1);
 });

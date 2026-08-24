@@ -10,6 +10,100 @@ type CountByCity = {
   opportunities: number;
 };
 
+const ROLLING_PERIOD_MONTHS: Partial<Record<DashboardPeriod, number>> = {
+  last_3_months: 3,
+  last_6_months: 6,
+  last_12_months: 12,
+};
+
+type DashboardSegment = {
+  key: string;
+  name: string;
+  count: number;
+  percentage: number;
+};
+
+type DashboardSummaryResponse = {
+  period: {
+    key: DashboardPeriod;
+    label: string;
+    start: string;
+    end: string;
+    previousStart: string;
+    previousEnd: string;
+  };
+  filters: {
+    responsibles: Array<{ id: string; name: string; email: string }>;
+    unsupported: string[];
+  };
+  portfolio: {
+    totalClients: number;
+    activeClients: number;
+    inactiveClients: number;
+    newClientsInBase: number;
+    distribution: DashboardSegment[];
+  };
+  positivation: {
+    total: number;
+    portfolioPercentage: number;
+    previousTotal: number;
+    comparisonAvailable: boolean;
+    deltaPercentage: number | null;
+    distribution: DashboardSegment[];
+  };
+  coverage: {
+    clients: number;
+    opportunities: number;
+    totalMarket: number;
+    percentage: number;
+    expansionPercentage: number;
+  };
+  expansionByCity: Array<
+    CountByCity & {
+      totalMarket: number;
+      coveragePercentage: number;
+      expansionPercentage: number;
+    }
+  >;
+  monthlyEvolution: Array<{
+    month: string;
+    year: number;
+    activeClients: number;
+    positivatedClients: number;
+    negotiationsCount: number;
+    newLeads: number;
+  }>;
+  potentialClients: number;
+  activeClients: number;
+  inactiveClients: number;
+  criticalOpportunities: number;
+  monitoredCities: number;
+  monitoredCnaes: number;
+  priorityCity: string | null;
+  priorityCnae: string | null;
+  priorityMetrics?: {
+    territorialScore: number;
+    criticalCount: number;
+    qualifiedCount: number;
+    distanceGarcaKm: number;
+    cnaeFocusDescription: string;
+  };
+  topRegions: Array<{
+    rank: number;
+    city: string;
+    territorialScore: number;
+    criticalCount: number;
+    qualifiedCount: number;
+    totalCompanies: number;
+    distanceGarcaKm: number;
+    cnaeFocusDescription: string;
+  }>;
+  statusDistribution: Array<{ name: string; count: number }>;
+  potentialDistribution: Array<{ name: string; count: number }>;
+  cityDistribution: Array<{ city: string; total: number }>;
+  monthlyTrend: Array<{ mes: string; novosLeads: number; convertidos: number }>;
+};
+
 const POSITIVATION_STATUSES: LeadStatus[] = [
   LeadStatus.CONTACTED,
   LeadStatus.INTERESTED,
@@ -31,10 +125,6 @@ const monthLabels = [
   "Nov",
   "Dez",
 ];
-
-function normalizeCnae(code?: string | null) {
-  return code?.replace(/\D/g, "") || undefined;
-}
 
 function formatCnae(code?: string | null) {
   const digits = code?.replace(/\D/g, "") ?? "";
@@ -69,8 +159,9 @@ export function resolvePeriod(query: DashboardQueryDto) {
   let end: Date;
   let months: number;
 
-  if (period === "last_3_months" || period === "last_6_months" || period === "last_12_months") {
-    months = period === "last_3_months" ? 3 : period === "last_6_months" ? 6 : 12;
+  const rollingMonths = ROLLING_PERIOD_MONTHS[period];
+  if (rollingMonths) {
+    months = rollingMonths;
     start = addMonths(currentMonthStart, -(months - 1));
     end = addMonths(currentMonthStart, 1);
   } else {
@@ -102,9 +193,47 @@ function periodWhere(start: Date, end: Date): Prisma.DateTimeFilter {
   return { gte: start, lt: end };
 }
 
+function buildDashboardFilters(query: DashboardQueryDto, periodEnd: Date) {
+  const cnaeVariants = getCnaeVariants(query.cnae);
+  const uf = query.uf?.toUpperCase();
+  const city = query.city?.trim();
+  const assignedToId = query.assignedToId?.trim();
+  const companyFilters: Prisma.CompanyWhereInput[] = [
+    { situacaoCadastral: "ATIVA" },
+    buildCnaeWhereInput(query.cnae),
+  ];
+  if (uf) companyFilters.push({ uf });
+  if (city) companyFilters.push({ cidade: { equals: city, mode: "insensitive" } });
+
+  const companyBaseWhere: Prisma.CompanyWhereInput = { AND: companyFilters };
+  const clientCompanyFilters: Prisma.CompanyWhereInput[] = [];
+  if (assignedToId) clientCompanyFilters.push({ lead: { assignedToId } });
+  if (cnaeVariants.length > 0) {
+    clientCompanyFilters.push({
+      OR: [
+        { cnaePrincipal: { in: cnaeVariants } },
+        { cnaes: { some: { cnaeCode: { in: cnaeVariants } } } },
+      ],
+    });
+  }
+
+  const clientBaseWhere: Prisma.ClientAccountWhereInput = {
+    ...(uf ? { uf } : {}),
+    ...(city ? { cidade: { equals: city, mode: "insensitive" } } : {}),
+    ...(clientCompanyFilters.length > 0 ? { company: { AND: clientCompanyFilters } } : {}),
+    createdAt: { lt: periodEnd },
+  };
+  const leadBaseWhere: Prisma.LeadWhereInput = {
+    ...(assignedToId ? { assignedToId } : {}),
+    company: companyBaseWhere,
+  };
+
+  return { assignedToId, city, clientBaseWhere, companyBaseWhere, leadBaseWhere, uf };
+}
+
 @Injectable()
 export class DashboardService implements OnModuleInit {
-  private summaryCache = new Map<string, { data: any; expiresAt: number }>();
+  private summaryCache = new Map<string, { data: DashboardSummaryResponse; expiresAt: number }>();
 
   clearCache() {
     this.summaryCache.clear();
@@ -119,7 +248,7 @@ export class DashboardService implements OnModuleInit {
     }, 1000);
   }
 
-  async summary(query: DashboardQueryDto = {}) {
+  async summary(query: DashboardQueryDto = {}): Promise<DashboardSummaryResponse> {
     const period = resolvePeriod(query);
     const cacheKey = `${period.key}_${period.start.getTime()}_${period.end.getTime()}_${query.uf || "all"}_${query.city || "all"}_${query.cnae || "all"}_${query.assignedToId || "all"}`;
     const cached = this.summaryCache.get(cacheKey);
@@ -127,41 +256,8 @@ export class DashboardService implements OnModuleInit {
       return cached.data;
     }
 
-    const cnaeVariants = getCnaeVariants(query.cnae);
-    const uf = query.uf?.toUpperCase();
-    const city = query.city?.trim();
-    const assignedToId = query.assignedToId?.trim();
-
-    const companyFilters: Prisma.CompanyWhereInput[] = [
-      { situacaoCadastral: "ATIVA" },
-      buildCnaeWhereInput(query.cnae),
-    ];
-    if (uf) companyFilters.push({ uf });
-    if (city) companyFilters.push({ cidade: { equals: city, mode: "insensitive" } });
-    const companyBaseWhere: Prisma.CompanyWhereInput = { AND: companyFilters };
-
-    const clientCompanyFilters: Prisma.CompanyWhereInput[] = [];
-    if (assignedToId) clientCompanyFilters.push({ lead: { assignedToId } });
-    if (cnaeVariants.length > 0) {
-      clientCompanyFilters.push({
-        OR: [
-          { cnaePrincipal: { in: cnaeVariants } },
-          { cnaes: { some: { cnaeCode: { in: cnaeVariants } } } },
-        ],
-      });
-    }
-
-    const clientBaseWhere: Prisma.ClientAccountWhereInput = {
-      ...(uf ? { uf } : {}),
-      ...(city ? { cidade: { equals: city, mode: "insensitive" } } : {}),
-      ...(clientCompanyFilters.length > 0 ? { company: { AND: clientCompanyFilters } } : {}),
-      createdAt: { lt: period.end },
-    };
-
-    const leadBaseWhere: Prisma.LeadWhereInput = {
-      ...(assignedToId ? { assignedToId } : {}),
-      company: companyBaseWhere,
-    };
+    const { assignedToId, city, clientBaseWhere, companyBaseWhere, leadBaseWhere, uf } =
+      buildDashboardFilters(query, period.end);
 
     const [
       currentClients,
@@ -180,14 +276,10 @@ export class DashboardService implements OnModuleInit {
       topCnae,
       responsibles,
     ] = await Promise.all([
-      this.prisma.company.count({
+      this.prisma.clientAccount.count({
         where: {
-          ...companyBaseWhere,
-          createdAt: { lt: period.end },
-          OR: [
-            { lead: { status: LeadStatus.CONVERTED, ...(assignedToId ? { assignedToId } : {}) } },
-            { clientAccounts: { some: { isCurrentClient: true } } },
-          ],
+          ...clientBaseWhere,
+          isCurrentClient: true,
         },
       }),
       this.prisma.lead.count({
@@ -322,7 +414,6 @@ export class DashboardService implements OnModuleInit {
 
     const cityExpansion = await this.getCityExpansion({
       companyBaseWhere,
-      clientBaseWhere,
       assignedToId,
       periodEnd: period.end,
     });
@@ -357,7 +448,7 @@ export class DashboardService implements OnModuleInit {
 
     const priorityCityInfo = cityExpansion[0] ?? null;
 
-    const result = {
+    const result: DashboardSummaryResponse = {
       period: {
         key: period.key,
         label: period.label,
@@ -451,11 +542,10 @@ export class DashboardService implements OnModuleInit {
 
   private async getCityExpansion(args: {
     companyBaseWhere: Prisma.CompanyWhereInput;
-    clientBaseWhere: Prisma.ClientAccountWhereInput;
     assignedToId?: string;
     periodEnd: Date;
   }) {
-    const { companyBaseWhere, clientBaseWhere, assignedToId, periodEnd } = args;
+    const { companyBaseWhere, assignedToId, periodEnd } = args;
 
     const [clientsByCity, opportunitiesByCity] = await Promise.all([
       this.prisma.company.groupBy({
@@ -463,10 +553,7 @@ export class DashboardService implements OnModuleInit {
         where: {
           ...companyBaseWhere,
           createdAt: { lt: periodEnd },
-          OR: [
-            { lead: { status: LeadStatus.CONVERTED, ...(assignedToId ? { assignedToId } : {}) } },
-            { clientAccounts: { some: { isCurrentClient: true } } },
-          ],
+          clientAccounts: { some: { isCurrentClient: true } },
         },
         _count: { id: true },
       }),

@@ -3,9 +3,7 @@ export function onlyDigits(value: string) {
 }
 
 export function normalizeCnpj(value: string) {
-  const digits = onlyDigits(value);
-  if (digits.length !== 14) return digits;
-  return digits;
+  return onlyDigits(value);
 }
 
 export function formatCnpj(value: string) {

@@ -2,6 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { DashboardService, resolvePeriod } from "./dashboard.service";
 
+type QueryArgs = { where: Record<string, unknown> };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 test("resolvePeriod compara meses de calendário sem deslocar datas", () => {
   const period = resolvePeriod({ period: "selected_month", year: 2024, month: 3 });
   assert.equal(period.start.toISOString(), "2024-03-01T00:00:00.000Z");
@@ -11,25 +17,25 @@ test("resolvePeriod compara meses de calendário sem deslocar datas", () => {
 });
 
 test("summary preserva CNAE e responsável ao combinar filtros de carteira", async () => {
-  const companyCounts: Array<Record<string, any>> = [];
-  const clientCounts: Array<Record<string, any>> = [];
-  const leadCounts: Array<Record<string, any>> = [];
+  const companyCounts: QueryArgs[] = [];
+  const clientCounts: QueryArgs[] = [];
+  const leadCounts: QueryArgs[] = [];
   const prisma = {
     company: {
-      count: async (args: Record<string, any>) => {
+      count: async (args: QueryArgs) => {
         companyCounts.push(args);
         return 0;
       },
       groupBy: async () => [],
     },
     clientAccount: {
-      count: async (args: Record<string, any>) => {
+      count: async (args: QueryArgs) => {
         clientCounts.push(args);
         return 0;
       },
     },
     lead: {
-      count: async (args: Record<string, any>) => {
+      count: async (args: QueryArgs) => {
         leadCounts.push(args);
         return 0;
       },
@@ -49,22 +55,33 @@ test("summary preserva CNAE e responsável ao combinar filtros de carteira", asy
     assignedToId: "profile-1",
   });
 
-  const clientCompanyAnd = clientCounts[0].where.company.AND as Array<Record<string, any>>;
-  assert.ok(clientCompanyAnd.some((item) => item.lead?.assignedToId === "profile-1"));
+  const clientWhere = clientCounts[0].where;
+  assert.ok(isRecord(clientWhere.company));
+  assert.ok(Array.isArray(clientWhere.company.AND));
+  const clientCompanyAnd = clientWhere.company.AND.filter(isRecord);
+  assert.ok(
+    clientCompanyAnd.some(
+      (item) => isRecord(item.lead) && item.lead.assignedToId === "profile-1",
+    ),
+  );
   assert.ok(clientCompanyAnd.some((item) => Array.isArray(item.OR)));
 
-  const currentClientWhere = companyCounts[0].where as Record<string, any>;
-  assert.ok(Array.isArray(currentClientWhere.AND));
-  assert.ok(Array.isArray(currentClientWhere.OR));
+  assert.equal(clientWhere.isCurrentClient, true);
 
-  const unattendedWhere = companyCounts[1].where as Record<string, any>;
+  const unattendedWhere = companyCounts[0].where;
+  assert.ok(Array.isArray(unattendedWhere.AND));
+  assert.ok(isRecord(unattendedWhere.AND[0]));
   assert.ok(Array.isArray(unattendedWhere.AND[0].AND));
 
-  assert.deepEqual(leadCounts[0].where.company.clientAccounts, {
+  const firstLeadWhere = leadCounts[0].where;
+  assert.ok(isRecord(firstLeadWhere.company));
+  assert.deepEqual(firstLeadWhere.company.clientAccounts, {
     none: { isCurrentClient: true },
   });
-  assert.ok(leadCounts[1].where.lastContactAt);
+  const secondLeadWhere = leadCounts[1].where;
+  assert.ok(secondLeadWhere.lastContactAt);
+  assert.ok(Array.isArray(secondLeadWhere.OR));
   assert.ok(
-    leadCounts[1].where.OR.every((item: Record<string, unknown>) => !("lastContactAt" in item)),
+    secondLeadWhere.OR.filter(isRecord).every((item) => !("lastContactAt" in item)),
   );
 });

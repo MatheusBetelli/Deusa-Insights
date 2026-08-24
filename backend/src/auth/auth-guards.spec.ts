@@ -1,7 +1,7 @@
 import "reflect-metadata";
 import assert from "node:assert";
 import { test } from "node:test";
-import { GUARDS_METADATA } from "@nestjs/common/constants";
+import { GUARDS_METADATA, PATH_METADATA } from "@nestjs/common/constants";
 import { UnauthorizedException } from "@nestjs/common";
 import { UserRole } from "@prisma/client";
 import { AuthGuard } from "./auth.guard";
@@ -17,7 +17,10 @@ import { MapOpportunitiesController } from "../map-opportunities/map-opportuniti
 import { NotificationsController } from "../notifications/notifications.controller";
 import { PipelineController } from "../pipeline/pipeline.controller";
 import { UsersController } from "../users/users.controller";
-import { DatasetFreezeGuard } from "../common/dataset-freeze.guard";
+import {
+  DatasetFreezeGuard,
+  FROZEN_DATASET_READ_ONLY_KEY,
+} from "../common/dataset-freeze.guard";
 
 const guardedControllers = [
   CitiesController,
@@ -34,11 +37,19 @@ const guardedControllers = [
 ];
 
 const frozenDatasetControllers = [
+  CitiesController,
+  CnaesController,
   CompaniesController,
   ImportsController,
   LeadInteractionsController,
   LeadsController,
 ];
+
+type GuardTestRequest = {
+  cookies?: Record<string, string>;
+  headers: { authorization?: string; cookie?: string };
+  user?: { sub?: string; role?: UserRole };
+};
 
 test("controllers de negocio exigem AuthGuard no backend", () => {
   for (const controller of guardedControllers) {
@@ -56,41 +67,75 @@ test("controllers de negocio exigem AuthGuard no backend", () => {
       `${controller.name} deve aplicar DatasetFreezeGuard para proteger a carteira congelada`,
     );
   }
+
+  const deleteUserGuards = Reflect.getMetadata(
+    GUARDS_METADATA,
+    UsersController.prototype.deleteUser,
+  ) ?? [];
+  assert.ok(
+    deleteUserGuards.includes(DatasetFreezeGuard),
+    "DELETE /users/:id deve proteger as desvinculacoes de leads e interacoes congelados",
+  );
+});
+
+test("API nao expoe rotas de descoberta ou geocodificacao em lote", () => {
+  const routePaths = [CompaniesController, MapOpportunitiesController].flatMap((controller) => {
+    const prototype = controller.prototype as unknown as Record<string, unknown>;
+    return Object.getOwnPropertyNames(prototype).flatMap((property) => {
+      const handler = prototype[property];
+      if (typeof handler !== "function") return [];
+      const path = Reflect.getMetadata(PATH_METADATA, handler) as unknown;
+      return typeof path === "string" ? [path] : [];
+    });
+  });
+
+  assert.equal(routePaths.includes("geocode-batch-process"), false);
+  assert.equal(routePaths.includes("verify-google-batch"), false);
+  assert.equal(routePaths.includes("discover-region"), false);
+
+  assert.equal(
+    Reflect.getMetadata(
+      FROZEN_DATASET_READ_ONLY_KEY,
+      CompaniesController.prototype.getLocationCandidates,
+    ),
+    true,
+    "somente a consulta individual confirmada deve ignorar o congelamento de escrita",
+  );
 });
 
 test("token de redefinicao de senha nao pode autenticar chamadas da API", async () => {
   const guard = new AuthGuard(
-    { verifyAsync: async () => ({ sub: "user-1", type: "password_reset" }) } as any,
-    { get: () => "test-secret" } as any,
-    { user: { findUnique: async () => ({ id: "user-1" }) } } as any,
+    { verifyAsync: async () => ({ sub: "user-1", type: "password_reset" }) } as never,
+    { get: () => "test-secret" } as never,
+    { user: { findUnique: async () => ({ id: "user-1" }) } } as never,
   );
   const context = {
     switchToHttp: () => ({
       getRequest: () => ({ headers: { authorization: "Bearer reset-token" } }),
     }),
-  } as any;
+  } as never;
 
   await assert.rejects(() => guard.canActivate(context), UnauthorizedException);
 });
 
 test("token legado sem tipo e versão não pode autenticar chamadas da API", async () => {
   const guard = new AuthGuard(
-    { verifyAsync: async () => ({ sub: "user-1" }) } as any,
-    { get: () => "test-secret" } as any,
-    { user: { findUnique: async () => ({ id: "user-1", updatedAt: new Date() }) } } as any,
+    { verifyAsync: async () => ({ sub: "user-1" }) } as never,
+    { get: () => "test-secret" } as never,
+    { user: { findUnique: async () => ({ id: "user-1", updatedAt: new Date() }) } } as never,
   );
   const context = {
     switchToHttp: () => ({
       getRequest: () => ({ headers: { authorization: "Bearer legacy-token" } }),
     }),
-  } as any;
+  } as never;
 
   await assert.rejects(() => guard.canActivate(context), UnauthorizedException);
 });
 
 test("token de acesso atual permanece válido quando a versão da conta confere", async () => {
   const updatedAt = new Date("2026-08-19T12:00:00.000Z");
-  const request: any = { headers: { authorization: "Bearer access-token" } };
+  const request: GuardTestRequest = { headers: { authorization: "Bearer access-token" } };
   const guard = new AuthGuard(
     {
       verifyAsync: async () => ({
@@ -98,8 +143,8 @@ test("token de acesso atual permanece válido quando a versão da conta confere"
         type: "access",
         ver: updatedAt.getTime(),
       }),
-    } as any,
-    { get: () => "test-secret" } as any,
+    } as never,
+    { get: () => "test-secret" } as never,
     {
       user: {
         findUnique: async () => ({
@@ -110,20 +155,20 @@ test("token de acesso atual permanece válido quando a versão da conta confere"
           updatedAt,
         }),
       },
-    } as any,
+    } as never,
   );
   const context = {
     switchToHttp: () => ({ getRequest: () => request }),
-  } as any;
+  } as never;
 
   assert.equal(await guard.canActivate(context), true);
-  assert.equal(request.user.sub, "user-1");
-  assert.equal(request.user.role, UserRole.SALES);
+  assert.equal(request.user?.sub, "user-1");
+  assert.equal(request.user?.role, UserRole.SALES);
 });
 
 test("token de acesso armazenado em cookie httpOnly autentica requisição com sucesso", async () => {
   const updatedAt = new Date("2026-08-19T12:00:00.000Z");
-  const request: any = {
+  const request: GuardTestRequest = {
     cookies: { auth_token: "valid-cookie-token" },
     headers: {},
   };
@@ -137,8 +182,8 @@ test("token de acesso armazenado em cookie httpOnly autentica requisição com s
           ver: updatedAt.getTime(),
         };
       },
-    } as any,
-    { get: () => "test-secret" } as any,
+    } as never,
+    { get: () => "test-secret" } as never,
     {
       user: {
         findUnique: async () => ({
@@ -149,20 +194,20 @@ test("token de acesso armazenado em cookie httpOnly autentica requisição com s
           updatedAt,
         }),
       },
-    } as any,
+    } as never,
   );
   const context = {
     switchToHttp: () => ({ getRequest: () => request }),
-  } as any;
+  } as never;
 
   assert.equal(await guard.canActivate(context), true);
-  assert.equal(request.user.sub, "user-1");
-  assert.equal(request.user.role, UserRole.ADMIN);
+  assert.equal(request.user?.sub, "user-1");
+  assert.equal(request.user?.role, UserRole.ADMIN);
 });
 
 test("token de acesso extraído de cabeçalho Cookie bruto autentica com sucesso", async () => {
   const updatedAt = new Date("2026-08-19T12:00:00.000Z");
-  const request: any = {
+  const request: GuardTestRequest = {
     headers: { cookie: "other_cookie=123; auth_token=raw-header-cookie-token; session=xyz" },
   };
   const guard = new AuthGuard(
@@ -175,8 +220,8 @@ test("token de acesso extraído de cabeçalho Cookie bruto autentica com sucesso
           ver: updatedAt.getTime(),
         };
       },
-    } as any,
-    { get: () => "test-secret" } as any,
+    } as never,
+    { get: () => "test-secret" } as never,
     {
       user: {
         findUnique: async () => ({
@@ -187,15 +232,15 @@ test("token de acesso extraído de cabeçalho Cookie bruto autentica com sucesso
           updatedAt,
         }),
       },
-    } as any,
+    } as never,
   );
   const context = {
     switchToHttp: () => ({ getRequest: () => request }),
-  } as any;
+  } as never;
 
   assert.equal(await guard.canActivate(context), true);
-  assert.equal(request.user.sub, "user-2");
-  assert.equal(request.user.role, UserRole.MANAGER);
+  assert.equal(request.user?.sub, "user-2");
+  assert.equal(request.user?.role, UserRole.MANAGER);
 });
 
 test("operacoes administrativas declaram papeis no backend", () => {

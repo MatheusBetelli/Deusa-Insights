@@ -114,6 +114,34 @@ export function calcularConfiancaCadastral(input: QualidadeInput): ConfiancaResu
   return { score, statusVerificacaoEndereco };
 }
 
+type OpportunityCriterion = {
+  matches: boolean;
+  points: number;
+  metMessage: string;
+  unmetMessage: string;
+};
+
+function evaluateOpportunityCriteria(criteria: OpportunityCriterion[]): {
+  score: number;
+  motivos: string[];
+} {
+  let score = 0;
+  const motivos: string[] = [];
+
+  for (const criterion of criteria) {
+    if (criterion.matches) score += criterion.points;
+    motivos.push(criterion.matches ? criterion.metMessage : criterion.unmetMessage);
+  }
+
+  return { score, motivos };
+}
+
+function getOpportunityLevel(score: number): string {
+  if (score >= 80) return "alta";
+  if (score >= 50) return "media";
+  return "baixa";
+}
+
 /**
  * Calcula a pontuação comercial de oportunidade de 0 a 100.
  * Separada da confiança cadastral — mede potencial de negócio.
@@ -124,75 +152,56 @@ export function calcularPontuacaoOportunidade(
   priorityCities: string[],
   confiancaScore: number,
 ): OportunidadeResult {
-  let score = 0;
-  const motivos: string[] = [];
-
-  // CNAE 4712100 (minimercados/mercearias): +30
   const cnae = (input.cnaePrincipal ?? "").replace(/\D/g, "");
   const targetSet = new Set(targetCnaes.map((c) => c.replace(/\D/g, "")));
-  if (cnae && targetSet.has(cnae)) {
-    score += 30;
-    motivos.push(`CNAE ${cnae} alvo (+30)`);
-  } else {
-    motivos.push(`CNAE ${cnae || "não informado"} não é alvo (+0)`);
-  }
-
-  // Situação cadastral ATIVA: +25
-  if (normalize(input.situacaoCadastral) === "ATIVA") {
-    score += 25;
-    motivos.push("Situação cadastral ATIVA (+25)");
-  } else {
-    motivos.push(`Situação ${input.situacaoCadastral ?? "desconhecida"} — não ativa (+0)`);
-  }
-
-  // Endereço completo: +15
-  if (isEnderecoCompleto(input)) {
-    score += 15;
-    motivos.push("Endereço completo (+15)");
-  } else {
-    motivos.push("Endereço incompleto (+0)");
-  }
-
-  // Possui telefone: +10
-  if (input.telefone?.trim()) {
-    score += 10;
-    motivos.push("Telefone preenchido (+10)");
-  } else {
-    motivos.push("Telefone ausente (+0)");
-  }
-
-  // Possui e-mail: +5
-  if (input.email?.trim()) {
-    score += 5;
-    motivos.push("E-mail preenchido (+5)");
-  } else {
-    motivos.push("E-mail ausente (+0)");
-  }
-
-  // Município dentro das cidades monitoradas: +10
   const cityNorm = normalize(input.cidade);
   const priorityNorms = priorityCities.map(normalize);
-  if (cityNorm && priorityNorms.includes(cityNorm)) {
-    score += 10;
-    motivos.push(`Município ${input.cidade} monitorado (+10)`);
-  } else {
-    motivos.push(`Município ${input.cidade ?? "desconhecido"} não monitorado (+0)`);
-  }
-
-  // Confiança cadastral acima de 70: +5
-  if (confiancaScore >= 70) {
-    score += 5;
-    motivos.push(`Confiança cadastral ${confiancaScore}/100 (>70) (+5)`);
-  } else {
-    motivos.push(`Confiança cadastral ${confiancaScore}/100 (≤70) (+0)`);
-  }
-
-  score = Math.max(0, Math.min(100, score));
-
-  let nivelOportunidade: string;
-  if (score >= 80) nivelOportunidade = "alta";
-  else if (score >= 50) nivelOportunidade = "media";
-  else nivelOportunidade = "baixa";
+  const { score: rawScore, motivos } = evaluateOpportunityCriteria([
+    {
+      matches: Boolean(cnae && targetSet.has(cnae)),
+      points: 30,
+      metMessage: `CNAE ${cnae} alvo (+30)`,
+      unmetMessage: `CNAE ${cnae || "não informado"} não é alvo (+0)`,
+    },
+    {
+      matches: normalize(input.situacaoCadastral) === "ATIVA",
+      points: 25,
+      metMessage: "Situação cadastral ATIVA (+25)",
+      unmetMessage: `Situação ${input.situacaoCadastral ?? "desconhecida"} — não ativa (+0)`,
+    },
+    {
+      matches: isEnderecoCompleto(input),
+      points: 15,
+      metMessage: "Endereço completo (+15)",
+      unmetMessage: "Endereço incompleto (+0)",
+    },
+    {
+      matches: Boolean(input.telefone?.trim()),
+      points: 10,
+      metMessage: "Telefone preenchido (+10)",
+      unmetMessage: "Telefone ausente (+0)",
+    },
+    {
+      matches: Boolean(input.email?.trim()),
+      points: 5,
+      metMessage: "E-mail preenchido (+5)",
+      unmetMessage: "E-mail ausente (+0)",
+    },
+    {
+      matches: Boolean(cityNorm && priorityNorms.includes(cityNorm)),
+      points: 10,
+      metMessage: `Município ${input.cidade} monitorado (+10)`,
+      unmetMessage: `Município ${input.cidade ?? "desconhecido"} não monitorado (+0)`,
+    },
+    {
+      matches: confiancaScore >= 70,
+      points: 5,
+      metMessage: `Confiança cadastral ${confiancaScore}/100 (>70) (+5)`,
+      unmetMessage: `Confiança cadastral ${confiancaScore}/100 (≤70) (+0)`,
+    },
+  ]);
+  const score = Math.max(0, Math.min(100, rawScore));
+  const nivelOportunidade = getOpportunityLevel(score);
 
   return { score, nivelOportunidade, motivos };
 }

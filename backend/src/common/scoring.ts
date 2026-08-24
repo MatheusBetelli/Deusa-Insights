@@ -2,7 +2,7 @@ import { PotentialLevel } from "@prisma/client";
 import { isValidOpportunityCnae } from "./opportunity-filter";
 
 // Sede da Distribuidora Deusa em Garça/SP
-export const GARCA_COORDS = { lat: -22.2131, lon: -49.6553 };
+const GARCA_COORDS = { lat: -22.2131, lon: -49.6553 };
 
 // Distâncias rodoviárias estimadas de Garça/SP para municípios da região
 const CITY_DISTANCES_GARCA: Record<string, number> = {
@@ -44,6 +44,26 @@ const CITY_DISTANCES_GARCA: Record<string, number> = {
   "sao paulo": 420,
 };
 
+const PRIORITY_CITIES = new Set([
+  "bastos",
+  "tupa",
+  "tupã",
+  "marilia",
+  "marília",
+  "garca",
+  "garça",
+  "galia",
+  "gália",
+  "oriente",
+  "pompeia",
+  "pompéia",
+  "presidente prudente",
+  "bauru",
+  "assis",
+  "ourinhos",
+  "lins",
+]);
+
 export type ScoreInput = {
   cnpj?: string | null;
   situacaoCadastral?: string | null;
@@ -66,7 +86,7 @@ export type ScoreInput = {
   neighborCount?: number | null;
 };
 
-export type ScoreBreakdown = {
+type ScoreBreakdown = {
   perfilPts: number;     // max 30 (Minimercado, Supermercado, Açougue)
   potencialPts: number;  // max 25 (Cluster Logístico / Densidade de Alvos no Entorno)
   logisticaPts: number;  // max 20 (Proximidade da Base Garça/SP)
@@ -119,6 +139,61 @@ export function calculateGarcaDistance(lat?: number | null, lon?: number | null,
   return 120; // Fallback padrão para interior de SP não listado
 }
 
+function hasTargetCnae(input: ScoreInput): boolean {
+  if (isValidOpportunityCnae(input.cnaePrincipal)) return true;
+  return Boolean(
+    input.cnaes?.some((item) =>
+      isValidOpportunityCnae(typeof item === "string" ? item : item.cnaeCode),
+    ),
+  );
+}
+
+function getClusterScore(neighborCount: number | null | undefined, targetCnae: boolean): number {
+  if (typeof neighborCount !== "number") return targetCnae ? 50 : 40;
+  if (neighborCount >= 5) return 100;
+  if (neighborCount >= 3) return 76;
+  if (neighborCount >= 1) return 48;
+  return 20;
+}
+
+function getLogisticsScore(distanceKm: number): number {
+  if (distanceKm <= 30) return 100;
+  if (distanceKm <= 60) return 85;
+  if (distanceKm <= 100) return 70;
+  if (distanceKm <= 150) return 50;
+  if (distanceKm <= 200) return 30;
+  return 10;
+}
+
+function getDataQualityPoints(input: ScoreInput): number {
+  let rawScore = 0;
+  if (input.cnpj && input.cnpj.replace(/\D/g, "").length === 14) rawScore += 25;
+  if (input.logradouro && input.numero && input.bairro && input.cep) rawScore += 30;
+  if (input.telefone && input.telefone.trim().length >= 8) rawScore += 20;
+  if (
+    typeof input.latitude === "number" &&
+    typeof input.longitude === "number" &&
+    input.latitude !== 0
+  ) {
+    rawScore += 25;
+  }
+  return Math.round((Math.min(100, rawScore) / 100) * 10);
+}
+
+function getReadinessScore(porte: string, nomeFantasia?: string | null): number {
+  if (porte === "epp") return 100;
+  if (porte === "me") return 80;
+  if (nomeFantasia && nomeFantasia.trim().length > 3) return 60;
+  return 50;
+}
+
+function getTerritoryScore(city: string, status: string): number {
+  let score = 40;
+  if (PRIORITY_CITIES.has(city)) score += 40;
+  if (status === "ativa" || status === "ativo") score += 20;
+  return score;
+}
+
 /**
  * Calcula o Score de Oportunidade (0 a 100) com os 6 pilares ponderados:
  * 1. Perfil / CNAE Alvo (30 pts max) - Minimercados (4712100), Supermercados (4711302/4711301) e Açougues (4722901)
@@ -129,71 +204,34 @@ export function calculateGarcaDistance(lat?: number | null, lon?: number | null,
  * 6. Atratividade Territorial & Status (5 pts max)
  */
 export function calculateOpportunityScoreDetails(input: ScoreInput): FullScoreResult {
-  const cnae = (input.cnaePrincipal ?? "").replace(/\D/g, "");
   const status = normalize(input.situacaoCadastral);
   const porte = normalize(input.porte);
   const city = normalize(input.cidade);
 
   // 1. Perfil / CNAE (Peso 30% -> max 30 pts)
   // Mantém o mesmo escopo comercial central usado por filtros e ingestão.
-  const isTargetCnae =
-    isValidOpportunityCnae(cnae) ||
-    Boolean(
-      input.cnaes?.some((item) =>
-        isValidOpportunityCnae(typeof item === "string" ? item : item.cnaeCode),
-      ),
-    );
+  const isTargetCnae = hasTargetCnae(input);
   const perfilPts = isTargetCnae ? 30 : 0;
 
   // 2. Cluster Logístico / Densidade de Alvos no Entorno (Peso 25% -> max 25 pts)
   // Avalia a proximidade entre estabelecimentos alvos (minimercados e açougues).
-  let clusterScore = 40; // Fallback moderado para quando a contagem não é fornecida
-  const count = input.neighborCount;
-  if (typeof count === "number") {
-    if (count >= 5) clusterScore = 100;
-    else if (count >= 3) clusterScore = 76;
-    else if (count >= 1) clusterScore = 48;
-    else clusterScore = 20; // Estabelecimento isolado
-  } else if (isTargetCnae) {
-    // Estimativa moderada por cidade/porte quando não há contagem espacial pré-calculada
-    clusterScore = 50;
-  }
+  const clusterScore = getClusterScore(input.neighborCount, isTargetCnae);
   const potencialPts = Math.round((clusterScore / 100) * 25);
 
   // 3. Proximidade Logística de Garça/SP (Peso 20% -> max 20 pts)
   const distanceKm = calculateGarcaDistance(input.latitude, input.longitude, input.cidade);
-  let logisticaScore = 10;
-  if (distanceKm <= 30) logisticaScore = 100;
-  else if (distanceKm <= 60) logisticaScore = 85;
-  else if (distanceKm <= 100) logisticaScore = 70;
-  else if (distanceKm <= 150) logisticaScore = 50;
-  else if (distanceKm <= 200) logisticaScore = 30;
-  else logisticaScore = 10;
+  const logisticaScore = getLogisticsScore(distanceKm);
   const logisticaPts = Math.round((logisticaScore / 100) * 20);
 
   // 4. Qualidade cadastral (Peso 10% -> max 10 pts)
-  let dadosRaw = 0;
-  if (input.cnpj && input.cnpj.replace(/\D/g, "").length === 14) dadosRaw += 25;
-  if (input.logradouro && input.numero && input.bairro && input.cep) dadosRaw += 30;
-  if (input.telefone && input.telefone.trim().length >= 8) dadosRaw += 20;
-  if (typeof input.latitude === "number" && typeof input.longitude === "number" && input.latitude !== 0) dadosRaw += 25;
-  const dadosPts = Math.round((Math.min(100, dadosRaw) / 100) * 10);
+  const dadosPts = getDataQualityPoints(input);
 
   // 5. Porte & Giro Comercial Estimado (Peso 10% -> max 10 pts)
-  let prontidaoScore = 50;
-  if (porte === "epp") prontidaoScore = 100;
-  else if (porte === "me") prontidaoScore = 80;
-  else if (input.nomeFantasia && input.nomeFantasia.trim().length > 3) prontidaoScore = 60;
+  const prontidaoScore = getReadinessScore(porte, input.nomeFantasia);
   const prontidaoPts = Math.round((prontidaoScore / 100) * 10);
 
   // 6. Atratividade territorial & Status (Peso 5% -> max 5 pts)
-  const priorityCitiesSet = new Set([
-    "bastos", "tupa", "tupã", "marilia", "marília", "garca", "garça", "galia", "gália",
-    "oriente", "pompeia", "pompéia", "presidente prudente", "bauru", "assis", "ourinhos", "lins"
-  ]);
-  let territorioScore = 40;
-  if (priorityCitiesSet.has(city)) territorioScore += 40;
-  if (status === "ativa" || status === "ativo") territorioScore += 20;
+  const territorioScore = getTerritoryScore(city, status);
   const territorioPts = Math.round((Math.min(100, territorioScore) / 100) * 5);
 
   let totalScore = Math.max(0, Math.min(100, perfilPts + potencialPts + logisticaPts + dadosPts + prontidaoPts + territorioPts));

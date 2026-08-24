@@ -87,19 +87,24 @@ const LARGE_CITIES_SET = new Set<string>([
 ]);
 
 // Palavras-chave que desqualificam um estabelecimento quando são estritamente rurais ou não-comerciais (pet shop, tabacaria, etc.)
-const STRICT_RURAL_OR_NON_COMMERCIAL_REGEX = /\b(fazenda|sitio|sítio|estancia|estância|chacara|chácara|haras|rancho|gleba|estrada\s+rural|assentamento|zona\s+rural|area\s+rural|área\s+rural|pet\s+shop|casa\s+de\s+ração|tabacaria)\b/i;
+const STRICT_RURAL_OR_NON_COMMERCIAL_PATTERNS = [
+  /\b(fazenda|sitio|sítio|estancia|estância|chacara|chácara|haras|rancho|gleba|assentamento|tabacaria)\b/i,
+  /\b(estrada|zona|area|área)\s+rural\b/i,
+  /\bpet\s+shop\b/i,
+  /\bcasa\s+de\s+ração\b/i,
+];
 
 /**
  * Normaliza o código CNAE para conter apenas os 7 dígitos numéricos
  */
-export function normalizeCnaeCode(code?: string | null): string {
+function normalizeCnaeCode(code?: string | null): string {
   return code ? code.replace(/\D/g, "") : "";
 }
 
 /**
  * Formata um código CNAE de 7 dígitos para a máscara XXXX-X/XX
  */
-export function formatCnaeCode(code?: string | null): string {
+function formatCnaeCode(code?: string | null): string {
   const digits = normalizeCnaeCode(code);
   if (digits.length !== 7) return code ?? "";
   return digits.replace(/^(\d{4})(\d)(\d{2})$/, "$1-$2/$3");
@@ -121,7 +126,7 @@ export function getCnaeVariants(code?: string | null): string[] {
 /**
  * Retorna todas as variantes numéricas e formatadas dos CNAEs de oportunidade da Deusa Alimentos
  */
-export function getAllTargetCnaeVariants(): string[] {
+function getAllTargetCnaeVariants(): string[] {
   const set = new Set<string>();
   for (const cnae of TARGET_OPPORTUNITY_CNAES) {
     const digits = normalizeCnaeCode(cnae);
@@ -236,7 +241,7 @@ export function isRuralOrNonCommercialLocation(company: {
   }
 
   // 3. Se tem termos estritamente rurais ou de pet shop/tabacaria
-  if (STRICT_RURAL_OR_NON_COMMERCIAL_REGEX.test(combined)) {
+  if (STRICT_RURAL_OR_NON_COMMERCIAL_PATTERNS.some((pattern) => pattern.test(combined))) {
     return true;
   }
 
@@ -246,7 +251,7 @@ export function isRuralOrNonCommercialLocation(company: {
 /**
  * Calcula a distância em quilômetros entre duas coordenadas (Haversine)
  */
-export function calculateGeodesicDistanceKm(
+function calculateGeodesicDistanceKm(
   lat1: number,
   lon1: number,
   lat2: number,

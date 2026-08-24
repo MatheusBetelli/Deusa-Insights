@@ -34,6 +34,7 @@ test("importação Excel usa identificadores estáveis e não inventa empresas o
 
   const accountWrites: Array<Record<string, unknown>> = [];
   const leadWrites: Array<Record<string, unknown>> = [];
+  const clientCountFilters: Array<Record<string, unknown>> = [];
   const transactionClient = {
     lead: {
       upsert: async (args: Record<string, unknown>) => {
@@ -58,11 +59,19 @@ test("importação Excel usa identificadores estáveis e não inventa empresas o
         where.codigoClienteDeusa === "CLI-4"
           ? { id: "account-4", companyId: "company-other", cnpj: "60701190000104" }
           : null,
-      findMany: async () => [],
+      findMany: async () => {
+        throw new Error("A importação não deve varrer a carteira congelada");
+      },
+      count: async ({ where }: { where: Record<string, unknown> }) => {
+        clientCountFilters.push(where);
+        return 0;
+      },
     },
     lead: {
       count: async () => 0,
-      findMany: async () => [],
+      findMany: async () => {
+        throw new Error("A importação não deve varrer oportunidades para reconciliá-las");
+      },
     },
     $transaction: async (callback: (client: typeof transactionClient) => Promise<void>) =>
       callback(transactionClient),
@@ -93,6 +102,8 @@ test("importação Excel usa identificadores estáveis e não inventa empresas o
   });
   assert.equal(leadWrites.length, 1);
   assert.equal(accountWrites.length, 2);
+  assert.equal(clientCountFilters.length, 2);
+  assert.ok(clientCountFilters.every((where) => where.isCurrentClient === true));
 
   const unlinkedCreate = (accountWrites[1].create ?? {}) as Record<string, unknown>;
   assert.equal(unlinkedCreate.companyId, null);

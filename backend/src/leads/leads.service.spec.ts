@@ -2,6 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { LeadsService } from "./leads.service";
 
+type AccountUpsertArgs = {
+  where: { codigoClienteDeusa: string };
+  create: { cnpj: string; importedFromExcel: boolean };
+};
+
 test("convert grava lead e cliente de forma atômica com identificador idempotente", async () => {
   const company = {
     id: "company-1",
@@ -14,7 +19,7 @@ test("convert grava lead e cliente de forma atômica com identificador idempoten
     uf: "SP",
     cnaes: [],
   };
-  let accountUpsert: Record<string, any> | undefined;
+  let accountUpsert: AccountUpsertArgs | undefined;
   const transactionClient = {
     lead: {
       update: async () => ({ id: "lead-1", company }),
@@ -22,7 +27,7 @@ test("convert grava lead e cliente de forma atômica com identificador idempoten
     clientAccount: {
       findFirst: async () => null,
       update: async () => ({}),
-      upsert: async (args: Record<string, any>) => {
+      upsert: async (args: AccountUpsertArgs) => {
         accountUpsert = args;
         return {};
       },

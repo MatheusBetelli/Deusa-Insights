@@ -1,4 +1,4 @@
-export const NON_FOOD_KEYWORDS = [
+const NON_FOOD_KEYWORDS = [
   'sapato', 'calçado', 'calcado', 'capinha', 'celular', 'variedades', '1 real', 'um real',
   'presentes', 'presente', 'vestuario', 'vestuário', 'confecção', 'confeccao', 'confecções',
   'otica', 'ótica', 'farmacia', 'farmácia', 'drogaria', 'construção', 'construcao', 'moveis',

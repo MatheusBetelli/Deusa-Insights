@@ -3,14 +3,15 @@ import { Throttle } from "@nestjs/throttler";
 import { AuthGuard } from "../auth/auth.guard";
 import { Roles } from "../auth/roles.decorator";
 import { RolesGuard } from "../auth/roles.guard";
-import { DatasetFreezeGuard } from "../common/dataset-freeze.guard";
+import {
+  DatasetFreezeGuard,
+  FrozenDatasetReadOnly,
+} from "../common/dataset-freeze.guard";
 import { UserRole } from "@prisma/client";
 import { CompaniesService } from "./companies.service";
 import { CompanyQueryDto } from "./dto/company-query.dto";
 import { CreateCompanyDto } from "./dto/create-company.dto";
-import { GeocodeBatchQueryDto } from "./dto/geocode-batch-query.dto";
 import { UpdateCompanyDto } from "./dto/update-company.dto";
-import { VerifyGoogleBatchQueryDto } from "./dto/verify-google-batch-query.dto";
 import { CompanyDetailsDto } from "./dto/company-details.dto";
 import { ValidateLocationDto } from "./dto/validate-location.dto";
 import { LocationCandidatesRequestDto } from "./dto/location-candidates-request.dto";
@@ -24,23 +25,6 @@ export class CompaniesController {
   @Get()
   findAll(@Query() query: CompanyQueryDto) {
     return this.companiesService.findAll(query);
-  }
-
-  @Get("google-maps-readiness")
-  @Roles(UserRole.ADMIN)
-  getGoogleMapsReadiness() {
-    return this.companiesService.getGoogleMapsReadiness();
-  }
-
-  @Post("geocode-batch-process")
-  @Roles(UserRole.ADMIN)
-  @Throttle({ default: { ttl: 60000, limit: 6 } })
-  geocodeBatchProcess(@Query() query: GeocodeBatchQueryDto) {
-    return this.companiesService.geocodeBatchCompanies(
-      query.cnaeCode || "4712100",
-      query.limit ?? 50,
-      query.force ?? false,
-    );
   }
 
   @Get(":id")
@@ -64,13 +48,6 @@ export class CompaniesController {
   @Roles(UserRole.ADMIN)
   syncByCnpj(@Param("cnpj") cnpj: string) {
     return this.companiesService.syncByCnpj(cnpj);
-  }
-
-  @Post("verify-google-batch")
-  @Roles(UserRole.ADMIN)
-  @Throttle({ default: { ttl: 60000, limit: 10 } })
-  verifyGoogleBatch(@Query() query: VerifyGoogleBatchQueryDto) {
-    return this.companiesService.verifyGoogleBatch(query);
   }
 
   @Get(":id/details")
@@ -101,6 +78,7 @@ export class CompaniesController {
 
   @Post(":id/location-candidates")
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
+  @FrozenDatasetReadOnly()
   @Throttle({ default: { ttl: 60000, limit: 5 } })
   getLocationCandidates(@Param("id") id: string, @Body() dto: LocationCandidatesRequestDto) {
     return this.companiesService.getLocationCandidates(id, dto.confirmPaidRequest);

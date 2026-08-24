@@ -19,6 +19,7 @@
  */
 
 import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import * as fs from "fs";
 import * as path from "path";
 import * as readline from "readline";
@@ -30,6 +31,7 @@ import {
 import { isValidCnpj } from "../../common/cnpj-validator";
 import { normalizeCnpj } from "../../common/cnpj";
 import { TARGET_OPPORTUNITY_CNAES } from "../../common/opportunity-filter";
+import { areDatasetMutationsEnabled } from "../../common/dataset-freeze.guard";
 import { CnpjProvider, CnpjSearchPayload, ExternalCompany } from "./cnpj-provider.interface";
 
 // ─── Mapeamento Cidade → Código TOM da Receita Federal (26 Cidades Monitoradas) ─
@@ -137,6 +139,10 @@ const CITY_COORDS: Record<string, { lat: number; lng: number }> = {
 
 // ─── CNAEs estritamente autorizados pelo escopo comercial central ─────────────
 const TARGET_CNAES = Array.from(TARGET_OPPORTUNITY_CNAES);
+const MATRIZ_FILIAL_BY_CODE: Record<string, string> = {
+  "1": "MATRIZ",
+  "2": "FILIAL",
+};
 const PRIORITY_CITIES = Object.values(TOM_CITY_MAP);
 const MONITORED_TOM_CODES = new Set(Object.keys(TOM_CITY_MAP));
 
@@ -169,6 +175,8 @@ export function parseSemicolonCsvLine(line: string): string[] {
 export class ReceitaFederalProvider implements CnpjProvider, OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(ReceitaFederalProvider.name);
 
+  constructor(private readonly configService: ConfigService) {}
+
   /**
    * Cache em memória indexado por código TOM.
    * Chave: código TOM (ex: "7201"). Valor: array de linhas CSV já parseadas.
@@ -178,6 +186,11 @@ export class ReceitaFederalProvider implements CnpjProvider, OnModuleInit, OnMod
   private cacheLoading: Promise<void> | null = null;
 
   async onModuleInit() {
+    if (!areDatasetMutationsEnabled(this.configService)) {
+      this.logger.log("Pré-carregamento ignorado: o dataset está congelado neste ambiente.");
+      return;
+    }
+
     this.logger.log("⚡ Pré-carregando índice da Receita Federal em segundo plano...");
     void this.ensureCache().catch((err) => {
       this.logger.warn(`Falha no pré-carregamento do CSV da Receita Federal: ${err.message}`);
@@ -283,7 +296,7 @@ export class ReceitaFederalProvider implements CnpjProvider, OnModuleInit, OnMod
       (row[1] || "").padStart(4, "0") +
       (row[2] || "").padStart(2, "0");
 
-    const matrizFilial = row[3] === "1" ? "MATRIZ" : row[3] === "2" ? "FILIAL" : null;
+    const matrizFilial = MATRIZ_FILIAL_BY_CODE[row[3]] ?? null;
     const nomeFantasia = row[4]?.trim() || null;
     const razaoSocial = nomeFantasia || `EMPRESA CNPJ ${cnpjRaw}`;
 

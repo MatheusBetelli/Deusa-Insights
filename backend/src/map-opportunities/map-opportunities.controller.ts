@@ -1,11 +1,7 @@
-import { Controller, Get, Post, Query, UseGuards } from "@nestjs/common";
+import { Controller, Get, Query, UseGuards } from "@nestjs/common";
 import { Transform } from "class-transformer";
-import { IsOptional, IsString, IsNotEmpty, Length, Matches, MaxLength } from "class-validator";
-import { Throttle } from "@nestjs/throttler";
+import { IsOptional, IsString, Matches, MaxLength } from "class-validator";
 import { AuthGuard } from "../auth/auth.guard";
-import { Roles } from "../auth/roles.decorator";
-import { RolesGuard } from "../auth/roles.guard";
-import { UserRole } from "@prisma/client";
 import { MapOpportunitiesService } from "./map-opportunities.service";
 
 class HeatmapQueryDto {
@@ -31,20 +27,7 @@ class HeatmapQueryDto {
   cnae?: string;
 }
 
-class DiscoverRegionDto {
-  @IsNotEmpty({ message: "A cidade é obrigatória" })
-  @IsString()
-  @MaxLength(120)
-  cidade!: string;
-
-  @IsNotEmpty({ message: "O estado (UF) é obrigatório" })
-  @IsString()
-  @Length(2, 2)
-  @Matches(/^[A-Za-z]{2}$/, { message: "uf deve ser uma UF válida" })
-  uf!: string;
-}
-
-@UseGuards(AuthGuard, RolesGuard)
+@UseGuards(AuthGuard)
 @Controller("map")
 export class MapOpportunitiesController {
   constructor(private readonly mapOpportunitiesService: MapOpportunitiesService) {}
@@ -52,21 +35,6 @@ export class MapOpportunitiesController {
   @Get("opportunities")
   findAll() {
     return this.mapOpportunitiesService.findAll();
-  }
-
-  /**
-   * POST /map/discover-region?cidade=Bastos&uf=SP
-   *
-   * Descobre mercados/supermercados/mercearias na região via Google Places API
-   * e cadastra automaticamente os que ainda não existem no banco.
-   *
-   * Retorna: { success, message, discovered, existing, total }
-   */
-  @Post("discover-region")
-  @Roles(UserRole.ADMIN)
-  @Throttle({ default: { ttl: 60000, limit: 6 } })
-  discoverRegion(@Query() query: DiscoverRegionDto) {
-    return this.mapOpportunitiesService.discoverRegion(query.cidade, query.uf);
   }
 
   /**

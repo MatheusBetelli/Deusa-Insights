@@ -8,10 +8,6 @@ import { CreateLeadDto } from "./dto/create-lead.dto";
 import { LeadQueryDto } from "./dto/lead-query.dto";
 import { UpdateLeadDto } from "./dto/update-lead.dto";
 
-function normalizeCnae(code?: string | null) {
-  return code?.replace(/\D/g, "") || undefined;
-}
-
 const safeAssignedToSelect = {
   id: true,
   name: true,
@@ -20,7 +16,16 @@ const safeAssignedToSelect = {
 } as const;
 
 const leadInclude = {
-  company: { include: { cnaes: true, details: true } },
+  company: {
+    include: {
+      cnaes: true,
+      details: true,
+      clientAccounts: {
+        where: { isCurrentClient: true },
+        select: { isCurrentClient: true },
+      },
+    },
+  },
   assignedTo: { select: safeAssignedToSelect },
 } satisfies Prisma.LeadInclude;
 
@@ -29,6 +34,75 @@ function csvValue(value: unknown) {
   const text = String(value);
   const spreadsheetSafe = /^[\t\r ]*[=+\-@]/.test(text) ? `'${text}` : text;
   return `"${spreadsheetSafe.replace(/"/g, '""')}"`;
+}
+
+type SpatialCompany = {
+  id: string;
+  cidade?: string | null;
+  bairro?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+};
+
+function buildLeadSearchCondition(search?: string): Prisma.CompanyWhereInput | undefined {
+  const searchTerm = search?.trim();
+  if (!searchTerm) return undefined;
+
+  const searchOr: Prisma.CompanyWhereInput[] = [
+    { razaoSocial: { contains: searchTerm, mode: "insensitive" } },
+    { nomeFantasia: { contains: searchTerm, mode: "insensitive" } },
+    { cidade: { contains: searchTerm, mode: "insensitive" } },
+    { bairro: { contains: searchTerm, mode: "insensitive" } },
+    { logradouro: { contains: searchTerm, mode: "insensitive" } },
+  ];
+  const digitsOnly = searchTerm.replace(/\D/g, "");
+  if (digitsOnly) searchOr.push({ cnpj: { contains: digitsOnly } });
+  return { OR: searchOr };
+}
+
+function parsePendingValidation(value: LeadQueryDto["pendenteValidacao"]): boolean | undefined {
+  if (value === undefined) return undefined;
+  const normalized = String(value).toLowerCase();
+  if (["true", "sim", "1"].includes(normalized)) return true;
+  if (["false", "nao", "não", "0"].includes(normalized)) return false;
+  return undefined;
+}
+
+function hasSpatialCoordinates(company: SpatialCompany): company is SpatialCompany & {
+  latitude: number;
+  longitude: number;
+} {
+  return (
+    typeof company.latitude === "number" &&
+    typeof company.longitude === "number" &&
+    company.latitude !== 0
+  );
+}
+
+function haversineDistanceKm(first: SpatialCompany & { latitude: number; longitude: number }, second: SpatialCompany & { latitude: number; longitude: number }) {
+  const dLat = ((second.latitude - first.latitude) * Math.PI) / 180;
+  const dLon = ((second.longitude - first.longitude) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((first.latitude * Math.PI) / 180) *
+      Math.cos((second.latitude * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function areSpatialNeighbors(first: SpatialCompany, second: SpatialCompany): boolean {
+  if (first.id === second.id) return false;
+  const firstCity = (first.cidade || "").toLowerCase().trim();
+  const secondCity = (second.cidade || "").toLowerCase().trim();
+  if (firstCity && secondCity && firstCity !== secondCity) return false;
+  if (hasSpatialCoordinates(first) && hasSpatialCoordinates(second)) {
+    return haversineDistanceKm(first, second) <= 1.5;
+  }
+
+  const firstNeighborhood = (first.bairro || "").toLowerCase().trim();
+  const secondNeighborhood = (second.bairro || "").toLowerCase().trim();
+  return Boolean(firstNeighborhood && secondNeighborhood && firstNeighborhood === secondNeighborhood);
 }
 
 @Injectable()
@@ -159,35 +233,13 @@ export class LeadsService {
     }
     if (query.city) and.push({ company: { cidade: { equals: query.city, mode: "insensitive" } } });
     if (query.uf) and.push({ company: { uf: query.uf.toUpperCase() } });
-    if (query.search?.trim()) {
-      const searchTerm = query.search.trim();
-      const digitsOnly = searchTerm.replace(/\D/g, "");
-      const searchOr: Prisma.CompanyWhereInput[] = [
-        { razaoSocial: { contains: searchTerm, mode: "insensitive" } },
-        { nomeFantasia: { contains: searchTerm, mode: "insensitive" } },
-        { cidade: { contains: searchTerm, mode: "insensitive" } },
-        { bairro: { contains: searchTerm, mode: "insensitive" } },
-        { logradouro: { contains: searchTerm, mode: "insensitive" } },
-      ];
-
-      if (digitsOnly.length > 0) {
-        searchOr.push({ cnpj: { contains: digitsOnly } });
-      }
-
-      and.push({ company: { OR: searchOr } });
-    }
+    const searchCondition = buildLeadSearchCondition(query.search);
+    if (searchCondition) and.push({ company: searchCondition });
     if (query.statusVerificacaoEndereco) {
       and.push({ company: { statusVerificacaoEndereco: query.statusVerificacaoEndereco } });
     }
-    if (query.pendenteValidacao !== undefined) {
-      const normalized = String(query.pendenteValidacao).toLowerCase();
-      if (["true", "sim", "1"].includes(normalized)) {
-        and.push({ company: { pendenteValidacao: true } });
-      }
-      if (["false", "nao", "não", "0"].includes(normalized)) {
-        and.push({ company: { pendenteValidacao: false } });
-      }
-    }
+    const pendenteValidacao = parsePendingValidation(query.pendenteValidacao);
+    if (pendenteValidacao !== undefined) and.push({ company: { pendenteValidacao } });
     if (query.situacaoCadastral) {
       and.push({
         company: { situacaoCadastral: { equals: query.situacaoCadastral, mode: "insensitive" } },
@@ -290,18 +342,19 @@ export class LeadsService {
 
   async update(id: string, dto: UpdateLeadDto) {
     await this.findById(id);
+    const { assignedToId, ...scalarFields } = dto;
 
     const updatePayload: Prisma.LeadUpdateInput = {
-      ...dto,
+      ...scalarFields,
       potentialLevel:
         dto.score !== undefined && dto.potentialLevel === undefined
           ? getPotentialLevel(dto.score)
           : dto.potentialLevel,
     };
 
-    if (dto.assignedToId !== undefined) {
-      const profileId = await this.resolveProfileId(dto.assignedToId);
-      if (dto.assignedToId && !profileId) {
+    if (assignedToId !== undefined) {
+      const profileId = await this.resolveProfileId(assignedToId);
+      if (assignedToId && !profileId) {
         throw new BadRequestException("Responsável informado não possui um perfil válido");
       }
       if (profileId) {
@@ -309,7 +362,6 @@ export class LeadsService {
       } else {
         updatePayload.assignedTo = { disconnect: true };
       }
-      delete (updatePayload as any).assignedToId;
     }
 
     return this.prisma.lead.update({
@@ -501,50 +553,16 @@ export class LeadsService {
     };
   }
 
-  private computeSpatialClusters<T extends { company: { id: string; cidade?: string | null; bairro?: string | null; latitude?: number | null; longitude?: number | null } }>(
+  private computeSpatialClusters<T extends { company: SpatialCompany }>(
     leads: T[],
-    allCompanies: Array<{ id: string; cidade: string; bairro?: string | null; latitude?: number | null; longitude?: number | null }>,
+    allCompanies: SpatialCompany[],
   ): Map<string, number> {
     const counts = new Map<string, number>();
 
     for (const lead of leads) {
       let count = 0;
-      const lat1 = lead.company.latitude;
-      const lon1 = lead.company.longitude;
-      const city1 = (lead.company.cidade || "").toLowerCase().trim();
-      const bairro1 = (lead.company.bairro || "").toLowerCase().trim();
-
       for (const comp of allCompanies) {
-        if (comp.id === lead.company.id) continue;
-        const city2 = (comp.cidade || "").toLowerCase().trim();
-        if (city1 && city2 && city1 !== city2) continue;
-
-        const lat2 = comp.latitude;
-        const lon2 = comp.longitude;
-
-        if (
-          typeof lat1 === "number" &&
-          typeof lon1 === "number" &&
-          lat1 !== 0 &&
-          typeof lat2 === "number" &&
-          typeof lon2 === "number" &&
-          lat2 !== 0
-        ) {
-          const dLat = ((lat2 - lat1) * Math.PI) / 180;
-          const dLon = ((lon2 - lon1) * Math.PI) / 180;
-          const a =
-            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-            Math.cos((lat1 * Math.PI) / 180) *
-              Math.cos((lat2 * Math.PI) / 180) *
-              Math.sin(dLon / 2) *
-              Math.sin(dLon / 2);
-          const distKm = 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-          if (distKm <= 1.5) {
-            count++;
-          }
-        } else if (bairro1 && comp.bairro && bairro1 === comp.bairro.toLowerCase().trim()) {
-          count++;
-        }
+        if (areSpatialNeighbors(lead.company, comp)) count += 1;
       }
       counts.set(lead.company.id, count);
     }

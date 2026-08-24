@@ -18,7 +18,7 @@ test("NotificationsService - getOperationalNotifications gera alertas operaciona
     },
   };
 
-  const service = new NotificationsService(fakePrisma as any);
+  const service = new NotificationsService(fakePrisma as never);
   const result = await service.getOperationalNotifications();
 
   assert.ok(result.length >= 1);

@@ -1,7 +1,7 @@
 import { Type } from "class-transformer";
 import { IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min } from "class-validator";
 
-export const dashboardPeriods = [
+const dashboardPeriods = [
   "selected_month",
   "current_month",
   "last_3_months",

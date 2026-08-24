@@ -20,10 +20,6 @@ const safeAssignedToSelect = {
   role: true,
 } as const;
 
-function normalizeCnae(code?: string | null) {
-  return code?.replace(/\D/g, "") || undefined;
-}
-
 @Injectable()
 export class PipelineService {
   constructor(private readonly prisma: PrismaService) {}

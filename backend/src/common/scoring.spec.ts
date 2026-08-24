@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { calculateOpportunityScoreDetails, calculateLeadScore, getPotentialLevel, calculateGarcaDistance } from "./scoring";
+import { calculateOpportunityScoreDetails, getPotentialLevel, calculateGarcaDistance } from "./scoring";
 import { PotentialLevel } from "@prisma/client";
 
 test("calculateOpportunityScoreDetails calcula score dos 6 pilares corretamente para minimercado em Garça com cluster de vizinhos", () => {
