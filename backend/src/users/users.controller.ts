@@ -6,6 +6,7 @@ import { CreateUserDto } from "./dto/create-user.dto";
 import { UserRole } from "@prisma/client";
 import { UsersService } from "./users.service";
 import { AuthenticatedHttpRequest } from "../common/auditable-http.types";
+import { DatasetFreezeGuard } from "../common/dataset-freeze.guard";
 
 @Controller("users")
 @UseGuards(AuthGuard, RolesGuard)
@@ -32,6 +33,7 @@ export class UsersController {
 
   @Delete(":id")
   @Roles(UserRole.ADMIN)
+  @UseGuards(DatasetFreezeGuard)
   deleteUser(@Param("id") id: string, @Req() request: AuthenticatedHttpRequest) {
     return this.usersService.deleteUser(id, request.user.sub);
   }

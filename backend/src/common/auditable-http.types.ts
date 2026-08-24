@@ -1,4 +1,4 @@
-export type AuthenticatedRequestUser = {
+type AuthenticatedRequestUser = {
   sub?: string;
   email?: string;
   role?: string;

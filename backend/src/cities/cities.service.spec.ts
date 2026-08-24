@@ -12,9 +12,10 @@ test("CitiesService - findAll retorna lista ordenada de cidades", async () => {
     },
   };
 
-  const service = new CitiesService(fakePrisma as any);
-  const cities = (await service.findAll()) as any[];
+  const service = new CitiesService(fakePrisma as never);
+  const cities = await service.findAll();
 
+  assert.ok(Array.isArray(cities));
   assert.equal(cities.length, 2);
   assert.equal(cities[0].name, "Bastos");
 });
@@ -22,11 +23,11 @@ test("CitiesService - findAll retorna lista ordenada de cidades", async () => {
 test("CitiesService - create adiciona nova cidade", async () => {
   const fakePrisma = {
     city: {
-      create: async ({ data }: any) => ({ id: "c3", ...data }),
+      create: async ({ data }: { data: Record<string, unknown> }) => ({ id: "c3", ...data }),
     },
   };
 
-  const service = new CitiesService(fakePrisma as any);
+  const service = new CitiesService(fakePrisma as never);
   const newCity = await service.create({ name: "Marília", uf: "SP" });
 
   assert.equal(newCity.id, "c3");

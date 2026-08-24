@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 const BACKEND_URL = process.env.E2E_BACKEND_URL ?? "http://localhost:3001";
 const FRONTEND_URL = process.env.E2E_FRONTEND_URL ?? "http://localhost:8080";
+const AUTH_ORIGIN = process.env.E2E_AUTH_ORIGIN ?? FRONTEND_URL;
 const E2E_EMAIL = process.env.E2E_EMAIL;
 const E2E_PASSWORD = process.env.E2E_PASSWORD;
 const missingCredentialsReason =
@@ -10,20 +11,30 @@ const missingCredentialsReason =
     ? false
     : "Defina E2E_EMAIL e E2E_PASSWORD para executar testes autenticados";
 
-let cachedAdminToken: string | null = null;
+let cachedSessionCookie: string | null = null;
 
-async function getAdminToken() {
-  if (cachedAdminToken) return cachedAdminToken;
+function requireSessionCookie(response: Response) {
+  const setCookie = response.headers.get("set-cookie");
+  if (!setCookie) throw new Error("Resposta de login sem cookie de sessão");
+  return setCookie;
+}
+
+async function getSessionCookie() {
+  if (cachedSessionCookie) return cachedSessionCookie;
   assert.ok(E2E_EMAIL && E2E_PASSWORD, "Credenciais E2E não configuradas");
   const loginRes = await fetch(`${BACKEND_URL}/auth/login`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", Origin: AUTH_ORIGIN },
     body: JSON.stringify({ email: E2E_EMAIL, password: E2E_PASSWORD }),
   });
   assert.strictEqual(loginRes.status, 201);
-  const { accessToken } = await loginRes.json();
-  cachedAdminToken = accessToken as string;
-  return cachedAdminToken;
+  const data = await loginRes.json();
+  assert.equal("accessToken" in data, false, "O token não deve ser exposto no JSON");
+  const setCookie = requireSessionCookie(loginRes);
+  assert.ok(setCookie.includes("auth_token="), "Deve definir o cookie de sessão");
+  assert.ok(setCookie.includes("HttpOnly"), "O cookie de sessão deve ser HttpOnly");
+  cachedSessionCookie = setCookie.split(";", 1)[0];
+  return cachedSessionCookie;
 }
 
 test("E2E: Backend Health Check responde com status ok", async () => {
@@ -35,18 +46,21 @@ test("E2E: Backend Health Check responde com status ok", async () => {
 });
 
 test(
-  "E2E: Autenticação de Usuário e Geração de Token JWT",
+  "E2E: Autenticação usa cookie de sessão HttpOnly",
   { skip: missingCredentialsReason },
   async () => {
     assert.ok(E2E_EMAIL && E2E_PASSWORD, "Credenciais E2E não configuradas");
     const res = await fetch(`${BACKEND_URL}/auth/login`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Origin: AUTH_ORIGIN },
       body: JSON.stringify({ email: E2E_EMAIL, password: E2E_PASSWORD }),
     });
     assert.strictEqual(res.status, 201);
     const data = await res.json();
-    assert.ok(data.accessToken, "Deve retornar um accessToken JWT válido");
+    assert.equal("accessToken" in data, false, "O token não deve ser exposto no JSON");
+    const setCookie = requireSessionCookie(res);
+    assert.ok(setCookie.includes("auth_token="), "Deve definir o cookie de sessão");
+    assert.ok(setCookie.includes("HttpOnly"), "O cookie de sessão deve ser HttpOnly");
     assert.strictEqual(data.user.email, E2E_EMAIL.trim().toLowerCase());
   },
 );
@@ -55,10 +69,10 @@ test(
   "E2E: Endpoint do Dashboard Comercial (/dashboard/summary)",
   { skip: missingCredentialsReason },
   async () => {
-    const accessToken = await getAdminToken();
+    const sessionCookie = await getSessionCookie();
 
     const res = await fetch(`${BACKEND_URL}/dashboard/summary`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: { Cookie: sessionCookie },
     });
     assert.strictEqual(res.status, 200);
     const summary = await res.json();
@@ -69,10 +83,10 @@ test(
 );
 
 test("E2E: Endpoint de Leads B2B (/leads)", { skip: missingCredentialsReason }, async () => {
-  const accessToken = await getAdminToken();
+  const sessionCookie = await getSessionCookie();
 
   const res = await fetch(`${BACKEND_URL}/leads?page=1&pageSize=10`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
+    headers: { Cookie: sessionCookie },
   });
   assert.strictEqual(res.status, 200);
   const data = await res.json();
@@ -94,10 +108,10 @@ test(
   "E2E: Endpoint do Funil Comercial (/pipeline)",
   { skip: missingCredentialsReason },
   async () => {
-    const accessToken = await getAdminToken();
+    const sessionCookie = await getSessionCookie();
 
     const res = await fetch(`${BACKEND_URL}/pipeline`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: { Cookie: sessionCookie },
     });
     assert.strictEqual(res.status, 200);
     const pipeline = await res.json();
@@ -112,9 +126,9 @@ test(
   "E2E: Endpoint de Cidades Monitoradas (/cities)",
   { skip: missingCredentialsReason },
   async () => {
-    const accessToken = await getAdminToken();
+    const sessionCookie = await getSessionCookie();
     const res = await fetch(`${BACKEND_URL}/cities`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: { Cookie: sessionCookie },
     });
     assert.strictEqual(res.status, 200);
     const cities: unknown = await res.json();
@@ -136,9 +150,9 @@ test(
   "E2E: Endpoint de CNAEs Monitorados (/cnaes)",
   { skip: missingCredentialsReason },
   async () => {
-    const accessToken = await getAdminToken();
+    const sessionCookie = await getSessionCookie();
     const res = await fetch(`${BACKEND_URL}/cnaes`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: { Cookie: sessionCookie },
     });
     assert.strictEqual(res.status, 200);
     const cnaes = await res.json();

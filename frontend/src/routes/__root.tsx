@@ -34,8 +34,7 @@ function NotFoundComponent() {
   );
 }
 
-function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
-  console.error(error);
+function ErrorComponent({ error: _error, reset }: { error: Error; reset: () => void }) {
   const router = useRouter();
 
   return (
@@ -80,7 +79,6 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         content:
           "Deusa Analytics is a web application for commercial and territorial intelligence.",
       },
-      { name: "author", content: "Lovable" },
       { property: "og:title", content: "Deusa Analytics" },
       {
         property: "og:description",
@@ -89,22 +87,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
-      { name: "twitter:site", content: "@Lovable" },
       { name: "twitter:title", content: "Deusa Analytics" },
       {
         name: "twitter:description",
         content:
           "Deusa Analytics is a web application for commercial and territorial intelligence.",
-      },
-      {
-        property: "og:image",
-        content:
-          "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/d1e10111-07e5-4e5f-b534-0abd9df54ce7/id-preview-0b47c708--84fada2f-f9e1-47a2-aef0-4a579b37687f.lovable.app-1779396149080.png",
-      },
-      {
-        name: "twitter:image",
-        content:
-          "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/d1e10111-07e5-4e5f-b534-0abd9df54ce7/id-preview-0b47c708--84fada2f-f9e1-47a2-aef0-4a579b37687f.lovable.app-1779396149080.png",
       },
     ],
     links: [
@@ -127,7 +114,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="pt-BR">
       <head>
         <HeadContent />
       </head>

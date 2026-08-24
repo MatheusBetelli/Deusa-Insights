@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Patch, Post, Req, Res, UseGuards } from "@nestjs/common";
-import { Response } from "express";
+import { CookieOptions, Response } from "express";
 import { Throttle } from "@nestjs/throttler";
 import { AuthGuard } from "./auth.guard";
 import { AuthService } from "./auth.service";
@@ -10,17 +10,22 @@ import { ResetPasswordDto } from "./dto/reset-password.dto";
 import { AuthenticatedHttpRequest } from "../common/auditable-http.types";
 
 export const AUTH_COOKIE_NAME = "auth_token";
-const COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 dias
+const COOKIE_MAX_AGE_MS = 8 * 60 * 60 * 1000;
 
-export function getAuthCookieOptions() {
+export function getAuthCookieOptions(rememberMe = true): CookieOptions {
   const isProduction = process.env.NODE_ENV === "production";
-  return {
+  const configuredSameSite = process.env.AUTH_COOKIE_SAME_SITE?.trim().toLowerCase();
+  const sameSite = configuredSameSite === "none" || configuredSameSite === "strict"
+    ? configuredSameSite
+    : "lax";
+  const options: CookieOptions = {
     httpOnly: true,
     secure: isProduction,
-    sameSite: (isProduction ? "none" : "lax") as "none" | "lax",
+    sameSite,
     path: "/",
-    maxAge: COOKIE_MAX_AGE_MS,
   };
+  if (rememberMe) options.maxAge = COOKIE_MAX_AGE_MS;
+  return options;
 }
 
 @Controller("auth")
@@ -33,15 +38,14 @@ export class AuthController {
     @Body() dto: LoginDto,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const result = await this.authService.login(dto);
-    response.cookie(AUTH_COOKIE_NAME, result.accessToken, getAuthCookieOptions());
-    return result;
+    const { accessToken, user } = await this.authService.login(dto);
+    response.cookie(AUTH_COOKIE_NAME, accessToken, getAuthCookieOptions(dto.rememberMe));
+    return { user };
   }
 
   @Post("logout")
   logout(@Res({ passthrough: true }) response: Response) {
-    const { maxAge: _, ...clearOptions } = getAuthCookieOptions();
-    response.clearCookie(AUTH_COOKIE_NAME, clearOptions);
+    response.clearCookie(AUTH_COOKIE_NAME, getAuthCookieOptions(false));
     return { message: "Logout realizado com sucesso" };
   }
 

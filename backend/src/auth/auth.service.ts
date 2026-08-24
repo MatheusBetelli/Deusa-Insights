@@ -9,6 +9,18 @@ import { escapeHtml } from "../common/html-safety";
 
 const DUMMY_PASSWORD_HASH = "$2b$12$LHnUBoIInYMJZXnrv95KwOp0eaXS0xp/NCr8/Tzrf5dNJKZlSPLHK";
 
+type PasswordResetTokenPayload = {
+  sub?: unknown;
+  type?: unknown;
+  ver?: unknown;
+};
+
+function removeTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value[end - 1] === "/") end -= 1;
+  return value.slice(0, end);
+}
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -88,8 +100,8 @@ export class AuthService {
         { expiresIn: "1h" },
       );
 
-      const frontendUrl = (process.env.FRONTEND_URL || "http://localhost:8080").replace(/\/+$/, "");
-      const resetLink = `${frontendUrl}/reset-password?token=${resetToken}`;
+      const frontendUrl = removeTrailingSlashes(process.env.FRONTEND_URL || "http://localhost:8080");
+      const resetLink = `${frontendUrl}/reset-password#token=${encodeURIComponent(resetToken)}`;
       const safeResetLink = escapeHtml(resetLink);
       const safeUserName = escapeHtml(user.name);
 
@@ -146,14 +158,16 @@ export class AuthService {
       throw new BadRequestException("A confirmação da nova senha não confere.");
     }
 
-    let payload: any;
+    let payload: PasswordResetTokenPayload;
     try {
-      payload = await this.jwtService.verifyAsync(dto.token, { algorithms: ["HS256"] });
+      payload = await this.jwtService.verifyAsync<PasswordResetTokenPayload>(dto.token, {
+        algorithms: ["HS256"],
+      });
     } catch {
       throw new BadRequestException("O link de redefinição de senha é inválido ou expirou.");
     }
 
-    if (payload.type !== "password_reset" || !payload.sub) {
+    if (payload.type !== "password_reset" || typeof payload.sub !== "string") {
       throw new BadRequestException("Token de redefinição de senha inválido.");
     }
 
@@ -161,7 +175,7 @@ export class AuthService {
     if (!user) {
       throw new UnauthorizedException("Usuário não encontrado.");
     }
-    if (payload.ver !== user.updatedAt.getTime()) {
+    if (typeof payload.ver !== "number" || payload.ver !== user.updatedAt.getTime()) {
       throw new BadRequestException("Este link de redefinição já foi utilizado ou invalidado.");
     }
 

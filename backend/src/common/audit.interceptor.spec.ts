@@ -35,6 +35,13 @@ test("AuditInterceptor - registra login e exportacao sem expor credenciais", asy
     body: { email: "sales@deusa.test", password: "segredo" },
   }, 201), loginHandler));
 
+  const logoutHandler = { handle: () => of({ message: "ok" }) } as CallHandler;
+  await lastValueFrom(interceptor.intercept(createContext({
+    method: "POST",
+    originalUrl: "/auth/logout",
+    user: { sub: "usr-1", email: "sales@deusa.test" },
+  }), logoutHandler));
+
   const exportHandler = { handle: () => of("csv") } as CallHandler;
   await lastValueFrom(interceptor.intercept(createContext({
     method: "GET",
@@ -42,9 +49,9 @@ test("AuditInterceptor - registra login e exportacao sem expor credenciais", asy
     user: { sub: "usr-1", email: "sales@deusa.test" },
   }), exportHandler));
 
-  assert.deepEqual(events.map((event) => event.action), ["LOGIN", "EXPORT_DATA"]);
+  assert.deepEqual(events.map((event) => event.action), ["LOGIN", "LOGOUT", "EXPORT_DATA"]);
   assert.equal(events[0]?.userId, "usr-1");
-  assert.equal(events[1]?.route, "/leads/export.csv");
+  assert.equal(events[2]?.route, "/leads/export.csv");
   assert.ok(!JSON.stringify(events).includes("segredo"));
   assert.ok(!JSON.stringify(events).includes("token-nao-deve-ser-auditado"));
 });

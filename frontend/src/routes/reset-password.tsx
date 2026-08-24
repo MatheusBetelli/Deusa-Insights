@@ -11,7 +11,6 @@ import {
   AlertCircle,
   KeyRound,
   Check,
-  X,
 } from "lucide-react";
 import { DeusaLogo } from "@/components/layout/Logo";
 import { AuthService } from "@/lib/auth";
@@ -21,6 +20,7 @@ type SearchParams = {
 };
 
 export const Route = createFileRoute("/reset-password")({
+  ssr: false,
   validateSearch: (search: Record<string, unknown>): SearchParams => {
     return {
       token: (search.token as string) || "",
@@ -31,7 +31,22 @@ export const Route = createFileRoute("/reset-password")({
 
 function ResetPasswordPage() {
   const navigate = useNavigate();
-  const { token } = Route.useSearch();
+  const { token: legacyQueryToken } = Route.useSearch();
+  const [token] = useState(() => {
+    const fragmentToken = new URLSearchParams(window.location.hash.slice(1)).get("token");
+    const resolvedToken = fragmentToken?.trim() || legacyQueryToken?.trim() || "";
+    if (resolvedToken) {
+      const sanitizedUrl = new URL(window.location.href);
+      sanitizedUrl.hash = "";
+      sanitizedUrl.searchParams.delete("token");
+      window.history.replaceState(
+        window.history.state,
+        "",
+        `${sanitizedUrl.pathname}${sanitizedUrl.search}`,
+      );
+    }
+    return resolvedToken;
+  });
 
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");

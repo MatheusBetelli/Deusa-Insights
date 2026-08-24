@@ -100,6 +100,8 @@ test("forgotPassword aplica timeout, trata erro HTTP e mantém resposta não enu
     assert.ok(capturedInit?.signal instanceof AbortSignal);
     assert.equal(loggedErrors.length, 1);
     assert.match(String(loggedErrors[0][1]), /HTTP 429/);
+    assert.match(String(capturedInit?.body), /reset-password#token=reset-token/);
+    assert.doesNotMatch(String(capturedInit?.body), /reset-password\?token=/);
   } finally {
     globalThis.fetch = originalFetch;
     console.error = originalConsoleError;

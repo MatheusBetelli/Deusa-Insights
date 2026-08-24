@@ -23,6 +23,7 @@ function readString(value: unknown, key: string): string | undefined {
 
 function classifyAction(method: string, route: string): AuditAction | undefined {
   if (method === "POST" && route === "/auth/login") return "LOGIN";
+  if (method === "POST" && route === "/auth/logout") return "LOGOUT";
   if (method === "POST" && route === "/auth/forgot-password") return "PASSWORD_RESET_REQUEST";
   if (method === "POST" && route === "/auth/reset-password") return "PASSWORD_RESET_SUCCESS";
   if (method === "PATCH" && route === "/auth/password") return "PASSWORD_CHANGE";

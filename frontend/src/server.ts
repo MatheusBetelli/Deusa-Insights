@@ -1,5 +1,3 @@
-import "./lib/error-capture";
-
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
 
@@ -10,13 +8,14 @@ type ServerEntry = {
 let serverEntryPromise: Promise<ServerEntry> | undefined;
 
 function getContentSecurityPolicy(): string {
-  const connectOrigins = new Set<string>([
-    "'self'",
-    "http://localhost:*",
-    "http://127.0.0.1:*",
-    "ws:",
-    "wss:",
-  ]);
+  const connectOrigins = new Set<string>(["'self'"]);
+
+  if (import.meta.env.DEV) {
+    connectOrigins.add("http://localhost:*");
+    connectOrigins.add("http://127.0.0.1:*");
+    connectOrigins.add("ws:");
+    connectOrigins.add("wss:");
+  }
 
   const configuredApiUrl = import.meta.env.VITE_API_URL?.trim();
   if (configuredApiUrl) {

@@ -1,4 +1,6 @@
+import { Transform } from "class-transformer";
 import { IsBoolean, IsOptional, IsString, MaxLength } from "class-validator";
+import { transformOptionalBoolean } from "../../common/boolean-transform";
 
 export class UpdateCnaeDto {
   @IsOptional()
@@ -17,6 +19,7 @@ export class UpdateCnaeDto {
   category?: string;
 
   @IsOptional()
+  @Transform(transformOptionalBoolean)
   @IsBoolean()
   isTarget?: boolean;
 }

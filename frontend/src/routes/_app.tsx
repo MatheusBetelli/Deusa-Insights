@@ -1,12 +1,16 @@
-import { createFileRoute, Outlet, redirect, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Topbar } from "@/components/layout/Topbar";
 import { AuthService } from "@/lib/auth";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 export const Route = createFileRoute("/_app")({
-  beforeLoad: () => {
-    if (typeof window !== "undefined" && !AuthService.isAuthenticated()) {
+  ssr: false,
+  beforeLoad: async () => {
+    if (typeof window === "undefined") return;
+    try {
+      await AuthService.getProfile();
+    } catch {
       throw redirect({
         to: "/login",
       });
@@ -16,7 +20,6 @@ export const Route = createFileRoute("/_app")({
 });
 
 function AppLayout() {
-  const navigate = useNavigate();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     if (typeof window !== "undefined") {
       return localStorage.getItem("deusa_sidebar_collapsed") === "true";
@@ -37,12 +40,6 @@ function AppLayout() {
 
   const handleOpenMobile = () => setMobileOpen(true);
   const handleCloseMobile = () => setMobileOpen(false);
-
-  useEffect(() => {
-    if (!AuthService.isAuthenticated()) {
-      navigate({ to: "/login" });
-    }
-  }, [navigate]);
 
   return (
     <div className="flex h-screen bg-[#F5F7FA] text-[#0B1F33]">

@@ -2,13 +2,14 @@ import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from "@ne
 import { AuthGuard } from "../auth/auth.guard";
 import { Roles } from "../auth/roles.decorator";
 import { RolesGuard } from "../auth/roles.guard";
+import { DatasetFreezeGuard } from "../common/dataset-freeze.guard";
 import { UserRole } from "@prisma/client";
 import { CitiesService } from "./cities.service";
 import { CityQueryDto } from "./dto/city-query.dto";
 import { CreateCityDto } from "./dto/create-city.dto";
 import { UpdateCityDto } from "./dto/update-city.dto";
 
-@UseGuards(AuthGuard, RolesGuard)
+@UseGuards(AuthGuard, RolesGuard, DatasetFreezeGuard)
 @Controller("cities")
 export class CitiesController {
   constructor(private readonly citiesService: CitiesService) {}

@@ -2,13 +2,14 @@ import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from "@ne
 import { AuthGuard } from "../auth/auth.guard";
 import { Roles } from "../auth/roles.decorator";
 import { RolesGuard } from "../auth/roles.guard";
+import { DatasetFreezeGuard } from "../common/dataset-freeze.guard";
 import { UserRole } from "@prisma/client";
 import { CnaesService } from "./cnaes.service";
 import { CnaeQueryDto } from "./dto/cnae-query.dto";
 import { CreateCnaeDto } from "./dto/create-cnae.dto";
 import { UpdateCnaeDto } from "./dto/update-cnae.dto";
 
-@UseGuards(AuthGuard, RolesGuard)
+@UseGuards(AuthGuard, RolesGuard, DatasetFreezeGuard)
 @Controller("cnaes")
 export class CnaesController {
   constructor(private readonly cnaesService: CnaesService) {}

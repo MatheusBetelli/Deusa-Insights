@@ -1,4 +1,4 @@
-const AUTH_TOKEN_KEY = "deusa_auth_token";
+const LEGACY_AUTH_TOKEN_KEY = "deusa_auth_token";
 const USER_DATA_KEY = "deusa_user_data";
 
 const CONFIGURED_API_URL = import.meta?.env?.VITE_API_URL?.trim();
@@ -23,6 +23,14 @@ function buildAuthUrl(path: string): string {
 
 function hasBrowserStorage() {
   return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
+}
+
+function clearClientSession() {
+  if (!hasBrowserStorage()) return;
+  localStorage.removeItem(LEGACY_AUTH_TOKEN_KEY);
+  localStorage.removeItem(USER_DATA_KEY);
+  sessionStorage.removeItem(LEGACY_AUTH_TOKEN_KEY);
+  sessionStorage.removeItem(USER_DATA_KEY);
 }
 
 async function readError(response: Response, fallback: string) {
@@ -79,7 +87,7 @@ export const AuthService = {
     const response = await fetchWithTimeout(buildAuthUrl("auth/login"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, rememberMe }),
     });
 
     if (!response.ok) {
@@ -87,7 +95,6 @@ export const AuthService = {
     }
 
     const data = (await response.json()) as {
-      accessToken?: string;
       user: { id: string; name: string; email: string; role: string };
     };
 
@@ -99,50 +106,30 @@ export const AuthService = {
     };
 
     if (hasBrowserStorage()) {
-      localStorage.removeItem(AUTH_TOKEN_KEY);
-      localStorage.removeItem(USER_DATA_KEY);
-      sessionStorage.removeItem(AUTH_TOKEN_KEY);
-      sessionStorage.removeItem(USER_DATA_KEY);
-
+      clearClientSession();
       const targetStorage = rememberMe ? localStorage : sessionStorage;
-      if (data.accessToken) {
-        targetStorage.setItem(AUTH_TOKEN_KEY, data.accessToken);
-      }
       targetStorage.setItem(USER_DATA_KEY, JSON.stringify(user));
     }
 
     return user;
   },
 
-  getToken: (): string | null => {
-    if (!hasBrowserStorage()) return null;
-    return localStorage.getItem(AUTH_TOKEN_KEY) || sessionStorage.getItem(AUTH_TOKEN_KEY);
-  },
-
-  logout: () => {
+  logout: async (): Promise<void> => {
     try {
-      fetchWithTimeout(buildAuthUrl("auth/logout"), {
+      await fetchWithTimeout(buildAuthUrl("auth/logout"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-      }).catch(() => {});
+      });
     } catch {
-      // Silently handle error if URL build fails during offline/shutdown
+      // A sessao local deve ser encerrada mesmo se a API estiver indisponivel.
+    } finally {
+      clearClientSession();
     }
-    if (!hasBrowserStorage()) return;
-    localStorage.removeItem(AUTH_TOKEN_KEY);
-    localStorage.removeItem(USER_DATA_KEY);
-    sessionStorage.removeItem(AUTH_TOKEN_KEY);
-    sessionStorage.removeItem(USER_DATA_KEY);
   },
 
   isAuthenticated: () => {
     if (!hasBrowserStorage()) return false;
-    return !!(
-      localStorage.getItem(USER_DATA_KEY) ||
-      sessionStorage.getItem(USER_DATA_KEY) ||
-      localStorage.getItem(AUTH_TOKEN_KEY) ||
-      sessionStorage.getItem(AUTH_TOKEN_KEY)
-    );
+    return Boolean(localStorage.getItem(USER_DATA_KEY) || sessionStorage.getItem(USER_DATA_KEY));
   },
 
   getUser: (): User | null => {
@@ -152,41 +139,33 @@ export const AuthService = {
     try {
       return JSON.parse(data) as User;
     } catch {
-      AuthService.logout();
+      clearClientSession();
       return null;
     }
   },
 
   getProfile: async (): Promise<User> => {
-    const token = AuthService.getToken();
     const response = await fetchWithTimeout(buildAuthUrl("auth/me"), {
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
+      headers: { "Content-Type": "application/json" },
     });
 
     if (!response.ok) {
-      if (response.status === 401) AuthService.logout();
+      if (response.status === 401) await AuthService.logout();
       throw new Error(await readError(response, "Não foi possível carregar o perfil."));
     }
 
     const user = (await response.json()) as User;
     if (hasBrowserStorage()) {
-      const storage = localStorage.getItem(AUTH_TOKEN_KEY) ? localStorage : sessionStorage;
+      const storage = localStorage.getItem(USER_DATA_KEY) ? localStorage : sessionStorage;
       storage.setItem(USER_DATA_KEY, JSON.stringify(user));
     }
     return user;
   },
 
   changePassword: async (payload: ChangePasswordPayload) => {
-    const token = AuthService.getToken();
     const response = await fetchWithTimeout(buildAuthUrl("auth/password"), {
       method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
 
@@ -214,7 +193,9 @@ export const AuthService = {
       if (err instanceof Error && err.message !== "Failed to fetch" && err.name !== "AbortError") {
         throw err;
       }
-      throw new Error("Não foi possível contatar o serviço de recuperação de senha.");
+      throw new Error("Não foi possível contatar o serviço de recuperação de senha.", {
+        cause: err,
+      });
     }
   },
 

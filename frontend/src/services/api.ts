@@ -1,6 +1,6 @@
 import { AuthService } from "@/lib/auth";
 
-export class ApiError extends Error {
+class ApiError extends Error {
   status?: number;
 
   constructor(message: string, status?: number) {
@@ -65,16 +65,11 @@ export async function apiRequest<T>(
   query?: Record<string, string | number | undefined | null>,
 ): Promise<T> {
   try {
-    const token = AuthService.getToken();
     const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
     const headers: Record<string, string> = {
       ...(isFormData ? {} : { "Content-Type": "application/json" }),
       ...((options.headers as Record<string, string>) ?? {}),
     };
-
-    if (token) {
-      headers["Authorization"] = `Bearer ${token}`;
-    }
 
     const response = await fetchWithTimeout(buildUrl(path, query), {
       ...options,
@@ -83,7 +78,7 @@ export async function apiRequest<T>(
 
     // ── Sessão Expirada: Limpa storage e redireciona para /login ─────────────
     if (response.status === 401) {
-      AuthService.logout();
+      await AuthService.logout();
       if (typeof window !== "undefined" && window.location.pathname !== "/login") {
         window.location.href = "/login";
       }
@@ -120,14 +115,9 @@ export async function apiTextRequest(
   query?: Record<string, string | number | undefined | null>,
 ): Promise<string> {
   try {
-    const token = AuthService.getToken();
     const headers: Record<string, string> = {
       ...((options.headers as Record<string, string>) ?? {}),
     };
-
-    if (token) {
-      headers["Authorization"] = `Bearer ${token}`;
-    }
 
     const response = await fetchWithTimeout(buildUrl(path, query), {
       ...options,
@@ -135,7 +125,7 @@ export async function apiTextRequest(
     });
 
     if (response.status === 401) {
-      AuthService.logout();
+      await AuthService.logout();
       if (typeof window !== "undefined") window.location.href = "/login";
       throw new ApiError("Sessão expirada. Faça login novamente.", 401);
     }

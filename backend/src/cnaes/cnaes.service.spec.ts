@@ -12,9 +12,10 @@ test("CnaesService - findAll lista CNAEs alvo", async () => {
     },
   };
 
-  const service = new CnaesService(fakePrisma as any);
-  const result = (await service.findAll()) as any[];
+  const service = new CnaesService(fakePrisma as never);
+  const result = await service.findAll();
 
+  assert.ok(Array.isArray(result));
   assert.equal(result.length, 2);
   assert.equal(result[0].code, "4712100");
 });
@@ -22,11 +23,11 @@ test("CnaesService - findAll lista CNAEs alvo", async () => {
 test("CnaesService - create cria novo CNAE formatando código", async () => {
   const fakePrisma = {
     cnae: {
-      create: async ({ data }: any) => ({ id: "c1", ...data }),
+      create: async ({ data }: { data: Record<string, unknown> }) => ({ id: "c1", ...data }),
     },
   };
 
-  const service = new CnaesService(fakePrisma as any);
+  const service = new CnaesService(fakePrisma as never);
   const res = await service.create({
     code: "47.12-1/00",
     description: "Minimercados, mercearias e armazéns",

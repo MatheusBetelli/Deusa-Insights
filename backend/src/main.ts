@@ -7,6 +7,7 @@ import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import helmet from "helmet";
 import cookieParser from "cookie-parser";
 import { AppModule } from "./app.module";
+import { createOriginProtectionMiddleware } from "./common/origin-protection.middleware";
 
 const DEV_JWT_SECRET = "dev-secret-change-me";
 
@@ -114,6 +115,7 @@ async function bootstrap() {
   const nodeEnv = configService.get<string>("NODE_ENV") ?? "development";
   const isProduction = nodeEnv === "production";
   const allowedOrigins = getConfiguredAllowedOrigins(configService);
+  const allowedOriginSet = new Set(allowedOrigins);
 
   // ── Helmet — Headers de Segurança HTTP (substitui headers manuais) ──────
   app.use(
@@ -143,6 +145,9 @@ async function bootstrap() {
 
   // ── Cookie Parser — Processa cookies para autenticação httpOnly ─────────
   app.use(cookieParser());
+
+  // Cookies de sessao exigem bloqueio ativo de CSRF; CORS sozinho nao impede o envio da requisicao.
+  app.use(createOriginProtectionMiddleware(isProduction, allowedOriginSet));
 
   // ── CORS — restritivo em produção, permissivo em desenvolvimento ────────
   app.enableCors({

@@ -13,11 +13,11 @@ export function maskCpfInRazaoSocial(razaoSocial: string | null | undefined): st
   // Mascara formato de CPF com pontuação: 123.456.789-00
   let cleaned = razaoSocial.replace(
     /\b(\d{3})\.(\d{3})\.(\d{3})-(\d{2})\b/g,
-    "***.***.$3-$4"
+    "***.***.$3-$4",
   );
 
   // Mascara 11 dígitos numéricos isolados no final da Razão Social (típico de MEIs na Receita Federal)
-  cleaned = cleaned.replace(/\b(\d{3})(\d{3})(\d{3})(\d{2})\b/g, (match, p1, p2, p3, p4) => {
+  cleaned = cleaned.replace(/\b(\d{3})(\d{3})(\d{3})(\d{2})\b/g, (match, _p1, _p2, p3, p4) => {
     // Se for 14 dígitos (CNPJ), mantém. Se for 11 dígitos (CPF), mascara os primeiros 6 dígitos
     if (match.length === 11) {
       return `***.***.${p3}-${p4}`;
@@ -39,15 +39,4 @@ export function maskEmailForLogs(email: string | null | undefined): string {
   const [name, domain] = parts;
   if (name.length <= 2) return `${name[0]}*@${domain}`;
   return `${name[0]}***${name[name.length - 1]}@${domain}`;
-}
-
-/**
- * Sanitiza dados de empresa para envio ao frontend respeitando os princípios da LGPD.
- */
-export function sanitizeCompanyForLgpd<T extends { razaoSocial?: string; [key: string]: any }>(company: T): T {
-  if (!company) return company;
-  return {
-    ...company,
-    ...(company.razaoSocial ? { razaoSocial: maskCpfInRazaoSocial(company.razaoSocial) } : {}),
-  };
 }

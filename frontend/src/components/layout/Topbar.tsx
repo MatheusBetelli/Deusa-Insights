@@ -7,7 +7,6 @@ import {
   LogOut,
   Mail,
   Menu,
-  Search,
   ShieldCheck,
   Sparkles,
   User,
@@ -77,34 +76,6 @@ function getScreenInfo(pathname: string): ScreenInfo {
       subtitle: "Parâmetros do sistema, inteligência de scoring e gestão de usuários.",
     };
   }
-  if (path.includes("/base-de-dados")) {
-    return {
-      category: "GESTÃO DE DADOS",
-      title: "Base de Dados",
-      subtitle: "Consulte empresas, cidades e CNAEs monitorados.",
-    };
-  }
-  if (path.includes("/recomendacoes")) {
-    return {
-      category: "INTELIGÊNCIA COMERCIAL",
-      title: "Recomendações Inteligentes",
-      subtitle: "Ações prioritárias sugeridas pelo motor de inteligência da Deusa Analytics.",
-    };
-  }
-  if (path.includes("/regioes-prioritarias")) {
-    return {
-      category: "ESTRATÉGIA",
-      title: "Regiões Prioritárias",
-      subtitle: "Ranking objetivo de onde a equipe comercial deve concentrar esforços.",
-    };
-  }
-  if (path.includes("/rotas-inteligentes")) {
-    return {
-      category: "INTELIGÊNCIA TERRITORIAL",
-      title: "Rotas Inteligentes",
-      subtitle: "Planejamento otimizado de rotas de visita comercial.",
-    };
-  }
   if (path.includes("/leads-b2b/")) {
     return {
       category: "OPERAÇÃO & VENDAS",
@@ -126,15 +97,6 @@ function getScreenInfo(pathname: string): ScreenInfo {
   };
 }
 
-function getUserInitials(name?: string): string {
-  if (!name) return "U";
-  const parts = name.trim().split(/\s+/);
-  if (parts.length >= 2) {
-    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-  }
-  return parts[0].substring(0, 2).toUpperCase();
-}
-
 function getRoleLabel(role?: string): string {
   if (!role) return "Consultor Comercial";
   const r = role.toUpperCase();
@@ -151,7 +113,6 @@ export function Topbar({ onOpenMobile }: TopbarProps = {}) {
   const screenInfo = getScreenInfo(currentPathname);
 
   const user = AuthService.getUser();
-  const [searchQuery, setSearchQuery] = useState("");
   const [mounted, setMounted] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [profile, setProfile] = useState<AuthUser | null>(user);
@@ -233,20 +194,12 @@ export function Topbar({ onOpenMobile }: TopbarProps = {}) {
     }
   }
 
-  const handleLogout = () => {
-    AuthService.logout();
+  const handleLogout = async () => {
+    await AuthService.logout();
     navigate({ to: "/login" });
     toast.success("Sessão encerrada com sucesso");
   };
 
-  const handleSearch = (event: React.FormEvent) => {
-    event.preventDefault();
-    const term = searchQuery.trim();
-    if (!term) return;
-    navigate({ to: "/leads-b2b", search: { search: term } });
-  };
-
-  const userInitials = mounted ? getUserInitials(user?.name) : "U";
   const userRoleLabel = mounted ? getRoleLabel(user?.role) : "Consultor Comercial";
 
   return (
