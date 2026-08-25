@@ -1,43 +1,41 @@
 # Checkpoint da entrega de producao
 
-Atualizado em 2026-08-24, no branch `main`, antes do push ao GitHub.
+Atualizado em 2026-08-25, no branch `main`, depois da validacao local final. Os fatos de remoto abaixo correspondem ao `fetch` feito imediatamente antes deste registro; sempre verifique novamente antes de enviar.
 
-## Objetivo e autorizacao
+## Objetivo e limites de autorizacao
 
-O usuario pediu para corrigir backend e Docker, verificar testes, separar as mudancas em diversos commits e enviar diretamente para `main`. Reconfirme essa autorizacao no contexto ativo antes do push. Nao houve autorizacao para deploy na infraestrutura de producao, alteracao do banco real ou chamadas pagas.
+O usuario pediu para corrigir backend e Docker, verificar testes, separar as mudancas em diversos commits e enviar diretamente para `main`. A solicitacao ativa de retomada confirmou a continuidade desse trabalho. Nao houve autorizacao para deploy na infraestrutura de producao, alteracao do banco real ou chamadas pagas.
 
-## Commits locais concluidos
+## Commits concluidos e preservados
 
 - `b86cc4c fix(security): harden cookie auth and production guards`
 - `3986260 refactor(backend): enforce frozen commercial data flows`
 - `22813ab fix(database): reconcile production migration history`
+- `62ee1b7 docs(agent): save production release checkpoint`
+- `ee702e5 refactor(frontend): remove dead UI and align data contracts`
+- `29c15cf ci: enforce production release quality gates`
+- `0a20863 build(deploy): harden production packaging`
 
-O `origin/main` observado apontava para `2e6a310`; a branch local estava tres commits a frente e sem commits remotos exclusivos. Nao reescreva esses commits.
+O ultimo commit funcional validado e `0a20863`. Nao reescreva esses commits.
 
-## Mudancas restantes e divisao planejada
+## Evidencias finais verificadas
 
-O worktree ainda contem frontend, CI/qualidade e empacotamento/documentacao. Revise o estado atual antes de adicionar ao indice.
+- Worktree limpo e `git diff --check` sem erros.
+- Higiene, lint, typecheck e Knip passaram nos pacotes aplicaveis.
+- Backend: 82 de 82 testes passaram.
+- Frontend: 18 de 18 testes passaram; build de producao e verificacao do artefato passaram com `VITE_API_URL=https://api.deusa-ci.invalid`.
+- E2E isolado obtido antes da retomada: 8 de 8 cenarios passaram com cookie HttpOnly; nao foi repetido nesta etapa porque a validacao final cobriu o HEAD por testes, build, migrations e smoke Docker.
+- Auditoria npm: zero vulnerabilidades de producao nos tres manifests.
+- Cloudflare: dry-run passou e informou `No bindings found`.
+- Prisma: as cinco migrations foram aplicadas em PostgreSQL efemero; o status ficou atualizado e o diff contra `schema.prisma` retornou migration vazia.
+- Docker: a imagem do commit funcional `0a20863` construiu; a camada de producao reportou zero vulnerabilidades e `/health` respondeu `status=ok` com banco conectado.
 
-1. `refactor(frontend): remove dead UI and align data contracts`: codigo em `frontend/src`, tipos, utilitario de dados, manifests/lockfile, ESLint, TypeScript e `.env.example`. Deixe `vite.config.ts`, `wrangler.jsonc` e `knip.json` para os grupos seguintes.
-2. `ci: enforce production release quality gates`: workflow, Gitleaks, higiene, test runners, Knip, configuracao de lint/backend e manifests raiz/backend.
-3. `build(deploy): harden production packaging`: Dockerfile/.dockerignore, configuracao Cloudflare/Vite, exemplos de ambiente e documentacao; inclui remover o `docker-compose.prod.yml` obsoleto.
+A primeira tentativa de smoke Docker terminou com `P1001` porque uma porta publicada apenas em `127.0.0.1` nao era alcancavel por `host.docker.internal`. Sem alterar codigo, a repeticao pela rede interna Docker passou. Todos os containers e a imagem temporaria foram removidos.
 
-Use `git diff --cached --check` e revise o resumo antes de cada commit.
+O banco local real nao foi migrado nem recebeu seed. Nenhuma API Google/paga foi chamada e nenhum dado comercial, lead ou coordenada foi alterado.
 
-## Evidencias ja obtidas
+## Estado remoto observado
 
-- Backend: lint e typecheck passaram; 82 de 82 testes passaram.
-- Frontend: 18 de 18 testes passaram; build de producao passou.
-- E2E isolado: 8 de 8 cenarios passaram com cookie HttpOnly.
-- Auditoria npm: zero vulnerabilidades nos tres manifests.
-- Prisma: schema validado/gerado; cinco migrations aplicadas em PostgreSQL efemero, status atualizado e diff vazio.
-- Docker: imagem de producao construiu e `/health` respondeu com banco conectado em ambiente efemero.
-- Cloudflare: dry-run passou sem bindings sensiveis.
+Depois de `git fetch origin`, `origin/main` continuava em `2e6a310`. Antes de versionar esta atualizacao do checkpoint, a branch local estava sete commits a frente e zero atras, sem commits remotos exclusivos.
 
-O banco local real foi somente consultado para status/diff e nao foi migrado. Nenhuma API Google/paga foi chamada. Recursos Docker efemeros foram removidos.
-
-## Validacao ainda obrigatoria
-
-Depois dos commits restantes, repita higiene, lint, typecheck, deadcode, todos os testes, build com `VITE_API_URL` nao sensivel, auditoria e `git diff --check`. Reconstrua a imagem Docker com o HEAD final e execute um smoke test sem mutar dados. Repita o dry-run Cloudflare.
-
-Em seguida, execute `git fetch origin`, confirme que `origin/main` nao avancou, envie sem force e verifique `HEAD == origin/main`. Acompanhe o workflow do GitHub; se falhar, corrija e valide antes de declarar a entrega pronta.
+Antes de qualquer envio, repita `git fetch origin` e interrompa se `origin/main` avancar. Envie sem force, confirme `HEAD == origin/main` e acompanhe o workflow do GitHub. Repositorio enviado e validado nao significa deploy realizado na infraestrutura de producao.
