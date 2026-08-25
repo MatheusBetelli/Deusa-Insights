@@ -15,7 +15,7 @@ export type DashboardQuery = {
   assignedToId?: string;
 };
 
-export type DashboardResponsible = {
+type DashboardResponsible = {
   id: string;
   name: string;
   email: string;
@@ -28,7 +28,7 @@ export type DashboardSegment = {
   percentage: number;
 };
 
-export type DashboardPeriodInfo = {
+type DashboardPeriodInfo = {
   key: DashboardPeriod;
   label: string;
   start: string;
@@ -55,7 +55,7 @@ export type MonthlyEvolutionPoint = {
   newLeads?: number;
 };
 
-export type CityTerritorialRanking = {
+type CityTerritorialRanking = {
   rank: number;
   city: string;
   territorialScore: number;

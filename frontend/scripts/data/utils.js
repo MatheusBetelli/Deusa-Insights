@@ -3,8 +3,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const ROOT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-export const DATA_DIR = path.join(ROOT_DIR, "data");
-export const IMPORTS_DIR = path.join(DATA_DIR, "imports");
+const DATA_DIR = path.join(ROOT_DIR, "data");
+const IMPORTS_DIR = path.join(DATA_DIR, "imports");
 export const PROCESSED_DIR = path.join(DATA_DIR, "processed");
 export const DB_PATH = path.join(DATA_DIR, "deusa_analytics.db");
 export const SUMMARY_PATH = path.join(ROOT_DIR, "src/data/commercial-comparison-summary.json");

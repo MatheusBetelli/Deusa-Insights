@@ -15,7 +15,7 @@ export type MapOpportunity = {
   longitude: number | null;
   score: number;
   status: LeadStatus;
-  isClient?: boolean;
+  isClient: boolean;
   potentialLevel: PotentialLevel;
   // Rastreabilidade — usado para exibir aviso de localização aproximada no popup
   // "municipio_centroide_jitter" = ponto visual apenas, NÃO é endereço real

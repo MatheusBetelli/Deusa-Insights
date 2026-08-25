@@ -9,10 +9,8 @@ import {
   KeyRound,
   LogOut,
   Mail,
-  Plus,
   ShieldCheck,
   Trash2,
-  UserCheck,
   UserPlus,
   Users,
 } from "lucide-react";
@@ -160,8 +158,8 @@ function SettingsPage() {
     }
   }
 
-  function handleLogout() {
-    AuthService.logout();
+  async function handleLogout() {
+    await AuthService.logout();
     window.location.href = "/login";
   }
 

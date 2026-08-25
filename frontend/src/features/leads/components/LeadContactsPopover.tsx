@@ -1,4 +1,3 @@
-import React from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Phone, MessageCircle, Mail, PhoneCall, ChevronDown } from "lucide-react";
 import type { Company } from "@/types/company";

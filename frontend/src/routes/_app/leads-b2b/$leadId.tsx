@@ -5,9 +5,7 @@ import { EmptyState, ErrorState, LoadingState } from "@/components/common/Interf
 import {
   AvisoLocalizacaoAproximada,
   ConfiancaBadge,
-  NivelOportunidadeBadge,
   PendenteBadge,
-  SituacaoCadastralBadge,
   StatusVerificacaoBadge,
 } from "@/components/common/QualityBadges";
 import {
@@ -24,8 +22,6 @@ import type { Lead, LeadInteraction, LeadStatus } from "@/types/lead";
 import {
   ArrowLeft,
   CalendarClock,
-  CheckCircle2,
-  ExternalLink,
   Mail,
   MapPin,
   MessageSquare,
@@ -301,8 +297,6 @@ function LeadDetail() {
     !company.cnpj.startsWith("GOOGLE-");
   const phone = company.details?.telefone || company.telefoneEncontrado || company.telefone || null;
   const email = company.details?.email || company.email || null;
-  const website = null;
-
   const phoneDigits = phone ? phone.replace(/\D/g, "") : "";
   const waUrl =
     phoneDigits.length >= 10

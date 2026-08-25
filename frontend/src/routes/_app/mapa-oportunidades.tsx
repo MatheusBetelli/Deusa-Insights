@@ -6,11 +6,10 @@ import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "@/components/common/InterfaceStates";
-import { formatCnae, formatCnpj, potentialLabels, statusLabels } from "@/lib/commercial-formatters";
+import { formatCnae, potentialLabels, statusLabels } from "@/lib/commercial-formatters";
 import { ESTADOS_UF } from "@/lib/constants";
 import { escapeHtml, escapeHtmlAttribute, safePathSegment } from "@/lib/html-safety";
 import { mapService } from "@/services/mapService";
-import type { LeadStatus } from "@/types/lead";
 import type { MapOpportunity } from "@/types/mapOpportunity";
 import {
   AlertTriangle,
@@ -20,7 +19,6 @@ import {
   Layers,
   RotateCcw,
   MapPin,
-  Loader2,
   Search,
   Navigation,
 } from "lucide-react";
@@ -77,7 +75,7 @@ const DEFAULT_ZOOM = 12;
 type CommercialCategory = "CLIENTE" | "CRITICO" | "PROSPECT";
 
 function getCommercialCategory(item: MapOpportunity): CommercialCategory {
-  if (item.status === "CONVERTED" || item.isClient) return "CLIENTE";
+  if (item.isClient) return "CLIENTE";
   if (item.score >= 80 || item.potentialLevel === "CRITICAL") return "CRITICO";
   return "PROSPECT";
 }
@@ -120,11 +118,7 @@ function getEstablishmentIconSvg(cnae?: string | null): string {
 }
 
 // Visual config para marcadores operacionais limpos
-function makePinHtml(
-  category: CommercialCategory,
-  cnae: string | null | undefined,
-  isAprox: boolean,
-): string {
+function makePinHtml(category: CommercialCategory, cnae: string | null | undefined): string {
   let bg = "#1061AF"; // Navy institucional para Prospect
   if (category === "CLIENTE") {
     bg = "#16A34A"; // Verde para Cliente Ativo
@@ -190,9 +184,6 @@ function OpportunityMap() {
   const [clustersOn, setClustersOn] = useState(
     routeSearch.clusters ?? storedFilters.clusters ?? true,
   );
-  const [isOptimizing, setIsOptimizing] = useState(false);
-  const [isDiscovering, setIsDiscovering] = useState(false);
-  const [selectedOpportunity, setSelectedOpportunity] = useState<MapOpportunity | null>(null);
 
   useEffect(() => {
     const params: MapSearch = {
@@ -217,71 +208,6 @@ function OpportunityMap() {
     navigate,
   ]);
   const hasFittedRef = useRef(false);
-  const [optimizeMessage, setOptimizeMessage] = useState<{
-    text: string;
-    type: "success" | "error" | "info";
-  } | null>(null);
-
-  async function handleOptimizeLocations() {
-    setIsOptimizing(true);
-    setOptimizeMessage(null);
-    try {
-      const response = await mapService.optimizeLocations({
-        limit: 50,
-        dryRun: true,
-      });
-      if (response.error) throw new Error(response.message || "Erro desconhecido");
-
-      setOptimizeMessage({
-        text: response.message || "Otimização concluída.",
-        type: "success",
-      });
-
-      // Reload map data
-      await loadData();
-    } catch (err) {
-      setOptimizeMessage({
-        text:
-          (err instanceof Error ? err.message : null) ||
-          "Falha ao otimizar localizações. Verifique se a API Key do Google Maps está configurada no backend.",
-        type: "error",
-      });
-    } finally {
-      setIsOptimizing(false);
-    }
-  }
-
-  async function handleDiscoverMarkets() {
-    const cidade = selectedCity !== "Todas" ? selectedCity : "";
-    const uf = selectedUf !== "Todos" ? selectedUf : "";
-    if (!cidade || !uf) {
-      setOptimizeMessage({
-        text: "Selecione um Estado (UF) e uma Cidade nos filtros antes de descobrir mercados.",
-        type: "error",
-      });
-      return;
-    }
-    setIsDiscovering(true);
-    setOptimizeMessage(null);
-    try {
-      const result = await mapService.discoverRegion(cidade, uf);
-      setOptimizeMessage({
-        text:
-          result.message ||
-          `Descoberta concluída: ${result.discovered} novo(s), ${result.existing} já existente(s).`,
-        type: result.success ? "success" : "error",
-      });
-      if (result.discovered > 0) await loadData();
-    } catch (err) {
-      setOptimizeMessage({
-        text: (err instanceof Error ? err.message : null) || "Falha na descoberta de mercados.",
-        type: "error",
-      });
-    } finally {
-      setIsDiscovering(false);
-    }
-  }
-
   async function loadData() {
     setDataLoading(true);
     setDataError(null);
@@ -557,7 +483,7 @@ function OpportunityMap() {
 
         const icon = Leaflet.divIcon({
           className: "",
-          html: makePinHtml(commCat, cnae, isAprox),
+          html: makePinHtml(commCat, cnae),
           iconSize: [30, 38],
           iconAnchor: [15, 38],
           popupAnchor: [0, -34],
@@ -671,7 +597,6 @@ function OpportunityMap() {
 
         if (target && mapRef.current) {
           hasFittedRef.current = true;
-          setSelectedOpportunity(target);
           const m =
             markerById.current.get(target.id) ||
             (target.companyId ? markerById.current.get(target.companyId) : null);
@@ -744,36 +669,6 @@ function OpportunityMap() {
               </button>
             }
           />
-        </div>
-      )}
-
-      {/* Optimize message */}
-      {optimizeMessage && (
-        <div
-          className={`mb-4 flex items-center justify-between rounded-lg border px-4 py-3 text-sm shadow-sm ${
-            optimizeMessage.type === "success"
-              ? "border-green-200 bg-green-50 text-green-800"
-              : optimizeMessage.type === "error"
-                ? "border-red-200 bg-red-50 text-red-800"
-                : "border-sky-200 bg-sky-50 text-sky-800"
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            {optimizeMessage.type === "error" ? (
-              <AlertTriangle className="h-4 w-4 shrink-0 text-red-600" />
-            ) : (
-              <MapPin
-                className={`h-4 w-4 shrink-0 ${optimizeMessage.type === "success" ? "text-green-600" : "text-sky-600"}`}
-              />
-            )}
-            <span>{optimizeMessage.text}</span>
-          </div>
-          <button
-            onClick={() => setOptimizeMessage(null)}
-            className="text-xs font-bold underline opacity-70 hover:opacity-100"
-          >
-            Fechar
-          </button>
         </div>
       )}
 

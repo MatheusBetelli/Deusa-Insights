@@ -1,6 +1,6 @@
 import type { Company } from "./company";
 
-export type UserRole = "ADMIN" | "MANAGER" | "SALES";
+type UserRole = "ADMIN" | "MANAGER" | "SALES";
 export type LeadStatus =
   | "NEW"
   | "NO_CONTACT"

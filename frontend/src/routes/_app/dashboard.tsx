@@ -4,18 +4,15 @@ import type { Dispatch, ReactNode, SetStateAction } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
   AlertTriangle,
-  ArrowRight,
   BarChart3,
   Building2,
   CalendarRange,
   CheckCircle2,
   LineChart as LineChartIcon,
   MapPinned,
-  PieChart as PieChartIcon,
   RotateCcw,
   Target,
   TrendingUp,
-  UserCheck,
   X,
 } from "lucide-react";
 import { ExecutiveCityRanking } from "@/components/dashboard/ExecutiveCityRanking";
@@ -26,7 +23,6 @@ import {
   Cell,
   ComposedChart,
   Line,
-  LineChart,
   Pie,
   PieChart,
   ResponsiveContainer,
@@ -36,7 +32,6 @@ import {
 } from "recharts";
 import type { PieLabelRenderProps } from "recharts";
 import { SkeletonMetricCards } from "@/components/common/InterfaceStates";
-import { ESTADOS_UF } from "@/lib/constants";
 import { formatCnae } from "@/lib/commercial-formatters";
 import { cnaesService } from "@/services/cnaesService";
 import { citiesService } from "@/services/citiesService";
@@ -67,11 +62,6 @@ const PORTFOLIO_COLORS: Record<string, string> = {
   inactive: "#9CA3AF",
   "Clientes Ativos": "#22C55E",
   "Clientes Inativos": "#9CA3AF",
-};
-
-const POSITIVATION_COLORS: Record<string, string> = {
-  positivated: "#22C55E",
-  inactive: "#9CA3AF",
 };
 
 const POTENTIAL_COLORS: Record<string, string> = {
@@ -249,11 +239,6 @@ function Dashboard() {
     () => buildPositivationComparisonSegments(summary),
     [summary],
   );
-  const positivationData = useMemo(
-    () => filterSegments(positivationComparisonSegments, selectedPositivationKeys),
-    [positivationComparisonSegments, selectedPositivationKeys],
-  );
-
   const potentialSegments = useMemo(() => {
     if (!summary?.potentialDistribution || summary.coverage.opportunities === 0) return [];
     const total = summary.potentialDistribution.reduce((acc, curr) => acc + curr.count, 0);
@@ -742,24 +727,6 @@ function DetailLink(props: {
   );
 }
 
-function PositivationDelta({ summary }: { summary: DashboardSummary }) {
-  if (!summary.positivation.comparisonAvailable) {
-    return <span className="text-xs font-semibold text-[#94A3B8]">Sem base anterior</span>;
-  }
-
-  const delta = summary.positivation.deltaPercentage;
-  if (delta === null) {
-    return <span className="text-xs font-semibold text-[#94A3B8]">Sem base anterior</span>;
-  }
-
-  return (
-    <span className={`text-xs font-bold ${delta >= 0 ? "text-emerald-700" : "text-red-700"}`}>
-      {delta > 0 ? "+" : ""}
-      {formatPercent(delta)} vs. período anterior
-    </span>
-  );
-}
-
 function renderDonutPercentLabel(props: PieLabelRenderProps) {
   const percent = typeof props.percent === "number" ? props.percent : 0;
   if (percent <= 0) return null;
@@ -927,127 +894,6 @@ function SegmentLegend(props: {
               </span>
             </span>
           </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function CoveragePanel({ summary }: { summary: DashboardSummary }) {
-  const clientWidth = clampBarWidth(summary.coverage.percentage, summary.coverage.clients);
-  const opportunityWidth = Math.max(0, 100 - clientWidth);
-
-  return (
-    <div className="space-y-5">
-      <div>
-        <div className="flex items-end justify-between gap-3">
-          <div>
-            <div className="text-xs font-bold uppercase text-[#64748B]">Cobertura comercial</div>
-            <div className="mt-1 text-4xl font-black leading-none text-[#0B1F33]">
-              {formatPercent(summary.coverage.percentage)}
-            </div>
-          </div>
-          <div className="text-right text-xs font-semibold text-[#64748B]">
-            {formatNumber(summary.coverage.totalMarket)} pontos mapeados
-          </div>
-        </div>
-        <div className="mt-4 h-4 overflow-hidden rounded-full bg-[#EAF0F7]">
-          <div className="flex h-full w-full">
-            <div style={{ width: `${clientWidth}%`, backgroundColor: BRAND.blue }} />
-            <div style={{ width: `${opportunityWidth}%`, backgroundColor: "#F59E0B" }} />
-          </div>
-        </div>
-      </div>
-
-      <div className="grid gap-2">
-        <CoverageRow
-          label="Clientes Deusa"
-          value={summary.coverage.clients}
-          percentage={summary.coverage.percentage}
-          color={BRAND.blue}
-        />
-        <CoverageRow
-          label="Oportunidades"
-          value={summary.coverage.opportunities}
-          percentage={summary.coverage.expansionPercentage}
-          color="#F59E0B"
-        />
-      </div>
-    </div>
-  );
-}
-
-function CoverageRow(props: { label: string; value: number; percentage: number; color: string }) {
-  return (
-    <div className="flex items-center justify-between rounded-md border border-[#EEF2F7] bg-[#F8FAFC] px-3 py-2">
-      <div className="flex items-center gap-2 text-xs font-bold text-[#0B1F33]">
-        <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: props.color }} />
-        {props.label}
-      </div>
-      <div className="text-xs font-bold tabular-nums text-[#64748B]">
-        {formatNumber(props.value)} · {formatPercent(props.percentage)}
-      </div>
-    </div>
-  );
-}
-
-function ExpansionBars(props: {
-  items: DashboardSummary["expansionByCity"];
-  selectedCity: string;
-  onSelectCity: (city: string) => void;
-  uf: string;
-}) {
-  if (props.items.length === 0) {
-    return (
-      <NoData icon={BarChart3} label="Sem municípios com mercado mapeado nos filtros atuais" />
-    );
-  }
-
-  return (
-    <div className="space-y-2">
-      {props.items.map((item) => {
-        const selected = props.selectedCity === item.city;
-        return (
-          <div key={item.city} className="grid gap-1">
-            <button
-              type="button"
-              onClick={() => props.onSelectCity(item.city)}
-              className={`grid grid-cols-[150px_minmax(0,1fr)_56px] items-center gap-3 rounded-md border px-3 py-2 text-left transition ${
-                selected
-                  ? "border-[#1061AF] bg-blue-50"
-                  : "border-[#EEF2F7] bg-white hover:border-[#1061AF]"
-              }`}
-            >
-              <span className="truncate text-xs font-bold text-[#0B1F33]">{item.city}</span>
-              <span className="h-2.5 overflow-hidden rounded-full bg-[#EAF0F7]">
-                <span
-                  className="block h-full rounded-full bg-[#1061AF]"
-                  style={{
-                    width: `${Math.max(item.expansionPercentage, item.opportunities > 0 ? 4 : 0)}%`,
-                  }}
-                />
-              </span>
-              <span className="text-right text-xs font-black tabular-nums text-[#0B1F33]">
-                {formatPercent(item.expansionPercentage)}
-              </span>
-            </button>
-            <div className="flex items-center justify-between px-1 text-[11px] font-medium text-[#64748B]">
-              <span>
-                {formatNumber(item.opportunities)} oportunidades · {formatNumber(item.clients)}{" "}
-                clientes
-              </span>
-              <Link
-                to="/mapa-oportunidades"
-                search={{
-                  uf: props.uf !== "Todos" ? props.uf : undefined,
-                  city: item.city,
-                }}
-                className="font-bold text-[#1061AF] hover:underline"
-              >
-                Abrir mapa
-              </Link>
-            </div>
-          </div>
         );
       })}
     </div>
@@ -1282,11 +1128,6 @@ function formatPeriodHeading(period: DashboardSummary["period"]) {
     return `${MONTH_OPTIONS[start.getUTCMonth()]} de ${start.getUTCFullYear()}`.toUpperCase();
   }
   return period.label.toUpperCase();
-}
-
-function clampBarWidth(value: number, count: number) {
-  if (count <= 0) return 0;
-  return Math.max(4, Math.min(100, value));
 }
 
 function buildYearOptions(currentYear: number) {

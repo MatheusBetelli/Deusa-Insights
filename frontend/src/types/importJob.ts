@@ -1,6 +1,6 @@
 import type { Company } from "./company";
 
-export type ImportStatus = "PENDING" | "RUNNING" | "SUCCESS" | "ERROR";
+type ImportStatus = "PENDING" | "RUNNING" | "SUCCESS" | "ERROR";
 
 export type ImportJob = {
   id: string;

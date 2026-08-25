@@ -25,11 +25,11 @@ import {
 import { leadsService } from "@/services/leadsService";
 import { companiesService } from "@/services/companiesService";
 import type { Lead, LeadStatus } from "@/types/lead";
+import { hasCurrentClientAccount } from "@/lib/client-status";
 import type { CompanyDetailsResponse } from "@/types/company-details";
 import {
   Building2,
   CheckCircle2,
-  ExternalLink,
   Loader2,
   MapPin,
   MessageSquare,
@@ -37,7 +37,6 @@ import {
   Save,
   ShoppingBag,
   X,
-  PhoneCall,
 } from "lucide-react";
 import { AuthService } from "@/lib/auth";
 
@@ -254,7 +253,7 @@ export function LeadDetailsSheet({ leadId, open, onOpenChange, onUpdated }: Lead
           ) : (
             <>
               {/* Status Especial: Cliente Convertido */}
-              {lead.status === "CONVERTED" && (
+              {hasCurrentClientAccount(company.clientAccounts) && (
                 <div className="flex items-center gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-3 text-emerald-900 shadow-2xs">
                   <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
                   <div>

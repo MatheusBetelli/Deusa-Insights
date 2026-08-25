@@ -1,4 +1,4 @@
-export type CompanyClassification = {
+type CompanyClassification = {
   type: string;
   size: string;
   region: string;
@@ -6,7 +6,7 @@ export type CompanyClassification = {
   potentialLevel: "LOW" | "MEDIUM" | "HIGH";
 };
 
-export type CompanyDetails = {
+type CompanyDetails = {
   id: string;
   companyId: string;
   naturezaJuridica: string | null;

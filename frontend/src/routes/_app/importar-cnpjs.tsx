@@ -1,6 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "@/components/common/InterfaceStates";
 import { companyName, formatCnae, formatCnpj, formatDateTime } from "@/lib/commercial-formatters";
 import { citiesService } from "@/services/citiesService";

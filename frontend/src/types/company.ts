@@ -1,8 +1,12 @@
-export type CompanyCnae = {
+type CompanyCnae = {
   id: string;
   companyId: string;
   cnaeCode: string;
   isPrimary: boolean;
+};
+
+export type ClientAccountStatus = {
+  isCurrentClient: boolean;
 };
 
 export type Company = {
@@ -32,6 +36,7 @@ export type Company = {
   createdAt: string;
   updatedAt: string;
   cnaes?: CompanyCnae[];
+  clientAccounts?: ClientAccountStatus[];
   // ─── Rastreabilidade de Coordenadas ───────────────────────────────
   // "municipio_centroide_jitter" = ponto visual apenas, NÃO é endereço real
   origemCoordenada?: string | null;

@@ -20,6 +20,8 @@ export default tseslint.config(
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
+      // O app ainda usa carregamento assíncrono em effects; a regra pressupõe um data loader externo.
+      "react-hooks/set-state-in-effect": "off",
       "no-restricted-imports": [
         "error",
         {
@@ -33,7 +35,7 @@ export default tseslint.config(
         },
       ],
       "react-refresh/only-export-components": [
-        "warn",
+        "error",
         {
           allowConstantExport: true,
           allowExportNames: [
@@ -47,8 +49,16 @@ export default tseslint.config(
           ],
         },
       ],
-      "@typescript-eslint/no-unused-vars": "off",
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
+      ],
     },
+  },
+  {
+    files: ["src/routes/**/*.{ts,tsx}"],
+    // Módulos de rota TanStack exportam `Route` junto dos componentes por convenção do framework.
+    rules: { "react-refresh/only-export-components": "off" },
   },
   eslintPluginPrettier,
 );

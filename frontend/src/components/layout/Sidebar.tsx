@@ -4,13 +4,10 @@ import {
   Funnel,
   LayoutDashboard,
   Building2,
-  Database,
   MapPinned,
   Settings,
-  ShieldCheck,
   PanelLeftClose,
   PanelLeftOpen,
-  LogOut,
   X,
 } from "lucide-react";
 import { DeusaLogo } from "./Logo";
