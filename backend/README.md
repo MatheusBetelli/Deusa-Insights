@@ -249,52 +249,8 @@ Importante: coordenadas com origem em centroide/jitter são apenas aproximaçõe
   - `75-89 HIGH`
   - `90-100 CRITICAL`
 
-## Integração e Validação com Google Maps API
+## Integração com Google Maps
 
-Implementamos uma rotina de validação e enriquecimento em lote para leads prioritários que cruza os dados cadastrais da Receita Federal com a **Google Geocoding API** e a **Google Places API** de maneira controlada.
+O backend não expõe descoberta regional nem geocodificação em lote. A base PostgreSQL é a fonte única da verdade e nenhuma coordenada é alterada automaticamente.
 
-### Como configurar a Chave
-
-Adicione a chave da API no seu arquivo `.env` do backend:
-
-```env
-GOOGLE_MAPS_API_KEY="SUA_CHAVE_AQUI"
-```
-
-Se a chave não estiver configurada, o endpoint de validação informará que a funcionalidade está desativada, e o sistema continuará rodando de forma estável com coordenadas aproximadas (centroide + jitter).
-
-### Como Rodar a Validação em Lote
-
-Envie uma requisição HTTP POST para o endpoint administrativo:
-
-`POST /companies/verify-google-batch`
-
-**Parâmetros de Query:**
-- `limit`: Quantidade de leads a serem processados (padrão: `50`, máximo: `100`).
-- `city`: Filtro por cidade específica monitorada (ex: `Tupã`). Se omitido, processa todas as cidades ativas.
-- `minScore`: Nota de corte mínima de oportunidade para filtrar (padrão: `70`).
-- `dryRun`: Se definido como `true`, apenas simula a execução listando os leads qualificados e o custo estimado sem chamar a API do Google ou salvar no banco de dados.
-
-#### Exemplos de chamadas:
-
-* **Simulação (Recomendado antes de rodar lote real):**
-  ```bash
-  curl -X POST "http://127.0.0.1:3001/companies/verify-google-batch?limit=10&city=Tupã&minScore=70&dryRun=true"
-  ```
-
-* **Execução Real:**
-  ```bash
-  curl -X POST "http://127.0.0.1:3001/companies/verify-google-batch?limit=50&city=Tupã&minScore=70&dryRun=false"
-  ```
-
-### ⚠️ Alerta de Custo e Melhores Práticas
-
-A API do Google é cobrada por uso:
-- **Geocoding API**: $5.00 por 1.000 chamadas.
-- **Places API (Text Search)**: $32.00 por 1.000 chamadas.
-- **Places API (Details)**: $17.00 por 1.000 chamadas.
-
-**Recomendações:**
-1. Rode sempre um `dryRun` primeiro para conferir a contagem de leads prioritários.
-2. Limite a verificação real a lotes de **50 ou 100 leads** por execução para controle orçamentário.
-3. A rotina possui rate limit automático de **500ms** entre chamadas para evitar estouro de quotas.
+A única consulta paga disponível é individual, autenticada e limitada por taxa em `POST /companies/:id/location-candidates`. Ela exige `confirmPaidRequest: true` no corpo e apenas retorna candidatos para revisão humana; a persistência depende de uma ação posterior explicitamente autorizada e permanece bloqueada em produção quando `ENABLE_LEAD_MUTATIONS=false`.

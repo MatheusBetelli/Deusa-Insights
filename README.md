@@ -43,7 +43,11 @@ npm run test:frontend # Apenas testes do Frontend (Vite / TSX test)
 | :--- | :--- |
 | `npm run setup` | Prepara ambiente (.env, Docker, Prisma, Seed). |
 | `npm run doctor` | Valida portas, Node, Docker e variáveis de ambiente. |
-| `npm run dev` | Inicia Frontend (`3001`) e Backend (`8080`) juntos. |
+| `npm run dev` | Inicia Backend (`3001`) e Frontend (`5173`, ou próxima porta livre). |
+| `npm run lint` | Executa TypeScript estrito, ESLint e Prettier sem autofix. |
+| `npm run typecheck` | Valida os tipos do backend e frontend. |
+| `npm run deadcode` | Detecta arquivos, exports e dependências sem uso com Knip. |
+| `npm run audit` | Audita dependências de produção dos três pacotes. |
 | `npm run test` | Roda a suíte completa de testes unitários. |
 | `npm run db:start` | Sobe o container PostgreSQL (`docker compose up -d`). |
 | `npm run db:stop` | Para o container PostgreSQL (`docker compose down`). |
@@ -54,6 +58,6 @@ npm run test:frontend # Apenas testes do Frontend (Vite / TSX test)
 
 ## 🩺 Requisitos & Solução de Problemas
 
-- **Requisitos:** Node.js `>= 20.0.0`, npm `>= 9.0.0`, Docker Engine / Desktop ativo.
+- **Requisitos:** Node.js `^20.19`, `^22.13` ou `>=24`; npm `>=10`; Docker Engine / Desktop ativo.
 - **Diagnóstico:** Execute `npm run doctor` para detectar conflitos de porta ou variáveis ausentes.
 - **Banco Inacessível (`localhost:5435`):** Certifique-se de que o Docker está rodando e execute `npm run db:start`.

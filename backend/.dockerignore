@@ -1,0 +1,10 @@
+node_modules
+dist
+coverage
+scripts
+.env
+.env.*
+!.env.example
+*.csv
+*.log
+npm-debug.log*
