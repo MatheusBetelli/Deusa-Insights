@@ -4,7 +4,7 @@
   "private": true,
   "description": "Plataforma interna de inteligência comercial B2B - Deusa Analytics",
   "engines": {
-    "node": "^20.19.0 || ^22.13.0 || >=24.0.0",
+    "node": "^22.13.0 || >=24.0.0",
     "npm": ">=10.0.0"
   },
   "scripts": {

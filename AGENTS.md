@@ -21,7 +21,7 @@ This npm monorepo has two main packages:
 
 ## Coding Style & Naming Conventions
 
-Use Node `>=20` and npm `>=9`. Code is TypeScript-first. Prettier uses `printWidth: 100`, semicolons, double quotes, and trailing commas. Backend files follow Nest conventions: `*.module.ts`, `*.controller.ts`, `*.service.ts`, with DTOs under `dto/`. Frontend components use `PascalCase`, hooks use `useX`, services use `camelCase`, and route files follow TanStack Router conventions.
+Use Node `^22.13` or `>=24` and npm `>=10`. Code is TypeScript-first. Prettier uses `printWidth: 100`, semicolons, double quotes, and trailing commas. Backend files follow Nest conventions: `*.module.ts`, `*.controller.ts`, `*.service.ts`, with DTOs under `dto/`. Frontend components use `PascalCase`, hooks use `useX`, services use `camelCase`, and route files follow TanStack Router conventions.
 
 ## Testing Guidelines
 

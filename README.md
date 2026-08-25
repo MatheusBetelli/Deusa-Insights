@@ -58,6 +58,6 @@ npm run test:frontend # Apenas testes do Frontend (Vite / TSX test)
 
 ## 🩺 Requisitos & Solução de Problemas
 
-- **Requisitos:** Node.js `^20.19`, `^22.13` ou `>=24`; npm `>=10`; Docker Engine / Desktop ativo.
+- **Requisitos:** Node.js `^22.13` ou `>=24`; npm `>=10`; Docker Engine / Desktop ativo.
 - **Diagnóstico:** Execute `npm run doctor` para detectar conflitos de porta ou variáveis ausentes.
 - **Banco Inacessível (`localhost:5435`):** Certifique-se de que o Docker está rodando e execute `npm run db:start`.
