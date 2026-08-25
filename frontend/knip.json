@@ -1,0 +1,11 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": [
+    "src/**/*.spec.{ts,tsx}",
+    "src/**/*.test.{ts,tsx}",
+    "scripts/data/import-data.js",
+    "scripts/data/compare-data.js",
+    "scripts/data/prepare-data.js"
+  ],
+  "project": ["src/**/*.{ts,tsx,css}", "scripts/data/**/*.js"]
+}

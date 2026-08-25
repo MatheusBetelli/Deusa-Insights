@@ -70,4 +70,4 @@ skills-lock.json
 # Scratch & Temporary Audit Scripts
 backend/scripts/*.ts
 !backend/scripts/.gitkeep
-
+!backend/scripts/generate-quality-report.ts

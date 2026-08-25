@@ -16,13 +16,24 @@ jobs:
 
     steps:
       - name: Checkout do código
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Detectar segredos no histórico Git
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Configurar Node.js (v20)
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 20
           cache: 'npm'
+          cache-dependency-path: |
+            package-lock.json
+            backend/package-lock.json
+            frontend/package-lock.json
 
       - name: Instalar dependências do Monorepo
         run: |
@@ -33,11 +44,20 @@ jobs:
       - name: Gerar Prisma Client
         run: cd backend && npx prisma generate
 
+      - name: Validar higiene do repositório
+        run: npm run hygiene
+
       - name: Executar Lint do Monorepo
         run: npm run lint
 
+      - name: Detectar codigo e dependencias sem uso
+        run: npm run deadcode
+
       - name: Executar Typecheck do Monorepo
         run: npm run typecheck
+
+      - name: Validar higiene do diff
+        run: git diff --check
 
       - name: Auditar Dependencias de Producao
         run: npm run audit --omit=dev
@@ -50,3 +70,13 @@ jobs:
           # URL não roteável usada somente para validar o bundle; deploys reais devem fornecer sua API HTTPS.
           VITE_API_URL: https://api.deusa-ci.invalid
         run: npm run build
+
+      - name: Construir imagem de produção do backend
+        run: docker build --tag deusa-insights-backend:ci --file backend/Dockerfile backend
+
+      - name: Validar empacotamento do Cloudflare Worker
+        env:
+          CI: 1
+          VITE_API_URL: https://api.deusa-ci.invalid
+          WRANGLER_WRITE_LOGS: false
+        run: npm --prefix frontend run deploy:dry-run

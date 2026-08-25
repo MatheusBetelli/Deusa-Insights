@@ -1,0 +1,9 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": [
+    "src/main.ts",
+    "src/**/*.spec.ts",
+    "scripts/generate-quality-report.ts"
+  ],
+  "project": ["src/**/*.ts", "prisma/**/*.ts"]
+}

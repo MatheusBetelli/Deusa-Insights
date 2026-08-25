@@ -4,21 +4,22 @@
   "private": true,
   "description": "API REST do Deusa Analytics",
   "engines": {
-    "node": ">=20.0.0",
-    "npm": ">=9.0.0"
+    "node": "^20.19.0 || ^22.13.0 || >=24.0.0",
+    "npm": ">=10.0.0"
   },
   "scripts": {
     "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
     "start": "node dist/main.js",
-    "start:dev": "ts-node-dev --respawn --transpile-only src/main.ts",
+    "start:dev": "tsx watch src/main.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "seed": "ts-node prisma/seed.ts",
-    "geocode": "ts-node scripts/run-google-geocoding.ts",
     "quality:report": "ts-node scripts/generate-quality-report.ts",
-    "lint": "tsc --noEmit",
-    "test": "node -r reflect-metadata -r ts-node/register --test src/**/*.spec.ts"
+    "lint": "eslint . --max-warnings 0",
+    "deadcode": "knip --no-config-hints",
+    "typecheck": "tsc --noEmit",
+    "test": "node -r reflect-metadata -r ts-node/register ../scripts/run-backend-tests.cjs"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.9",
@@ -34,6 +35,7 @@
     "class-validator": "^0.14.3",
     "cookie-parser": "^1.4.7",
     "dotenv": "^17.2.3",
+    "express": "^5.2.1",
     "helmet": "^8.3.0",
     "read-excel-file": "^9.3.10",
     "reflect-metadata": "^0.2.2",
@@ -41,14 +43,19 @@
     "unzipper-esm": "^0.13.3"
   },
   "devDependencies": {
-    "@types/bcryptjs": "^2.4.6",
+    "@eslint/js": "10.0.1",
     "@types/cookie-parser": "^1.4.10",
     "@types/express": "^5.0.6",
     "@types/node": "^22.16.5",
+    "eslint": "10.9.0",
+    "eslint-plugin-sonarjs": "4.2.0",
+    "globals": "17.11.0",
+    "knip": "^6.32.2",
     "prisma": "6.12.0",
     "ts-node": "^10.9.2",
-    "ts-node-dev": "^2.0.0",
-    "typescript": "^5.8.3"
+    "tsx": "^4.23.12",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "8.67.0"
   },
   "overrides": {
     "js-yaml": "^5.3.0"
