@@ -143,7 +143,22 @@ gcloud run services update-traffic deusa-backend --region=southamerica-east1 --t
 gcloud run services update-traffic deusa-backend --region=southamerica-east1 --to-tags canary=100
 ```
 
-### E. Deploy do Frontend no Cloudflare Worker
+### E. Deploys Recorrentes pelo GitHub
+
+Depois do primeiro provisionamento, use o workflow manual `Deploy Backend Canary`. Ele autentica por Workload Identity Federation, publica uma imagem identificada pelo SHA e cria uma revisão `canary` com 0% de tráfego. Não cadastre chave JSON de service account no GitHub.
+
+Crie o environment protegido `production`, com revisor obrigatório, e configure estas GitHub Actions variables:
+
+- `GCP_PROJECT_ID`
+- `GCP_REGION` (recomendado: `southamerica-east1`)
+- `GCP_ARTIFACT_REPOSITORY` (exemplo: `deusa-repo`)
+- `CLOUD_RUN_SERVICE` (exemplo: `deusa-backend`)
+- `GCP_WORKLOAD_IDENTITY_PROVIDER`
+- `GCP_DEPLOY_SERVICE_ACCOUNT`
+
+O serviço precisa existir previamente, com runtime service account, Secret Manager, limites, ingress e acesso público revisados. Dispare o workflow informando um SHA da `main` cujo CI esteja verde. O workflow nunca promove tráfego automaticamente; faça smoke no canário e use os comandos graduais acima.
+
+### F. Deploy do Frontend no Cloudflare Worker
 O frontend não é uma SPA estática. O entrypoint `frontend/src/server.ts` executa SSR, fallback de rotas e headers de segurança.
 
 ```bash
@@ -155,7 +170,7 @@ Use domínios sob o mesmo site registrável, por exemplo `app.deusainsights.com.
 
 Antes de liberar tráfego, valide por acesso direto `/login`, `/dashboard`, `/leads-b2b` e `/mapa-oportunidades`.
 
-### F. Controles Operacionais Obrigatórios
+### G. Controles Operacionais Obrigatórios
 
 - A limitação do NestJS é local a cada instância. Configure rate limiting centralizado e regras WAF no Load Balancer/Cloud Armor (ou gateway equivalente), especialmente para `/auth/*` e exportações.
 - Encaminhe logs JSON do Cloud Run e logs do Cloudflare para retenção central, com acesso restrito e alertas para falhas de login, bloqueios de mutação, 5xx, latência e saturação do banco.

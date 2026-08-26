@@ -1,0 +1,105 @@
+name: Deploy Backend Canary
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: "SHA validado da main que será publicado"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: production-backend
+  cancel-in-progress: false
+
+jobs:
+  deploy-canary:
+    name: Build, Push & Deploy without Traffic
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      REGION: ${{ vars.GCP_REGION }}
+      ARTIFACT_REPOSITORY: ${{ vars.GCP_ARTIFACT_REPOSITORY }}
+      CLOUD_RUN_SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
+      WIF_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+      DEPLOY_SERVICE_ACCOUNT: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+      RELEASE_INPUT: ${{ inputs.release_sha }}
+
+    steps:
+      - name: Checkout da main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Validar configuração e release
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          for variable in PROJECT_ID REGION ARTIFACT_REPOSITORY CLOUD_RUN_SERVICE WIF_PROVIDER DEPLOY_SERVICE_ACCOUNT; do
+            if [[ -z "${!variable}" ]]; then
+              echo "GitHub variable ausente: ${variable}" >&2
+              exit 1
+            fi
+          done
+
+          RELEASE_SHA="$(git rev-parse "${RELEASE_INPUT}^{commit}")"
+          git merge-base --is-ancestor "${RELEASE_SHA}" origin/main
+          git checkout --detach "${RELEASE_SHA}"
+          echo "sha=${RELEASE_SHA}" >> "${GITHUB_OUTPUT}"
+          echo "image=${REGION}-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REPOSITORY}/backend:${RELEASE_SHA}" >> "${GITHUB_OUTPUT}"
+
+      - name: Autenticar no Google Cloud sem chave persistente
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
+      - name: Configurar Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
+
+      - name: Confirmar serviço previamente provisionado
+        run: |
+          gcloud run services describe "${CLOUD_RUN_SERVICE}" \
+            --project="${PROJECT_ID}" \
+            --region="${REGION}" \
+            --format='value(metadata.name)'
+
+      - name: Construir e publicar imagem imutável
+        env:
+          IMAGE_URI: ${{ steps.release.outputs.image }}
+        run: |
+          gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
+          docker build --file backend/Dockerfile --tag "${IMAGE_URI}" backend/
+          docker push "${IMAGE_URI}"
+
+      - name: Criar revisão canário sem tráfego
+        env:
+          IMAGE_URI: ${{ steps.release.outputs.image }}
+        run: |
+          gcloud run deploy "${CLOUD_RUN_SERVICE}" \
+            --project="${PROJECT_ID}" \
+            --region="${REGION}" \
+            --image="${IMAGE_URI}" \
+            --no-traffic \
+            --tag=canary \
+            --quiet
+
+      - name: Registrar entrega
+        env:
+          IMAGE_URI: ${{ steps.release.outputs.image }}
+          RELEASE_SHA: ${{ steps.release.outputs.sha }}
+        run: |
+          {
+            echo "### Backend canário criado"
+            echo "- Commit: \`${RELEASE_SHA}\`"
+            echo "- Imagem: \`${IMAGE_URI}\`"
+            echo "- Tráfego: 0%"
+            echo "- Próximo gate: smoke test e promoção gradual conforme DEPLOY.md"
+          } >> "${GITHUB_STEP_SUMMARY}"

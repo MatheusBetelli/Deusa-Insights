@@ -20,6 +20,9 @@ dist-ssr
 .wrangler/
 .dev.vars
 
+# Credenciais efêmeras geradas pelo google-github-actions/auth
+gha-creds-*.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
