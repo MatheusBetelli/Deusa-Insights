@@ -10,7 +10,7 @@
   "scripts": {
     "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
     "start": "node dist/main.js",
-    "start:dev": "tsx watch src/main.ts",
+    "start:dev": "node --watch --require ts-node/register src/main.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
@@ -53,7 +53,6 @@
     "knip": "^6.32.2",
     "prisma": "6.12.0",
     "ts-node": "^10.9.2",
-    "tsx": "^4.23.12",
     "typescript": "^5.8.3",
     "typescript-eslint": "8.67.0"
   },
