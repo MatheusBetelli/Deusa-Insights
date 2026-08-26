@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { PipelineService } from "./pipeline.service";
 
 test("findStage mantém total e paginação do conjunto consultado", async () => {
+  let capturedWhere: unknown;
   const company = {
     cnpj: "11222333000181",
     razaoSocial: "Supermercado Teste",
@@ -16,7 +17,10 @@ test("findStage mantém total e paginação do conjunto consultado", async () =>
   };
   const prisma = {
     lead: {
-      count: async () => 12,
+      count: async (args: { where: unknown }) => {
+        capturedWhere = args.where;
+        return 12;
+      },
       findMany: async () => [
         {
           id: "lead-1",
@@ -32,12 +36,22 @@ test("findStage mantém total e paginação do conjunto consultado", async () =>
     $transaction: async (operations: Array<Promise<unknown>>) => Promise.all(operations),
   };
 
-  const result = await new PipelineService(prisma as never).findStage("NEW", {
-    page: 1,
-    pageSize: 10,
-  });
+  const result = await new PipelineService(prisma as never).findStage(
+    "NEW",
+    {
+      page: 1,
+      pageSize: 10,
+    },
+    {
+      sub: "sales-1",
+      email: "sales@example.com",
+      role: "SALES",
+    },
+  );
 
   assert.equal(result.total, 12);
   assert.equal(result.totalPages, 2);
   assert.equal(result.items.length, 1);
+  assert.match(JSON.stringify(capturedWhere), /assignedToId_legacy/);
+  assert.match(JSON.stringify(capturedWhere), /sales@example\.com/);
 });

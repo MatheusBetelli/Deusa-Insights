@@ -11,8 +11,8 @@ export class LeadInteractionsController {
   constructor(private readonly leadInteractionsService: LeadInteractionsService) {}
 
   @Get()
-  findByLead(@Param("id") leadId: string) {
-    return this.leadInteractionsService.findByLead(leadId);
+  findByLead(@Param("id") leadId: string, @Req() request: AuthenticatedHttpRequest) {
+    return this.leadInteractionsService.findByLead(leadId, request.user);
   }
 
   @Post()
@@ -21,6 +21,6 @@ export class LeadInteractionsController {
     @Body() dto: CreateLeadInteractionDto,
     @Req() request: AuthenticatedHttpRequest,
   ) {
-    return this.leadInteractionsService.create(leadId, dto, request.user.sub);
+    return this.leadInteractionsService.create(leadId, dto, request.user);
   }
 }

@@ -14,12 +14,7 @@ function makeService(existing: Record<string, unknown> | null) {
       },
     },
   };
-  const service = new CompaniesService(
-    prisma as never,
-    {} as never,
-    {} as never,
-    {} as never,
-  );
+  const service = new CompaniesService(prisma as never, {} as never, {} as never, {} as never);
   return { service, getUpsertArgs: () => upsertArgs };
 }
 
@@ -89,21 +84,20 @@ test("busca numérica mantém filtro parcial por CNPJ", () => {
 test("update rejeita par de coordenadas incompleto", async () => {
   const { service } = makeService(null);
 
-  await assert.rejects(
-    () => service.update("company-1", { latitude: -22.2 }),
-    BadRequestException,
-  );
+  await assert.rejects(() => service.update("company-1", { latitude: -22.2 }), BadRequestException);
 });
 
 test("updateCommercialProfile grava cadastro e contatos na mesma transação", async () => {
   const calls: string[] = [];
   const tx = {
     company: {
-      findUnique: async (args: Record<string, unknown>) => {
-        calls.push(args && "include" in args ? "read-result" : "read-company");
-        return args && "include" in args
-          ? { id: "company-1", details: { telefone: "14999999999" } }
-          : { id: "company-1" };
+      findFirst: async () => {
+        calls.push("read-company");
+        return { id: "company-1" };
+      },
+      findUnique: async () => {
+        calls.push("read-result");
+        return { id: "company-1", details: { telefone: "14999999999" } };
       },
       update: async () => {
         calls.push("update-company");
@@ -125,17 +119,16 @@ test("updateCommercialProfile grava cadastro e contatos na mesma transação", a
       return result;
     },
   };
-  const service = new CompaniesService(
-    prisma as never,
-    {} as never,
-    {} as never,
-    {} as never,
-  );
+  const service = new CompaniesService(prisma as never, {} as never, {} as never, {} as never);
 
-  const result = await service.updateCommercialProfile("company-1", {
-    nomeFantasia: "Mercado Teste",
-    telefone: "14999999999",
-  });
+  const result = await service.updateCommercialProfile(
+    "company-1",
+    {
+      nomeFantasia: "Mercado Teste",
+      telefone: "14999999999",
+    },
+    { sub: "manager-1", email: "manager@example.com", role: "MANAGER" },
+  );
 
   assert.deepEqual(calls, [
     "transaction-start",
@@ -146,6 +139,39 @@ test("updateCommercialProfile grava cadastro e contatos na mesma transação", a
     "transaction-finish",
   ]);
   assert.equal(result?.id, "company-1");
+});
+
+test("vendedor não altera perfil comercial de empresa fora da própria carteira", async () => {
+  let updateCalls = 0;
+  let accessWhere: unknown;
+  const tx = {
+    company: {
+      findFirst: async (args: { where: unknown }) => {
+        accessWhere = args.where;
+        return null;
+      },
+      update: async () => {
+        updateCalls += 1;
+      },
+    },
+  };
+  const prisma = {
+    $transaction: async (callback: (transaction: typeof tx) => Promise<unknown>) => callback(tx),
+  };
+  const service = new CompaniesService(prisma as never, {} as never, {} as never, {} as never);
+
+  await assert.rejects(
+    () =>
+      service.updateCommercialProfile(
+        "company-other",
+        { telefone: "14999999999" },
+        { sub: "sales-1", email: "sales@example.com", role: "SALES" },
+      ),
+    /Empresa não encontrada/,
+  );
+  assert.equal(updateCalls, 0);
+  assert.match(JSON.stringify(accessWhere), /assignedToId_legacy/);
+  assert.match(JSON.stringify(accessWhere), /sales@example\.com/);
 });
 
 test("candidatos de localização exigem confirmação explícita", async () => {
@@ -177,12 +203,7 @@ test("candidatos de localização não chamam Google Places sem chave configurad
   };
   const prisma = { company: { findUnique: async () => company } };
   const config = { get: () => undefined };
-  const service = new CompaniesService(
-    prisma as never,
-    {} as never,
-    {} as never,
-    config as never,
-  );
+  const service = new CompaniesService(prisma as never, {} as never, {} as never, config as never);
 
   const result = await service.getLocationCandidates("company-1", true);
 

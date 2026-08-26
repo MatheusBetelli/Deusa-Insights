@@ -19,9 +19,44 @@ test("NotificationsService - getOperationalNotifications gera alertas operaciona
   };
 
   const service = new NotificationsService(fakePrisma as never);
-  const result = await service.getOperationalNotifications();
+  const result = await service.getOperationalNotifications({
+    sub: "manager-1",
+    email: "manager@example.com",
+    role: "MANAGER",
+  });
 
   assert.ok(result.length >= 1);
-  assert.ok(result.some(r => r.category === "OPPORTUNITY" || r.category === "ACTION"));
+  assert.ok(result.some((r) => r.category === "OPPORTUNITY" || r.category === "ACTION"));
   assert.ok(result[0].title.length > 0);
+});
+
+test("notificações de vendedor não expõem importações nem leads de outras carteiras", async () => {
+  const leadWheres: unknown[] = [];
+  let importQueries = 0;
+  const fakePrisma = {
+    lead: {
+      count: async (args: { where: unknown }) => {
+        leadWheres.push(args.where);
+        return 0;
+      },
+      findFirst: async () => null,
+    },
+    importJob: {
+      findMany: async () => {
+        importQueries += 1;
+        return [];
+      },
+    },
+  };
+
+  const result = await new NotificationsService(fakePrisma as never).getOperationalNotifications({
+    sub: "sales-1",
+    email: "sales@example.com",
+    role: "SALES",
+  });
+
+  assert.deepEqual(result, []);
+  assert.equal(importQueries, 0);
+  assert.match(JSON.stringify(leadWheres), /assignedToId_legacy/);
+  assert.match(JSON.stringify(leadWheres), /sales@example\.com/);
 });

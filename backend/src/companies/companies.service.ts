@@ -19,12 +19,18 @@ import { UpdateCommercialProfileDto } from "./dto/update-commercial-profile.dto"
 
 import { ConfigService } from "@nestjs/config";
 import { maskCpfInRazaoSocial } from "../common/lgpd.utils";
+import { LeadAccessActor, scopeCompanyWhere } from "../common/lead-access.policy";
 
 function normalizeCnae(code?: string | null) {
   return code?.replace(/\D/g, "") || undefined;
 }
 
-function calculateHaversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+function calculateHaversineDistance(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number,
+): number {
   const R = 6371000;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
   const dLon = ((lon2 - lon1) * Math.PI) / 180;
@@ -151,8 +157,14 @@ function assertConfirmedLocation(situacaoCadastral: string, dto: ValidateLocatio
   }
 
   const requiredFields: Array<[string | undefined, string]> = [
-    [dto.nomeEncontrado, "O nome do estabelecimento comercial encontrado é obrigatório para confirmação."],
-    [dto.enderecoEncontrado, "O endereço do estabelecimento comercial encontrado é obrigatório para confirmação."],
+    [
+      dto.nomeEncontrado,
+      "O nome do estabelecimento comercial encontrado é obrigatório para confirmação.",
+    ],
+    [
+      dto.enderecoEncontrado,
+      "O endereço do estabelecimento comercial encontrado é obrigatório para confirmação.",
+    ],
     [dto.categoriaEncontrada, "A categoria comercial encontrada é obrigatória para confirmação."],
     [dto.fonteConsultada, "A fonte consultada é obrigatória para confirmação."],
     [dto.justificativaDecisao, "A justificativa específica da decisão é obrigatória."],
@@ -166,7 +178,12 @@ function assertConfirmedLocation(situacaoCadastral: string, dto: ValidateLocatio
       "É necessário fornecer a URL da evidência digital, Place ID ou relatório de visita presencial.",
     );
   }
-  if (dto.latitude === undefined || dto.longitude === undefined || dto.latitude === 0 || dto.longitude === 0) {
+  if (
+    dto.latitude === undefined ||
+    dto.longitude === undefined ||
+    dto.latitude === 0 ||
+    dto.longitude === 0
+  ) {
     throw new BadRequestException("Coordenadas numéricas válidas e não nulas são obrigatórias.");
   }
   if (dto.latitude < -90 || dto.latitude > 90 || dto.longitude < -180 || dto.longitude > 180) {
@@ -218,14 +235,18 @@ function buildLocationCandidate(
 
   const latitude = place.location?.latitude ?? 0;
   const longitude = place.location?.longitude ?? 0;
-  const distanceMeters = company.latitude && company.longitude
-    ? calculateHaversineDistance(company.latitude, company.longitude, latitude, longitude)
-    : 0;
+  const distanceMeters =
+    company.latitude && company.longitude
+      ? calculateHaversineDistance(company.latitude, company.longitude, latitude, longitude)
+      : 0;
   const displayName = place.displayName?.text || "";
   const formattedAddress = place.formattedAddress || "";
   const placePhone = place.nationalPhoneNumber || "";
   const companyPhone = company.details?.telefone || "";
-  const nomeCompativel = checkNameSimilarity(company.nomeFantasia || company.razaoSocial, displayName);
+  const nomeCompativel = checkNameSimilarity(
+    company.nomeFantasia || company.razaoSocial,
+    displayName,
+  );
   const enderecoCompativel = checkAddressSimilarity(company.logradouro || "", formattedAddress);
   const telefoneCompativel = companyPhone
     ? placePhone.replace(/\D/g, "").includes(companyPhone.replace(/\D/g, ""))
@@ -267,7 +288,8 @@ function buildLocationCandidate(
     businessStatus: place.businessStatus || null,
     nationalPhoneNumber: placePhone || null,
     websiteUri: place.websiteUri || null,
-    googleMapsUri: place.googleMapsUri || `https://www.google.com/maps/place/?q=place_id:${place.id}`,
+    googleMapsUri:
+      place.googleMapsUri || `https://www.google.com/maps/place/?q=place_id:${place.id}`,
     queryExecuted: query,
     distanciaDoEnderecoCadastradoMetros: Math.round(distanceMeters),
     nomeCompativel,
@@ -288,7 +310,8 @@ function buildLocationValidationUpdate(dto: ValidateLocationDto): {
   const isConfirmado = dto.statusValidacao === "confirmado";
   const isProvavel = dto.statusValidacao === "provavel";
   const pendenteValidacao = !isConfirmado && !isProvavel;
-  const origemCoordenada = dto.origemCoordenada || (isConfirmado ? "google_maps" : "sem_coordenada");
+  const origemCoordenada =
+    dto.origemCoordenada || (isConfirmado ? "google_maps" : "sem_coordenada");
   const updateData: Prisma.CompanyUpdateInput = {
     statusValidacao: dto.statusValidacao,
     validadoManualmente: true,
@@ -487,8 +510,7 @@ export class CompaniesService {
       throw new BadRequestException("Latitude e longitude devem ser informadas em conjunto.");
     }
     const cnaes = dto.cnaes?.map((cnae) => normalizeCnae(cnae)).filter(Boolean) as
-      | string[]
-      | undefined;
+      string[] | undefined;
     const company = await this.prisma.company.update({
       where: { id },
       data: {
@@ -510,10 +532,14 @@ export class CompaniesService {
     return company;
   }
 
-  async updateCommercialProfile(id: string, dto: UpdateCommercialProfileDto) {
+  async updateCommercialProfile(
+    id: string,
+    dto: UpdateCommercialProfileDto,
+    actor: LeadAccessActor,
+  ) {
     return this.prisma.$transaction(async (tx) => {
-      const existing = await tx.company.findUnique({
-        where: { id },
+      const existing = await tx.company.findFirst({
+        where: scopeCompanyWhere({ id }, actor),
         select: { id: true },
       });
       if (!existing) throw new NotFoundException("Empresa não encontrada");
@@ -587,11 +613,11 @@ export class CompaniesService {
     });
     const preserveVerifiedLocation = Boolean(
       existing?.validadoManualmente ||
-        existing?.latitudeVerificada != null ||
-        existing?.longitudeVerificada != null ||
-        ["verificado", "verificado_google", "confirmado"].includes(
-          existing?.statusVerificacaoEndereco ?? "",
-        ),
+      existing?.latitudeVerificada != null ||
+      existing?.longitudeVerificada != null ||
+      ["verificado", "verificado_google", "confirmado"].includes(
+        existing?.statusVerificacaoEndereco ?? "",
+      ),
     );
 
     const company = await this.prisma.company.upsert({
@@ -669,9 +695,7 @@ export class CompaniesService {
           ? { pontuacaoOportunidade: input.pontuacaoOportunidade }
           : {}),
         nivelOportunidade: input.nivelOportunidade,
-        ...(input.motivoPontuacao !== undefined
-          ? { motivoPontuacao: input.motivoPontuacao }
-          : {}),
+        ...(input.motivoPontuacao !== undefined ? { motivoPontuacao: input.motivoPontuacao } : {}),
         ...(cnaes.length > 0
           ? {
               cnaes: {
@@ -704,8 +728,11 @@ export class CompaniesService {
     };
   }
 
-  async upsertDetails(id: string, dto: CompanyDetailsDto) {
-    const company = await this.prisma.company.findUnique({ where: { id } });
+  async upsertDetails(id: string, dto: CompanyDetailsDto, actor: LeadAccessActor) {
+    const company = await this.prisma.company.findFirst({
+      where: scopeCompanyWhere({ id }, actor),
+      select: { id: true },
+    });
     if (!company) throw new NotFoundException("Empresa não encontrada");
 
     await this.prisma.companyDetails.upsert({
@@ -729,7 +756,10 @@ export class CompaniesService {
   }
 
   async validateLocation(id: string, dto: ValidateLocationDto) {
-    const company = await this.prisma.company.findUnique({ where: { id }, include: { lead: true } });
+    const company = await this.prisma.company.findUnique({
+      where: { id },
+      include: { lead: true },
+    });
     if (!company) throw new NotFoundException("Empresa não encontrada");
 
     assertCoordinatePair(dto);
@@ -779,7 +809,8 @@ export class CompaniesService {
     const apiKey = this.configService.get<string>("GOOGLE_MAPS_API_KEY");
     const isConfigured = Boolean(apiKey && apiKey.trim().length > 0);
 
-    const query1 = `${company.nomeFantasia || company.razaoSocial} ${company.logradouro || ""} ${company.numero || ""} ${company.cidade} ${company.uf}`.trim();
+    const query1 =
+      `${company.nomeFantasia || company.razaoSocial} ${company.logradouro || ""} ${company.numero || ""} ${company.cidade} ${company.uf}`.trim();
     const queriesExecuted = [query1];
 
     const companyData = {
@@ -802,11 +833,13 @@ export class CompaniesService {
         apiKeyConfigured: false,
         queriesExecuted,
         candidates: [],
-        message: "GOOGLE_MAPS_API_KEY não configurada no backend. Insira a chave no arquivo backend/.env para habilitar a busca na Google Places API.",
+        message:
+          "GOOGLE_MAPS_API_KEY não configurada no backend. Insira a chave no arquivo backend/.env para habilitar a busca na Google Places API.",
       };
     }
 
-    const fieldMask = "places.id,places.displayName,places.formattedAddress,places.location,places.primaryType,places.types,places.businessStatus,places.nationalPhoneNumber,places.websiteUri,places.googleMapsUri";
+    const fieldMask =
+      "places.id,places.displayName,places.formattedAddress,places.location,places.primaryType,places.types,places.businessStatus,places.nationalPhoneNumber,places.websiteUri,places.googleMapsUri";
     const candidateMap = new Map<string, LocationCandidate>();
     let apiCallsCount = 0;
     const apiErrors: string[] = [];
@@ -838,5 +871,4 @@ export class CompaniesService {
       candidates,
     };
   }
-
 }

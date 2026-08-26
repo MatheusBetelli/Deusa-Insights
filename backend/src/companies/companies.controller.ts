@@ -1,13 +1,11 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from "@nestjs/common";
 import { Throttle } from "@nestjs/throttler";
 import { AuthGuard } from "../auth/auth.guard";
 import { Roles } from "../auth/roles.decorator";
 import { RolesGuard } from "../auth/roles.guard";
-import {
-  DatasetFreezeGuard,
-  FrozenDatasetReadOnly,
-} from "../common/dataset-freeze.guard";
+import { DatasetFreezeGuard, FrozenDatasetReadOnly } from "../common/dataset-freeze.guard";
 import { UserRole } from "@prisma/client";
+import { AuthenticatedHttpRequest } from "../common/auditable-http.types";
 import { CompaniesService } from "./companies.service";
 import { CompanyQueryDto } from "./dto/company-query.dto";
 import { CreateCompanyDto } from "./dto/create-company.dto";
@@ -56,18 +54,30 @@ export class CompaniesController {
   }
 
   @Post(":id/details")
-  createDetails(@Param("id") id: string, @Body() dto: CompanyDetailsDto) {
-    return this.companiesService.upsertDetails(id, dto);
+  createDetails(
+    @Param("id") id: string,
+    @Body() dto: CompanyDetailsDto,
+    @Req() request: AuthenticatedHttpRequest,
+  ) {
+    return this.companiesService.upsertDetails(id, dto, request.user);
   }
 
   @Patch(":id/details")
-  updateDetails(@Param("id") id: string, @Body() dto: CompanyDetailsDto) {
-    return this.companiesService.upsertDetails(id, dto);
+  updateDetails(
+    @Param("id") id: string,
+    @Body() dto: CompanyDetailsDto,
+    @Req() request: AuthenticatedHttpRequest,
+  ) {
+    return this.companiesService.upsertDetails(id, dto, request.user);
   }
 
   @Patch(":id/commercial-profile")
-  updateCommercialProfile(@Param("id") id: string, @Body() dto: UpdateCommercialProfileDto) {
-    return this.companiesService.updateCommercialProfile(id, dto);
+  updateCommercialProfile(
+    @Param("id") id: string,
+    @Body() dto: UpdateCommercialProfileDto,
+    @Req() request: AuthenticatedHttpRequest,
+  ) {
+    return this.companiesService.updateCommercialProfile(id, dto, request.user);
   }
 
   @Post(":id/validate-location")

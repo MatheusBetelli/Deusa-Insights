@@ -1,7 +1,8 @@
-import { Controller, Get, Query, UseGuards } from "@nestjs/common";
+import { Controller, Get, Query, Req, UseGuards } from "@nestjs/common";
 import { Transform } from "class-transformer";
 import { IsOptional, IsString, Matches, MaxLength } from "class-validator";
 import { AuthGuard } from "../auth/auth.guard";
+import { AuthenticatedHttpRequest } from "../common/auditable-http.types";
 import { MapOpportunitiesService } from "./map-opportunities.service";
 
 class HeatmapQueryDto {
@@ -33,8 +34,8 @@ export class MapOpportunitiesController {
   constructor(private readonly mapOpportunitiesService: MapOpportunitiesService) {}
 
   @Get("opportunities")
-  findAll() {
-    return this.mapOpportunitiesService.findAll();
+  findAll(@Req() request: AuthenticatedHttpRequest) {
+    return this.mapOpportunitiesService.findAll(request.user);
   }
 
   /**

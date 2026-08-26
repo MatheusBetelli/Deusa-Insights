@@ -4,6 +4,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { PipelineQueryDto } from "./dto/pipeline-query.dto";
 import { calculateOpportunityScoreDetails } from "../common/scoring";
 import { buildCnaeWhereInput, isValidOpportunity } from "../common/opportunity-filter";
+import { buildLeadAccessWhere, LeadAccessActor } from "../common/lead-access.policy";
 
 const pipelineStatuses = [
   LeadStatus.NEW,
@@ -24,12 +25,12 @@ const safeAssignedToSelect = {
 export class PipelineService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(query: PipelineQueryDto = {}) {
+  async findAll(query: PipelineQueryDto = {}, actor: LeadAccessActor) {
     const pageSize = Math.min(Math.max(1, query.columnPageSize ?? 6), 25);
     const totals = await Promise.all(
       pipelineStatuses.map((status) =>
         this.prisma.lead.count({
-          where: this.buildWhere(query, status),
+          where: this.buildWhere(query, status, actor),
         }),
       ),
     );
@@ -39,7 +40,7 @@ export class PipelineService {
       await Promise.all(
         pipelineStatuses.map(async (status, index) => {
           const total = totals[index] ?? 0;
-          const items = await this.findStageItems(status, query, 1, pageSize);
+          const items = await this.findStageItems(status, query, 1, pageSize, actor);
 
           return [
             status,
@@ -60,7 +61,7 @@ export class PipelineService {
     return { total: grandTotal, stages };
   }
 
-  async findStage(status: string, query: PipelineQueryDto = {}) {
+  async findStage(status: string, query: PipelineQueryDto = {}, actor: LeadAccessActor) {
     if (!(pipelineStatuses as readonly LeadStatus[]).includes(status as LeadStatus)) {
       throw new BadRequestException("Etapa de funil inválida");
     }
@@ -68,12 +69,15 @@ export class PipelineService {
     const typedStatus = status as LeadStatus;
     const page = Math.max(1, query.page ?? 1);
     const pageSize = Math.min(Math.max(1, query.pageSize ?? 10), 100);
-    const where = this.buildWhere(query, typedStatus);
+    const where = this.buildWhere(query, typedStatus, actor);
     const [total, items] = await this.prisma.$transaction([
       this.prisma.lead.count({ where }),
       this.prisma.lead.findMany({
         where,
-        include: { company: { include: { cnaes: true } }, assignedTo: { select: safeAssignedToSelect } },
+        include: {
+          company: { include: { cnaes: true } },
+          assignedTo: { select: safeAssignedToSelect },
+        },
         orderBy: [{ score: "desc" }, { createdAt: "desc" }],
         skip: (page - 1) * pageSize,
         take: pageSize,
@@ -97,10 +101,14 @@ export class PipelineService {
     query: PipelineQueryDto,
     page: number,
     pageSize: number,
+    actor: LeadAccessActor,
   ) {
     const leads = await this.prisma.lead.findMany({
-      where: this.buildWhere(query, status),
-      include: { company: { include: { cnaes: true } }, assignedTo: { select: safeAssignedToSelect } },
+      where: this.buildWhere(query, status, actor),
+      include: {
+        company: { include: { cnaes: true } },
+        assignedTo: { select: safeAssignedToSelect },
+      },
       orderBy: [{ score: "desc" }, { createdAt: "desc" }],
       skip: (page - 1) * pageSize,
       take: pageSize,
@@ -110,8 +118,9 @@ export class PipelineService {
     return validLeads.map((lead) => this.toCard(lead));
   }
 
-  private buildWhere(query: PipelineQueryDto, status: LeadStatus) {
+  private buildWhere(query: PipelineQueryDto, status: LeadStatus, actor: LeadAccessActor) {
     const and: Prisma.LeadWhereInput[] = [
+      buildLeadAccessWhere(actor),
       { status },
       { company: { situacaoCadastral: "ATIVA" } },
       { company: buildCnaeWhereInput(query.cnae) },

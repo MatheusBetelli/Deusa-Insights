@@ -1,6 +1,11 @@
-import { Injectable, OnModuleInit } from "@nestjs/common";
+import { Injectable } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
+import {
+  buildLeadAccessWhere,
+  leadAccessCacheKey,
+  LeadAccessActor,
+} from "../common/lead-access.policy";
 import {
   buildCnaeWhereInput,
   isValidOpportunity,
@@ -63,7 +68,9 @@ type MapOpportunityPoint = {
 
 function joinSqlFragments(fragments: Prisma.Sql[], separator: Prisma.Sql): Prisma.Sql {
   if (fragments.length === 0) return Prisma.empty;
-  return fragments.slice(1).reduce((sql, fragment) => Prisma.sql`${sql}${separator}${fragment}`, fragments[0]);
+  return fragments
+    .slice(1)
+    .reduce((sql, fragment) => Prisma.sql`${sql}${separator}${fragment}`, fragments[0]);
 }
 
 function buildHeatmapConditions(params: HeatmapQueryParams): Prisma.Sql[] {
@@ -98,12 +105,17 @@ function buildHeatmapConditions(params: HeatmapQueryParams): Prisma.Sql[] {
   return conditions;
 }
 
-function resolveHeatmapCoordinates(row: HeatmapRow): { latitude: number; longitude: number } | null {
+function resolveHeatmapCoordinates(
+  row: HeatmapRow,
+): { latitude: number; longitude: number } | null {
   if (row.lat_media && row.lon_media) {
     return { latitude: row.lat_media, longitude: row.lon_media };
   }
   const key = `${row.cidade.toLowerCase()}|${row.uf.toLowerCase()}`;
-  const keyNormalized = `${row.cidade.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()}|${row.uf.toLowerCase()}`;
+  const keyNormalized = `${row.cidade
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()}|${row.uf.toLowerCase()}`;
   const fallback = IBGE_CENTROIDES[key] || IBGE_CENTROIDES[keyNormalized];
   return fallback ? { latitude: fallback.lat, longitude: fallback.lon } : null;
 }
@@ -125,25 +137,21 @@ function toHeatmapPoint(row: HeatmapRow, maxQuantity: number): HeatmapPoint | nu
 }
 
 @Injectable()
-export class MapOpportunitiesService implements OnModuleInit {
-  private mapCache: { data: MapOpportunityPoint[]; expiresAt: number } | null = null;
+export class MapOpportunitiesService {
+  private mapCache = new Map<string, { data: MapOpportunityPoint[]; expiresAt: number }>();
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async onModuleInit() {
-    // Pré-aquecer os pontos do mapa na inicialização do backend
-    setTimeout(() => {
-      void this.findAll().catch(() => {});
-    }, 1500);
-  }
-
-  async findAll(): Promise<MapOpportunityPoint[]> {
-    if (this.mapCache && this.mapCache.expiresAt > Date.now()) {
-      return this.mapCache.data;
+  async findAll(actor: LeadAccessActor): Promise<MapOpportunityPoint[]> {
+    const cacheKey = leadAccessCacheKey(actor);
+    const cached = this.mapCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.data;
     }
     // Buscar apenas leads ativos criados pelos fluxos autorizados.
     const leads = await this.prisma.lead.findMany({
       where: {
+        AND: [buildLeadAccessWhere(actor)],
         status: { notIn: ["NOT_INTERESTED", "INACTIVE"] },
         company: {
           situacaoCadastral: "ATIVA",
@@ -181,7 +189,10 @@ export class MapOpportunitiesService implements OnModuleInit {
         .normalize("NFD")
         .replace(/[\u0300-\u036f]/g, "")
         .toLowerCase()
-        .replace(/\b(ltda|me|eireli|s\/a|sa|supermercados|supermercado|minimercado|mini-mercado|mercado|acougue|mercearia)\b/g, "")
+        .replace(
+          /\b(ltda|me|eireli|s\/a|sa|supermercados|supermercado|minimercado|mini-mercado|mercado|acougue|mercearia)\b/g,
+          "",
+        )
         .replace(/[^a-z0-9]/g, "")
         .trim();
 
@@ -214,7 +225,7 @@ export class MapOpportunitiesService implements OnModuleInit {
       const isOutOfSpBounds =
         typeof lat === "number" &&
         typeof lng === "number" &&
-        (lat > -20.10 || lat < -23.10 || lng > -47.10 || lng < -51.90);
+        (lat > -20.1 || lat < -23.1 || lng > -47.1 || lng < -51.9);
 
       const isDivergent =
         lead.company.statusVerificacaoEndereco === "divergente" ||
@@ -228,9 +239,16 @@ export class MapOpportunitiesService implements OnModuleInit {
         lng = null;
       }
 
-      if ((typeof lat !== "number" || typeof lng !== "number") && lead.company.cidade && lead.company.uf) {
+      if (
+        (typeof lat !== "number" || typeof lng !== "number") &&
+        lead.company.cidade &&
+        lead.company.uf
+      ) {
         const key = `${lead.company.cidade.toLowerCase()}|${lead.company.uf.toLowerCase()}`;
-        const keyNorm = `${lead.company.cidade.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()}|${lead.company.uf.toLowerCase()}`;
+        const keyNorm = `${lead.company.cidade
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .toLowerCase()}|${lead.company.uf.toLowerCase()}`;
         const centroid = IBGE_CENTROIDES[key] || IBGE_CENTROIDES[keyNorm];
         if (centroid) {
           lat = centroid.lat;
@@ -271,12 +289,13 @@ export class MapOpportunitiesService implements OnModuleInit {
         cnaePrincipal:
           (isValidOpportunityCnae(lead.company.cnaePrincipal)
             ? lead.company.cnaePrincipal
-            : lead.company.cnaes.find((item) => isValidOpportunityCnae(item.cnaeCode))?.cnaeCode) || null,
+            : lead.company.cnaes.find((item) => isValidOpportunityCnae(item.cnaeCode))?.cnaeCode) ||
+          null,
         responsibleName: lead.assignedTo?.name || null,
       };
     });
 
-    this.mapCache = { data: result, expiresAt: Date.now() + 60000 };
+    this.mapCache.set(cacheKey, { data: result, expiresAt: Date.now() + 60000 });
     return result;
   }
 

@@ -51,7 +51,7 @@ export class UsersService {
         async (tx) => {
           const user = await tx.user.findUnique({
             where: { id },
-            select: { id: true, role: true },
+            select: { id: true, email: true, role: true },
           });
           if (!user) {
             throw new NotFoundException("Usuário não encontrado.");
@@ -63,11 +63,19 @@ export class UsersService {
           }
 
           const mapping = await tx.userMapping.findUnique({ where: { cuid: id } });
+          const profile =
+            mapping || !user.email
+              ? null
+              : await tx.profile.findUnique({
+                  where: { email: user.email },
+                  select: { id: true },
+                });
+          const profileId = mapping?.uuid ?? profile?.id;
           await tx.lead.updateMany({
             where: {
               OR: [
                 { assignedToId_legacy: id },
-                ...(mapping ? [{ assignedToId: mapping.uuid }] : []),
+                ...(profileId ? [{ assignedToId: profileId }] : []),
               ],
             },
             data: { assignedToId: null, assignedToId_legacy: null },
@@ -82,7 +90,14 @@ export class UsersService {
 
           return tx.user.delete({
             where: { id },
-            select: { id: true, name: true, email: true, role: true, createdAt: true, updatedAt: true },
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              role: true,
+              createdAt: true,
+              updatedAt: true,
+            },
           });
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },

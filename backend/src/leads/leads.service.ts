@@ -1,9 +1,20 @@
 import { randomUUID } from "crypto";
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { LeadStatus, Prisma } from "@prisma/client";
-import { calculateLeadScore, getPotentialLevel, calculateOpportunityScoreDetails } from "../common/scoring";
+import {
+  calculateLeadScore,
+  getPotentialLevel,
+  calculateOpportunityScoreDetails,
+} from "../common/scoring";
 import { buildCnaeWhereInput, isValidOpportunity } from "../common/opportunity-filter";
 import { PrismaService } from "../prisma/prisma.service";
+import {
+  assertSalesCannotManageLeadAssignment,
+  buildLeadAccessWhere,
+  hasFullPortfolioAccess,
+  LeadAccessActor,
+  scopeLeadWhere,
+} from "../common/lead-access.policy";
 import { CreateLeadDto } from "./dto/create-lead.dto";
 import { LeadQueryDto } from "./dto/lead-query.dto";
 import { UpdateLeadDto } from "./dto/update-lead.dto";
@@ -79,7 +90,10 @@ function hasSpatialCoordinates(company: SpatialCompany): company is SpatialCompa
   );
 }
 
-function haversineDistanceKm(first: SpatialCompany & { latitude: number; longitude: number }, second: SpatialCompany & { latitude: number; longitude: number }) {
+function haversineDistanceKm(
+  first: SpatialCompany & { latitude: number; longitude: number },
+  second: SpatialCompany & { latitude: number; longitude: number },
+) {
   const dLat = ((second.latitude - first.latitude) * Math.PI) / 180;
   const dLon = ((second.longitude - first.longitude) * Math.PI) / 180;
   const a =
@@ -102,18 +116,23 @@ function areSpatialNeighbors(first: SpatialCompany, second: SpatialCompany): boo
 
   const firstNeighborhood = (first.bairro || "").toLowerCase().trim();
   const secondNeighborhood = (second.bairro || "").toLowerCase().trim();
-  return Boolean(firstNeighborhood && secondNeighborhood && firstNeighborhood === secondNeighborhood);
+  return Boolean(
+    firstNeighborhood && secondNeighborhood && firstNeighborhood === secondNeighborhood,
+  );
 }
 
 @Injectable()
 export class LeadsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(query: LeadQueryDto = {}) {
+  async findAll(query: LeadQueryDto = {}, actor: LeadAccessActor) {
     const page = Math.max(1, query.page ?? 1);
-    const pageSize = Math.min(Math.max(1, query.pageSize ?? query.limit ?? query.perPage ?? 10), 100);
+    const pageSize = Math.min(
+      Math.max(1, query.pageSize ?? query.limit ?? query.perPage ?? 10),
+      100,
+    );
 
-    const where = this.buildWhere(query);
+    const where = this.buildWhere(query, actor);
     const [total, items, targetCompanies] = await this.prisma.$transaction([
       this.prisma.lead.count({ where }),
       this.prisma.lead.findMany({
@@ -173,9 +192,9 @@ export class LeadsService {
     };
   }
 
-  async exportCsv(query: LeadQueryDto) {
+  async exportCsv(query: LeadQueryDto, actor: LeadAccessActor) {
     const rawLeads = await this.prisma.lead.findMany({
-      where: this.buildWhere(query),
+      where: this.buildWhere(query, actor),
       include: leadInclude,
       orderBy: this.buildOrderBy(query),
       take: 10000,
@@ -218,9 +237,10 @@ export class LeadsService {
     return [header, ...rows].map((row) => row.map(csvValue).join(",")).join("\n");
   }
 
-  private buildWhere(query: LeadQueryDto) {
+  private buildWhere(query: LeadQueryDto, actor: LeadAccessActor) {
     const where: Prisma.LeadWhereInput = {};
     const and: Prisma.LeadWhereInput[] = [
+      buildLeadAccessWhere(actor),
       { company: { situacaoCadastral: "ATIVA" } },
       { company: buildCnaeWhereInput(query.cnae) },
     ];
@@ -261,9 +281,9 @@ export class LeadsService {
     return [{ score: direction }, { createdAt: "desc" }];
   }
 
-  async findById(id: string) {
-    const lead = await this.prisma.lead.findUnique({
-      where: { id },
+  async findById(id: string, actor: LeadAccessActor) {
+    const lead = await this.prisma.lead.findFirst({
+      where: scopeLeadWhere({ id }, actor),
       include: {
         company: { include: { cnaes: true } },
         assignedTo: { select: safeAssignedToSelect },
@@ -301,7 +321,8 @@ export class LeadsService {
     };
   }
 
-  async create(dto: CreateLeadDto) {
+  async create(dto: CreateLeadDto, actor: LeadAccessActor) {
+    assertSalesCannotManageLeadAssignment(actor, dto);
     const company = await this.prisma.company.findUnique({
       where: { id: dto.companyId },
       include: { cnaes: true },
@@ -318,8 +339,9 @@ export class LeadsService {
         priorityCities,
       });
 
-    const assignedProfileId = dto.assignedToId
-      ? await this.resolveProfileId(dto.assignedToId)
+    const requestedAssignee = hasFullPortfolioAccess(actor) ? dto.assignedToId : actor.sub;
+    const assignedProfileId = requestedAssignee
+      ? await this.resolveProfileId(requestedAssignee)
       : undefined;
     if (dto.assignedToId && !assignedProfileId) {
       throw new BadRequestException("Responsável informado não possui um perfil válido");
@@ -332,6 +354,7 @@ export class LeadsService {
         score,
         potentialLevel: dto.potentialLevel ?? getPotentialLevel(score),
         assignedToId: assignedProfileId,
+        assignedToId_legacy: hasFullPortfolioAccess(actor) ? undefined : actor.sub,
         notes: dto.notes,
         lastContactAt: dto.lastContactAt,
         nextActionAt: dto.nextActionAt,
@@ -340,8 +363,9 @@ export class LeadsService {
     });
   }
 
-  async update(id: string, dto: UpdateLeadDto) {
-    await this.findById(id);
+  async update(id: string, dto: UpdateLeadDto, actor: LeadAccessActor) {
+    assertSalesCannotManageLeadAssignment(actor, dto);
+    await this.findById(id, actor);
     const { assignedToId, ...scalarFields } = dto;
 
     const updatePayload: Prisma.LeadUpdateInput = {
@@ -364,10 +388,33 @@ export class LeadsService {
       }
     }
 
-    return this.prisma.lead.update({
-      where: { id },
-      data: updatePayload,
-      include: { company: true, assignedTo: { select: safeAssignedToSelect } },
+    if (hasFullPortfolioAccess(actor)) {
+      return this.prisma.lead.update({
+        where: { id },
+        data: updatePayload,
+        include: { company: true, assignedTo: { select: safeAssignedToSelect } },
+      });
+    }
+
+    const restrictedUpdatePayload: Prisma.LeadUpdateManyMutationInput = {
+      ...scalarFields,
+      potentialLevel:
+        dto.score !== undefined && dto.potentialLevel === undefined
+          ? getPotentialLevel(dto.score)
+          : dto.potentialLevel,
+    };
+
+    return this.prisma.$transaction(async (transaction) => {
+      const updated = await transaction.lead.updateMany({
+        where: scopeLeadWhere({ id }, actor),
+        data: restrictedUpdatePayload,
+      });
+      if (updated.count !== 1) throw new NotFoundException("Lead não encontrado");
+
+      return transaction.lead.findUniqueOrThrow({
+        where: { id },
+        include: { company: true, assignedTo: { select: safeAssignedToSelect } },
+      });
     });
   }
 
@@ -384,7 +431,10 @@ export class LeadsService {
     const mapping = isUuid
       ? await this.prisma.userMapping.findUnique({ where: { uuid: cleanId } })
       : await this.prisma.userMapping.findUnique({ where: { cuid: cleanId } });
-    if (mapping) return mapping.uuid;
+    if (mapping) {
+      const mappedProfile = await this.prisma.profile.findUnique({ where: { id: mapping.uuid } });
+      if (mappedProfile) return mappedProfile.id;
+    }
 
     const user = await this.prisma.user.findFirst({
       where: { OR: [{ id: cleanId }, { email: cleanId }] },
@@ -412,12 +462,22 @@ export class LeadsService {
     return null;
   }
 
-  async convert(id: string) {
-    const lead = await this.findById(id);
+  async convert(id: string, actor: LeadAccessActor) {
     return this.prisma.$transaction(async (transaction) => {
-      const updatedLead = await transaction.lead.update({
-        where: { id },
+      const lead = await transaction.lead.findFirst({
+        where: scopeLeadWhere({ id }, actor),
+        include: { company: true },
+      });
+      if (!lead) throw new NotFoundException("Lead não encontrado");
+
+      const updated = await transaction.lead.updateMany({
+        where: scopeLeadWhere({ id }, actor),
         data: { status: LeadStatus.CONVERTED, lastContactAt: new Date() },
+      });
+      if (updated.count !== 1) throw new NotFoundException("Lead não encontrado");
+
+      const updatedLead = await transaction.lead.findUniqueOrThrow({
+        where: { id },
         include: { company: true, assignedTo: { select: safeAssignedToSelect } },
       });
 
@@ -454,8 +514,8 @@ export class LeadsService {
     });
   }
 
-  discard(id: string) {
-    return this.update(id, { status: LeadStatus.NOT_INTERESTED, lastContactAt: new Date() });
+  discard(id: string, actor: LeadAccessActor) {
+    return this.update(id, { status: LeadStatus.NOT_INTERESTED, lastContactAt: new Date() }, actor);
   }
 
   async upsertLeadForCompany(companyId: string, assignedToId?: string) {
@@ -537,7 +597,8 @@ export class LeadsService {
     for (let i = 0; i < unassignedLeads.length; i++) {
       const lead = unassignedLeads[i];
       const cityClean = lead.company.cidade?.toLowerCase().trim() || "";
-      const assignedId = cityMap[cityClean] || usersWithProfile[i % usersWithProfile.length].profileId;
+      const assignedId =
+        cityMap[cityClean] || usersWithProfile[i % usersWithProfile.length].profileId;
 
       const assigned = await this.prisma.lead.updateMany({
         where: { id: lead.id, assignedToId: null },

@@ -89,6 +89,36 @@ test("deleteUser remove mapeamento obsoleto sem apagar o perfil histórico", asy
   ]);
 });
 
+test("deleteUser desvincula perfil por e-mail quando o mapeamento legado não existe", async () => {
+  let leadWhere: unknown;
+  const tx = {
+    user: {
+      findUnique: async () => ({
+        id: "sales-1",
+        email: "sales@example.com",
+        role: UserRole.SALES,
+      }),
+      delete: async () => ({ id: "sales-1" }),
+    },
+    userMapping: { findUnique: async () => null },
+    profile: { findUnique: async () => ({ id: "profile-1" }) },
+    lead: {
+      updateMany: async (args: { where: unknown }) => {
+        leadWhere = args.where;
+      },
+    },
+    leadInteraction: { updateMany: async () => ({ count: 0 }) },
+  };
+  const prisma = {
+    $transaction: async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx),
+  };
+
+  await new UsersService(prisma as never).deleteUser("sales-1", "admin-1");
+
+  assert.match(JSON.stringify(leadWhere), /profile-1/);
+  assert.match(JSON.stringify(leadWhere), /sales-1/);
+});
+
 test("deleteUser converte conflito serializável em erro seguro para nova tentativa", async () => {
   const prisma = {
     $transaction: async () => {
@@ -100,7 +130,6 @@ test("deleteUser converte conflito serializável em erro seguro para nova tentat
   await assert.rejects(
     () => service.deleteUser("admin-1", "admin-2"),
     (error: unknown) =>
-      error instanceof BadRequestException &&
-      error.message.includes("alterada simultaneamente"),
+      error instanceof BadRequestException && error.message.includes("alterada simultaneamente"),
   );
 });

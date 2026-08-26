@@ -1,5 +1,6 @@
-import { Controller, Get, UseGuards } from "@nestjs/common";
+import { Controller, Get, Req, UseGuards } from "@nestjs/common";
 import { AuthGuard } from "../auth/auth.guard";
+import { AuthenticatedHttpRequest } from "../common/auditable-http.types";
 import { NotificationsService } from "./notifications.service";
 
 @UseGuards(AuthGuard)
@@ -8,7 +9,7 @@ export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
 
   @Get()
-  getNotifications() {
-    return this.notificationsService.getOperationalNotifications();
+  getNotifications(@Req() request: AuthenticatedHttpRequest) {
+    return this.notificationsService.getOperationalNotifications(request.user);
   }
 }

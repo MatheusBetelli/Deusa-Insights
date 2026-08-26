@@ -1,7 +1,13 @@
-import { Injectable, OnModuleInit } from "@nestjs/common";
+import { Injectable } from "@nestjs/common";
 import { LeadStatus, Prisma } from "@prisma/client";
 import { buildCnaeWhereInput, getCnaeVariants } from "../common/opportunity-filter";
 import { PrismaService } from "../prisma/prisma.service";
+import {
+  hasFullPortfolioAccess,
+  leadAccessCacheKey,
+  LeadAccessActor,
+  scopeLeadWhere,
+} from "../common/lead-access.policy";
 import { DashboardPeriod, DashboardQueryDto } from "./dto/dashboard-query.dto";
 
 type CountByCity = {
@@ -193,11 +199,13 @@ function periodWhere(start: Date, end: Date): Prisma.DateTimeFilter {
   return { gte: start, lt: end };
 }
 
-function buildDashboardFilters(query: DashboardQueryDto, periodEnd: Date) {
+function buildDashboardFilters(query: DashboardQueryDto, periodEnd: Date, actor: LeadAccessActor) {
   const cnaeVariants = getCnaeVariants(query.cnae);
   const uf = query.uf?.toUpperCase();
   const city = query.city?.trim();
   const assignedToId = query.assignedToId?.trim();
+  const portfolioLeadWhere = scopeLeadWhere(assignedToId ? { assignedToId } : {}, actor);
+  const hasPortfolioFilter = Boolean(assignedToId) || !hasFullPortfolioAccess(actor);
   const companyFilters: Prisma.CompanyWhereInput[] = [
     { situacaoCadastral: "ATIVA" },
     buildCnaeWhereInput(query.cnae),
@@ -207,7 +215,7 @@ function buildDashboardFilters(query: DashboardQueryDto, periodEnd: Date) {
 
   const companyBaseWhere: Prisma.CompanyWhereInput = { AND: companyFilters };
   const clientCompanyFilters: Prisma.CompanyWhereInput[] = [];
-  if (assignedToId) clientCompanyFilters.push({ lead: { assignedToId } });
+  if (hasPortfolioFilter) clientCompanyFilters.push({ lead: { is: portfolioLeadWhere } });
   if (cnaeVariants.length > 0) {
     clientCompanyFilters.push({
       OR: [
@@ -224,15 +232,23 @@ function buildDashboardFilters(query: DashboardQueryDto, periodEnd: Date) {
     createdAt: { lt: periodEnd },
   };
   const leadBaseWhere: Prisma.LeadWhereInput = {
-    ...(assignedToId ? { assignedToId } : {}),
+    ...(hasPortfolioFilter ? { AND: [portfolioLeadWhere] } : {}),
     company: companyBaseWhere,
   };
 
-  return { assignedToId, city, clientBaseWhere, companyBaseWhere, leadBaseWhere, uf };
+  return {
+    city,
+    clientBaseWhere,
+    companyBaseWhere,
+    hasPortfolioFilter,
+    leadBaseWhere,
+    portfolioLeadWhere,
+    uf,
+  };
 }
 
 @Injectable()
-export class DashboardService implements OnModuleInit {
+export class DashboardService {
   private summaryCache = new Map<string, { data: DashboardSummaryResponse; expiresAt: number }>();
 
   clearCache() {
@@ -241,23 +257,26 @@ export class DashboardService implements OnModuleInit {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async onModuleInit() {
-    // Pré-aquecer o cache do dashboard na inicialização do backend
-    setTimeout(() => {
-      void this.summary({}).catch(() => {});
-    }, 1000);
-  }
-
-  async summary(query: DashboardQueryDto = {}): Promise<DashboardSummaryResponse> {
+  async summary(
+    query: DashboardQueryDto = {},
+    actor: LeadAccessActor,
+  ): Promise<DashboardSummaryResponse> {
     const period = resolvePeriod(query);
-    const cacheKey = `${period.key}_${period.start.getTime()}_${period.end.getTime()}_${query.uf || "all"}_${query.city || "all"}_${query.cnae || "all"}_${query.assignedToId || "all"}`;
+    const cacheKey = `${leadAccessCacheKey(actor)}_${period.key}_${period.start.getTime()}_${period.end.getTime()}_${query.uf || "all"}_${query.city || "all"}_${query.cnae || "all"}_${query.assignedToId || "all"}`;
     const cached = this.summaryCache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) {
       return cached.data;
     }
 
-    const { assignedToId, city, clientBaseWhere, companyBaseWhere, leadBaseWhere, uf } =
-      buildDashboardFilters(query, period.end);
+    const {
+      city,
+      clientBaseWhere,
+      companyBaseWhere,
+      hasPortfolioFilter,
+      leadBaseWhere,
+      portfolioLeadWhere,
+      uf,
+    } = buildDashboardFilters(query, period.end, actor);
 
     const [
       currentClients,
@@ -306,7 +325,7 @@ export class DashboardService implements OnModuleInit {
             { createdAt: { lt: period.end } },
             { OR: [{ lead: { is: null } }, { lead: { status: { not: LeadStatus.CONVERTED } } }] },
             { clientAccounts: { none: { isCurrentClient: true } } },
-            ...(assignedToId ? [{ lead: { assignedToId } }] : []),
+            ...(hasPortfolioFilter ? [{ lead: { is: portfolioLeadWhere } }] : []),
           ],
         },
       }),
@@ -370,13 +389,19 @@ export class DashboardService implements OnModuleInit {
       }),
       this.prisma.company.groupBy({
         by: ["cnaePrincipal"],
-        where: companyBaseWhere,
+        where: {
+          AND: [
+            companyBaseWhere,
+            ...(hasPortfolioFilter ? [{ lead: { is: portfolioLeadWhere } }] : []),
+          ],
+        },
         _count: { id: true },
         orderBy: { _count: { id: "desc" } },
         take: 1,
       }),
       this.prisma.profile.findMany({
         where: {
+          ...(!hasFullPortfolioAccess(actor) && actor.email ? { email: actor.email } : {}),
           assignedLeads: {
             some: {
               company: {
@@ -414,7 +439,8 @@ export class DashboardService implements OnModuleInit {
 
     const cityExpansion = await this.getCityExpansion({
       companyBaseWhere,
-      assignedToId,
+      hasPortfolioFilter,
+      portfolioLeadWhere,
       periodEnd: period.end,
     });
 
@@ -542,10 +568,11 @@ export class DashboardService implements OnModuleInit {
 
   private async getCityExpansion(args: {
     companyBaseWhere: Prisma.CompanyWhereInput;
-    assignedToId?: string;
+    hasPortfolioFilter: boolean;
+    portfolioLeadWhere: Prisma.LeadWhereInput;
     periodEnd: Date;
   }) {
-    const { companyBaseWhere, assignedToId, periodEnd } = args;
+    const { companyBaseWhere, hasPortfolioFilter, portfolioLeadWhere, periodEnd } = args;
 
     const [clientsByCity, opportunitiesByCity] = await Promise.all([
       this.prisma.company.groupBy({
@@ -554,6 +581,7 @@ export class DashboardService implements OnModuleInit {
           ...companyBaseWhere,
           createdAt: { lt: periodEnd },
           clientAccounts: { some: { isCurrentClient: true } },
+          ...(hasPortfolioFilter ? { lead: { is: portfolioLeadWhere } } : {}),
         },
         _count: { id: true },
       }),
@@ -565,7 +593,7 @@ export class DashboardService implements OnModuleInit {
             { createdAt: { lt: periodEnd } },
             { OR: [{ lead: { is: null } }, { lead: { status: { not: LeadStatus.CONVERTED } } }] },
             { clientAccounts: { none: { isCurrentClient: true } } },
-            ...(assignedToId ? [{ lead: { assignedToId } }] : []),
+            ...(hasPortfolioFilter ? [{ lead: { is: portfolioLeadWhere } }] : []),
           ],
         },
         _count: { id: true },

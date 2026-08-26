@@ -47,13 +47,20 @@ test("summary preserva CNAE e responsável ao combinar filtros de carteira", asy
   };
 
   const service = new DashboardService(prisma as never);
-  await service.summary({
-    period: "selected_month",
-    year: 2024,
-    month: 3,
-    cnae: "4712100",
-    assignedToId: "profile-1",
-  });
+  await service.summary(
+    {
+      period: "selected_month",
+      year: 2024,
+      month: 3,
+      cnae: "4712100",
+      assignedToId: "profile-1",
+    },
+    {
+      sub: "sales-1",
+      email: "sales@example.com",
+      role: "SALES",
+    },
+  );
 
   const clientWhere = clientCounts[0].where;
   assert.ok(isRecord(clientWhere.company));
@@ -61,9 +68,16 @@ test("summary preserva CNAE e responsável ao combinar filtros de carteira", asy
   const clientCompanyAnd = clientWhere.company.AND.filter(isRecord);
   assert.ok(
     clientCompanyAnd.some(
-      (item) => isRecord(item.lead) && item.lead.assignedToId === "profile-1",
+      (item) =>
+        isRecord(item.lead) &&
+        isRecord(item.lead.is) &&
+        Array.isArray(item.lead.is.AND) &&
+        item.lead.is.AND.some(
+          (condition) => isRecord(condition) && condition.assignedToId === "profile-1",
+        ),
     ),
   );
+  assert.match(JSON.stringify(clientWhere), /sales@example\.com/);
   assert.ok(clientCompanyAnd.some((item) => Array.isArray(item.OR)));
 
   assert.equal(clientWhere.isCurrentClient, true);
@@ -81,7 +95,5 @@ test("summary preserva CNAE e responsável ao combinar filtros de carteira", asy
   const secondLeadWhere = leadCounts[1].where;
   assert.ok(secondLeadWhere.lastContactAt);
   assert.ok(Array.isArray(secondLeadWhere.OR));
-  assert.ok(
-    secondLeadWhere.OR.filter(isRecord).every((item) => !("lastContactAt" in item)),
-  );
+  assert.ok(secondLeadWhere.OR.filter(isRecord).every((item) => !("lastContactAt" in item)));
 });
