@@ -1,6 +1,6 @@
 # Contratos de API - Deusa Analytics
 
-Data de consolidacao: 2026-07-05
+Data de consolidacao: 2026-08-26
 
 Este arquivo e a fonte de verdade dos contratos entre o frontend atual em React, o futuro frontend Angular e o backend NestJS. Qualquer migracao React -> Angular deve consumir estes contratos sem alterar semantica, nomes de campos ou comportamento esperado.
 
@@ -21,8 +21,9 @@ Cliente React atual: `frontend/src/services/api.ts`.
 - Respostas `2xx` sao parseadas como JSON, exceto `204`.
 - Erros HTTP retornam `ApiError` com `message` do payload quando existir.
 - Erros de rede retornam mensagem amigavel de API indisponivel.
-- O React envia o JWT real como `Authorization: Bearer <token>` e valida a sessao com `GET /auth/me`.
-- Clientes futuros devem usar o mesmo backend de auth: `POST /auth/login` e `GET /auth/me`.
+- O navegador autentica com cookie JWT `HttpOnly`, `Secure` em producao e `credentials: include`; o token nao e exposto ao JavaScript nem devolvido no JSON.
+- `Authorization: Bearer <token>` existe apenas como compatibilidade para CLI e integracoes controladas.
+- `SALES` acessa somente leads vinculados ao proprio usuario. `ADMIN` e `MANAGER` acessam a carteira completa; o backend aplica essa regra em detalhe, exportacao, interacoes, dashboard, funil, mapa e notificacoes.
 
 ## Tipos centrais
 
@@ -137,17 +138,19 @@ Quando `origemCoordenada` contem `centroide` ou `jitter`, a coordenada e apenas 
 
 | Status | Metodo | Rota | Query params | Body | Response esperada | Tela atual que consome | Observacoes |
 |---|---|---|---|---|---|---|---|
-| Confirmado | POST | `/auth/login` | none | `{ email: string; password: string }` | `{ accessToken: string; user: UserSummary }` | Nao consumido pelo React atual | Backend real existe; Angular deve usar este endpoint em vez do auth mock local |
-| Confirmado | GET | `/auth/me` | none | none | usuario autenticado | Nao consumido pelo React atual | Requer `Authorization: Bearer <token>`; Angular deve validar sessao aqui |
+| Confirmado | GET | `/health/live` | none | none | processo disponível | Infraestrutura | Não consulta o banco; usar como liveness |
+| Confirmado | GET | `/health/ready` | none | none | API e banco disponíveis | Infraestrutura | Retorna 503 quando PostgreSQL está indisponível |
+| Confirmado | POST | `/auth/login` | none | `{ email: string; password: string; rememberMe?: boolean }` | `{ user: UserSummary }` + cookie `HttpOnly` | `/login` | Resposta usa `Cache-Control: no-store`; nao retorna JWT |
+| Confirmado | GET | `/auth/me` | none | none | usuario autenticado | bootstrap da sessao | Requer cookie de sessao; Bearer e fallback de integracao |
 | Confirmado | GET | `/dashboard/summary` | none | none | `DashboardSummary` | `/dashboard` | Contrato atual de dashboard/analytics; nao existe rota `/analytics` separada |
-| Confirmado | GET | `/leads` | `city`, `uf`, `cnae`, `status`, `potentialLevel`, `minScore`, `maxScore`, `assignedToId`, `search` | none | `Lead[]` | `/leads-b2b`, `/regioes-prioritarias` | Backend retorna ate 250, ordenado por score desc e createdAt desc |
+| Confirmado | GET | `/leads` | `city`, `uf`, `cnae`, `status`, `potentialLevel`, `minScore`, `maxScore`, `assignedToId`, `search`, `page`, `pageSize` | none | `{ items: Lead[]; total; page; pageSize; totalPages }` | `/leads-b2b`, `/regioes-prioritarias` | Maximo de 100 por pagina; `SALES` recebe apenas a propria carteira |
 | Confirmado | GET | `/leads/:id` | none | none | `Lead` com `company`, `assignedTo`, `interactions` | `/leads-b2b/$leadId` | O detalhe tambem chama `/leads/:id/interactions`, gerando duplicacao conhecida |
 | Confirmado | POST | `/leads` | none | `{ companyId: string }` no React atual | `Lead` | `/consulta-cnpj` | Backend aceita campos opcionais adicionais via `CreateLeadDto` |
 | Confirmado | PATCH | `/leads/:id` | none | `UpdateLeadPayload` | `Lead` | `/leads-b2b/$leadId` | Usado para agendar proxima acao; tambem aceita status, score, responsavel e notas |
 | Confirmado | POST | `/leads/:id/convert` | none | none | `Lead` | `/leads-b2b/$leadId` | Marca lead como `CONVERTED` e atualiza `lastContactAt` |
 | Confirmado | POST | `/leads/:id/discard` | none | none | `Lead` | `/leads-b2b/$leadId` | Marca lead como `NOT_INTERESTED` e atualiza `lastContactAt` |
 | Confirmado | GET | `/leads/:id/interactions` | none | none | `LeadInteraction[]` | `/leads-b2b/$leadId` | Historico de contato do lead |
-| Confirmado | POST | `/leads/:id/interactions` | none | `{ userId: string; type: string; description: string }` | `LeadInteraction` | `/leads-b2b`, `/leads-b2b/$leadId` | UI atual bloqueia quando o lead nao tem `assignedToId` |
+| Confirmado | POST | `/leads/:id/interactions` | none | `{ type: string; description: string; newStatus?: LeadStatus; nextActionAt?: string }` | `LeadInteraction` | `/leads-b2b`, `/leads-b2b/$leadId` | Autor e obtido da sessao; `userId` recebido por compatibilidade nunca decide o autor |
 | Confirmado | GET | `/companies` | `city`, `uf`, `cnae`, `situacaoCadastral`, `search` | none | `Company[]` | `/base-de-dados` | Backend retorna ate 200 com `cnaes` e `lead` |
 | Confirmado | GET | `/companies/:id` | none | none | `Company` | Nao identificado em tela principal | Service existe no React, mas o uso atual e baixo |
 | Confirmado | POST | `/companies/sync/:cnpj` | none | none | `Company` | `/consulta-cnpj` | Busca no provider ativo e faz upsert |
@@ -184,27 +187,19 @@ Body:
 Response:
 
 ```ts
-type AuthLoginResponse = {
-  accessToken: string;
-  user: UserSummary;
-};
+type AuthLoginResponse = { user: UserSummary };
 ```
 
 Status: Confirmado.
 
 Observacoes:
 
-- O backend valida senha com bcrypt e emite JWT.
-- O React atual nao consome este endpoint.
-- O Angular deve persistir o token e enviar `Authorization: Bearer <token>` via interceptor.
+- O backend valida senha com bcrypt e grava o JWT apenas no cookie `HttpOnly`.
+- O cliente deve usar `credentials: include` e nunca persistir o JWT.
 
 #### GET `/auth/me`
 
-Headers:
-
-```http
-Authorization: Bearer <token>
-```
+Autenticacao: cookie de sessao; Bearer e aceito somente como fallback de integracao.
 
 Response:
 
@@ -273,7 +268,7 @@ type LeadQuery = {
 };
 ```
 
-Response: `Lead[]`.
+Response: `{ items: Lead[]; total: number; page: number; pageSize: number; totalPages: number }`.
 
 Status: Confirmado.
 
@@ -286,6 +281,7 @@ Observacoes:
 
 - A tela `/leads-b2b` ainda filtra localmente alguns campos de qualidade: `statusVerificacaoEndereco`, `pendenteValidacao`, `nivelOportunidade`, `situacaoCadastral`.
 - Se a base crescer, esses filtros devem virar query params antes ou durante a migracao da tabela para Angular.
+- Para `SALES`, filtros enviados pelo cliente nunca ampliam o escopo alem da propria carteira.
 
 #### GET `/leads/:id`
 
@@ -332,6 +328,8 @@ type UpdateLeadPayload = Partial<{
 }>;
 ```
 
+`SALES` pode atualizar status, notas e agenda somente em leads proprios. Reatribuicao, score e potencial exigem `ADMIN` ou `MANAGER`.
+
 Response: `Lead`.
 
 Status: Confirmado.
@@ -372,11 +370,14 @@ Body:
 
 ```ts
 {
-  userId: string;
   type: string;
   description: string;
+  newStatus?: LeadStatus;
+  nextActionAt?: string;
 }
 ```
+
+O backend identifica o autor pela sessao autenticada e valida o acesso ao lead dentro da transacao.
 
 Response: `LeadInteraction`.
 
@@ -560,12 +561,19 @@ type PipelineCard = {
   assignedTo: string | null;
 };
 
+type PipelineStage = {
+  status: LeadStatus;
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  conversionRate: number;
+  items: PipelineCard[];
+};
+
 type Pipeline = {
-  NEW: PipelineCard[];
-  CONTACTED: PipelineCard[];
-  INTERESTED: PipelineCard[];
-  NEGOTIATION: PipelineCard[];
-  CONVERTED: PipelineCard[];
+  total: number;
+  stages: Partial<Record<LeadStatus, PipelineStage>>;
 };
 ```
 
@@ -573,10 +581,10 @@ Status: Confirmado.
 
 Tela atual: `/funil-comercial`.
 
-## Divergencias e pendencias antes do Angular
+## Divergencias e pendencias conhecidas
 
 1. Divergencia documental corrigida em `backend/README.md`: o provider ativo nao e mock; e `ReceitaFederalProvider`.
-2. Pendente: React ainda usa auth mock local, mas Angular deve usar auth real do backend.
+2. A autenticacao React usa cookie `HttpOnly`; clientes futuros devem preservar o mesmo contrato.
 3. Pendente: decidir se filtros de qualidade de leads continuam client-side ou sobem para `GET /leads`.
 4. Pendente: decidir se o detalhe do lead usa uma ou duas chamadas para interacoes.
-5. Pendente: criar e executar smoke tests de API antes de criar `frontend-angular/`.
+5. Smoke tests autenticados exigem credenciais efemeras de um ambiente isolado; nao usar usuarios da base real em CI.

@@ -16,7 +16,7 @@ npm run dev
 ```
 
 - **Frontend:** `http://localhost:8080` (ou `http://localhost:5173`)
-- **Backend API:** `http://localhost:3001` (Healthcheck: `/health`)
+- **Backend API:** `http://localhost:3001` (liveness: `/health/live`; readiness: `/health/ready`)
 
 ---
 
