@@ -7,6 +7,20 @@ export class HealthController {
 
   constructor(private readonly prisma: PrismaService) {}
 
+  @Get("live")
+  checkLiveness() {
+    return {
+      status: "ok",
+      service: "available",
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  @Get("ready")
+  checkReadiness() {
+    return this.checkHealth();
+  }
+
   @Get()
   async checkHealth() {
     try {

@@ -10,6 +10,7 @@ export type AuditableHttpRequest = {
   url?: string;
   ip?: string;
   body?: unknown;
+  requestId?: string;
   user?: AuthenticatedRequestUser;
 };
 

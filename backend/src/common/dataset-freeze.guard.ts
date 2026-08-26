@@ -59,8 +59,11 @@ export class DatasetFreezeGuard implements CanActivate {
       route: getRequestPath(request),
       statusCode: 403,
       ip: request.ip,
+      requestId: request.requestId,
     });
 
-    throw new ForbiddenException("Alteracoes de leads, empresas e importacoes estao desabilitadas neste ambiente");
+    throw new ForbiddenException(
+      "Alteracoes de leads, empresas e importacoes estao desabilitadas neste ambiente",
+    );
   }
 }

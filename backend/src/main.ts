@@ -8,6 +8,7 @@ import helmet from "helmet";
 import cookieParser from "cookie-parser";
 import { AppModule } from "./app.module";
 import { createOriginProtectionMiddleware } from "./common/origin-protection.middleware";
+import { createRequestIdMiddleware } from "./common/request-id.middleware";
 
 const DEV_JWT_SECRET = "dev-secret-change-me";
 
@@ -42,61 +43,88 @@ function isValidProductionOrigin(origin: string): boolean {
   }
 }
 
-function validateEnv(configService: ConfigService, logger: Logger): void {
-  const nodeEnv = configService.get<string>("NODE_ENV") ?? "development";
-  const jwtSecret = configService.get<string>("JWT_SECRET");
-  const databaseUrl = configService.get<string>("DATABASE_URL");
-  const frontendUrl = configService.get<string>("FRONTEND_URL")?.trim();
-
-  if (!databaseUrl) {
-    logger.error("❌ DATABASE_URL não está definida. Configure a variável de ambiente antes de iniciar.");
-    process.exit(1);
-  }
-
-  if (!jwtSecret) {
-    logger.error("❌ JWT_SECRET não está definida. Configure a variável de ambiente antes de iniciar.");
-    process.exit(1);
-  }
-
+function validateProductionEnv(
+  configService: ConfigService,
+  logger: Logger,
+  jwtSecret: string,
+): void {
   const normalizedJwtSecret = jwtSecret.toLowerCase();
-  const weakSecretMarkers = [DEV_JWT_SECRET, "change-me", "dev-secret", "placeholder", "gere_um_segredo"];
-  if (nodeEnv === "production" && weakSecretMarkers.some((marker) => normalizedJwtSecret.includes(marker))) {
+  const weakSecretMarkers = [
+    DEV_JWT_SECRET,
+    "change-me",
+    "dev-secret",
+    "placeholder",
+    "gere_um_segredo",
+  ];
+  if (
+    weakSecretMarkers.some((marker) => normalizedJwtSecret.includes(marker))
+  ) {
     logger.error(
       "❌ SEGURANÇA: JWT_SECRET parece usar valor padrão, placeholder ou segredo de desenvolvimento em NODE_ENV=production. " +
-      "Defina um segredo forte antes de continuar.",
+        "Defina um segredo forte antes de continuar.",
     );
     process.exit(1);
   }
 
-  if (nodeEnv === "production" && jwtSecret.length < 32) {
+  if (jwtSecret.length < 32) {
     logger.error(
       `❌ SEGURANÇA: JWT_SECRET possui apenas ${jwtSecret.length} caracteres. ` +
-      "Em produção, use pelo menos 32 caracteres aleatórios.",
+        "Em produção, use pelo menos 32 caracteres aleatórios.",
     );
     process.exit(1);
   }
 
-  // Validar allowlist de origens obrigatória em produção
+  const allowedOrigins = getConfiguredAllowedOrigins(configService);
+  const cookieSameSite = configService.get<string>("AUTH_COOKIE_SAME_SITE")?.trim().toLowerCase();
+  if (cookieSameSite && !["lax", "strict", "none"].includes(cookieSameSite)) {
+    logger.error("❌ SEGURANÇA: AUTH_COOKIE_SAME_SITE deve ser lax, strict ou none.");
+    process.exit(1);
+  }
+  if (
+    allowedOrigins.length === 0 ||
+    allowedOrigins.some((origin) => !isValidProductionOrigin(origin))
+  ) {
+    logger.error(
+      "❌ SEGURANÇA: ALLOWED_ORIGINS contém origem inválida. Use somente origens HTTPS completas, sem caminho ou barra final.",
+    );
+    process.exit(1);
+  }
+  const frontendUrl = configService.get<string>("FRONTEND_URL")?.trim();
+  if (!frontendUrl || !isValidProductionOrigin(frontendUrl)) {
+    logger.error(
+      "❌ SEGURANÇA: FRONTEND_URL deve ser uma origem HTTPS válida para gerar links de recuperação de senha.",
+    );
+    process.exit(1);
+  }
+  if (
+    !configService.get<string>("RESEND_API_KEY") ||
+    !configService.get<string>("RESEND_FROM_EMAIL")
+  ) {
+    logger.error(
+      "❌ CONFIGURAÇÃO: RESEND_API_KEY e RESEND_FROM_EMAIL são obrigatórias em produção para recuperação de senha.",
+    );
+    process.exit(1);
+  }
+}
+
+function validateEnv(configService: ConfigService, logger: Logger): void {
+  const nodeEnv = (configService.get<string>("NODE_ENV") ?? "development").trim().toLowerCase();
+  const jwtSecret = configService.get<string>("JWT_SECRET");
+
+  if (!configService.get<string>("DATABASE_URL")) {
+    logger.error(
+      "❌ DATABASE_URL não está definida. Configure a variável de ambiente antes de iniciar.",
+    );
+    process.exit(1);
+  }
+  if (!jwtSecret) {
+    logger.error(
+      "❌ JWT_SECRET não está definida. Configure a variável de ambiente antes de iniciar.",
+    );
+    process.exit(1);
+  }
   if (nodeEnv === "production") {
-    const allowedOrigins = getConfiguredAllowedOrigins(configService);
-    if (allowedOrigins.length === 0 || allowedOrigins.some((origin) => !isValidProductionOrigin(origin))) {
-      logger.error(
-        "❌ SEGURANÇA: ALLOWED_ORIGINS contém origem inválida. Use somente origens HTTPS completas, sem caminho ou barra final.",
-      );
-      process.exit(1);
-    }
-    if (!frontendUrl || !isValidProductionOrigin(frontendUrl)) {
-      logger.error(
-        "❌ SEGURANÇA: FRONTEND_URL deve ser uma origem HTTPS válida para gerar links de recuperação de senha.",
-      );
-      process.exit(1);
-    }
-    if (!configService.get<string>("RESEND_API_KEY") || !configService.get<string>("RESEND_FROM_EMAIL")) {
-      logger.error(
-        "❌ CONFIGURAÇÃO: RESEND_API_KEY e RESEND_FROM_EMAIL são obrigatórias em produção para recuperação de senha.",
-      );
-      process.exit(1);
-    }
+    validateProductionEnv(configService, logger, jwtSecret);
   }
 }
 
@@ -112,7 +140,7 @@ async function bootstrap() {
   validateEnv(configService, logger);
 
   const port = configService.get<number>("PORT") ?? 3001;
-  const nodeEnv = configService.get<string>("NODE_ENV") ?? "development";
+  const nodeEnv = (configService.get<string>("NODE_ENV") ?? "development").trim().toLowerCase();
   const isProduction = nodeEnv === "production";
   const allowedOrigins = getConfiguredAllowedOrigins(configService);
   const allowedOriginSet = new Set(allowedOrigins);
@@ -137,21 +165,42 @@ async function bootstrap() {
   );
 
   // Headers customizados de conformidade LGPD
-  app.use((_request: unknown, response: { setHeader(name: string, value: string): void }, next: () => void) => {
-    response.setHeader("Permissions-Policy", "geolocation=(), camera=(), microphone=()");
-    response.setHeader("X-LGPD-Compliance", "Enforced (Lei 13.709/2018)");
-    next();
-  });
+  app.use(
+    (
+      _request: unknown,
+      response: { setHeader(name: string, value: string): void },
+      next: () => void,
+    ) => {
+      response.setHeader("Permissions-Policy", "geolocation=(), camera=(), microphone=()");
+      response.setHeader("X-LGPD-Compliance", "Enforced (Lei 13.709/2018)");
+      next();
+    },
+  );
 
   // ── Cookie Parser — Processa cookies para autenticação httpOnly ─────────
   app.use(cookieParser());
+  app.use(createRequestIdMiddleware());
+  app.use(
+    "/auth",
+    (
+      _request: unknown,
+      response: { setHeader(name: string, value: string): void },
+      next: () => void,
+    ) => {
+      response.setHeader("Cache-Control", "no-store");
+      next();
+    },
+  );
 
   // Cookies de sessao exigem bloqueio ativo de CSRF; CORS sozinho nao impede o envio da requisicao.
   app.use(createOriginProtectionMiddleware(isProduction, allowedOriginSet));
 
   // ── CORS — restritivo em produção, permissivo em desenvolvimento ────────
   app.enableCors({
-    origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+    origin: (
+      origin: string | undefined,
+      callback: (err: Error | null, allow?: boolean) => void,
+    ) => {
       // Sem origin = server-to-server (curl, Postman) → permitir em dev, bloquear em prod
       if (!origin) {
         callback(null, !isProduction);
@@ -174,7 +223,8 @@ async function bootstrap() {
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "Cookie"],
+    allowedHeaders: ["Content-Type", "Authorization", "Cookie", "X-Request-ID"],
+    exposedHeaders: ["X-Request-ID"],
     maxAge: 86400, // Cache preflight por 24h
   });
 
@@ -193,13 +243,10 @@ async function bootstrap() {
       .setTitle("Deusa Analytics API")
       .setDescription(
         "API REST da plataforma de inteligência comercial B2B da Deusa Alimentos. " +
-        "Documentação dos endpoints de autenticação, leads, empresas, importações, mapa e dashboard."
+          "Documentação dos endpoints de autenticação, leads, empresas, importações, mapa e dashboard.",
       )
       .setVersion("1.0.0")
-      .addBearerAuth(
-        { type: "http", scheme: "bearer", bearerFormat: "JWT" },
-        "JWT",
-      )
+      .addBearerAuth({ type: "http", scheme: "bearer", bearerFormat: "JWT" }, "JWT")
       .build();
 
     const document = SwaggerModule.createDocument(app, swaggerConfig);

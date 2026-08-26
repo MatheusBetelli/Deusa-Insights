@@ -73,9 +73,10 @@ export class AuditInterceptor implements NestInterceptor {
     outcome: { outcome: "SUCCESS" | "FAILURE"; statusCode: number; durationMs: number },
   ): void {
     const responseUser = this.readResponseUser(result);
-    const bodyEmail = action === "LOGIN" || action === "PASSWORD_RESET_REQUEST"
-      ? readString(request.body, "email")
-      : undefined;
+    const bodyEmail =
+      action === "LOGIN" || action === "PASSWORD_RESET_REQUEST"
+        ? readString(request.body, "email")
+        : undefined;
 
     this.auditLogger.logEvent({
       action,
@@ -85,6 +86,7 @@ export class AuditInterceptor implements NestInterceptor {
       method: request.method.toUpperCase(),
       route: getRequestPath(request),
       ip: request.ip,
+      requestId: request.requestId,
     });
   }
 

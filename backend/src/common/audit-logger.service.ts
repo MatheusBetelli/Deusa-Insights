@@ -25,6 +25,7 @@ export type AuditEvent = {
   statusCode?: number;
   durationMs?: number;
   ip?: string;
+  requestId?: string;
   timestamp?: Date;
 };
 
@@ -48,6 +49,7 @@ export class AuditLoggerService {
         statusCode: event.statusCode,
         durationMs: event.durationMs,
         ip: event.ip,
+        requestId: event.requestId,
         details: event.details,
       }),
     );

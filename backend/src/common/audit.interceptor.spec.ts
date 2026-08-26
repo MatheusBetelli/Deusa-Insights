@@ -24,33 +24,57 @@ test("AuditInterceptor - registra login e exportacao sem expor credenciais", asy
   const interceptor = new AuditInterceptor(logger);
 
   const loginHandler = {
-    handle: () => of({
-      accessToken: "token-nao-deve-ser-auditado",
-      user: { id: "usr-1", email: "sales@deusa.test" },
-    }),
+    handle: () =>
+      of({
+        accessToken: "token-nao-deve-ser-auditado",
+        user: { id: "usr-1", email: "sales@deusa.test" },
+      }),
   } as CallHandler;
-  await lastValueFrom(interceptor.intercept(createContext({
-    method: "POST",
-    originalUrl: "/auth/login",
-    body: { email: "sales@deusa.test", password: "segredo" },
-  }, 201), loginHandler));
+  await lastValueFrom(
+    interceptor.intercept(
+      createContext(
+        {
+          method: "POST",
+          originalUrl: "/auth/login",
+          requestId: "request-login-1",
+          body: { email: "sales@deusa.test", password: "segredo" },
+        },
+        201,
+      ),
+      loginHandler,
+    ),
+  );
 
   const logoutHandler = { handle: () => of({ message: "ok" }) } as CallHandler;
-  await lastValueFrom(interceptor.intercept(createContext({
-    method: "POST",
-    originalUrl: "/auth/logout",
-    user: { sub: "usr-1", email: "sales@deusa.test" },
-  }), logoutHandler));
+  await lastValueFrom(
+    interceptor.intercept(
+      createContext({
+        method: "POST",
+        originalUrl: "/auth/logout",
+        user: { sub: "usr-1", email: "sales@deusa.test" },
+      }),
+      logoutHandler,
+    ),
+  );
 
   const exportHandler = { handle: () => of("csv") } as CallHandler;
-  await lastValueFrom(interceptor.intercept(createContext({
-    method: "GET",
-    originalUrl: "/leads/export.csv?city=Franca",
-    user: { sub: "usr-1", email: "sales@deusa.test" },
-  }), exportHandler));
+  await lastValueFrom(
+    interceptor.intercept(
+      createContext({
+        method: "GET",
+        originalUrl: "/leads/export.csv?city=Franca",
+        user: { sub: "usr-1", email: "sales@deusa.test" },
+      }),
+      exportHandler,
+    ),
+  );
 
-  assert.deepEqual(events.map((event) => event.action), ["LOGIN", "LOGOUT", "EXPORT_DATA"]);
+  assert.deepEqual(
+    events.map((event) => event.action),
+    ["LOGIN", "LOGOUT", "EXPORT_DATA"],
+  );
   assert.equal(events[0]?.userId, "usr-1");
+  assert.equal(events[0]?.requestId, "request-login-1");
   assert.equal(events[2]?.route, "/leads/export.csv");
   assert.ok(!JSON.stringify(events).includes("segredo"));
   assert.ok(!JSON.stringify(events).includes("token-nao-deve-ser-auditado"));
