@@ -1,6 +1,7 @@
 import { Transform } from "class-transformer";
-import { IsEmail, IsEnum, IsString, MaxLength, MinLength } from "class-validator";
+import { IsEmail, IsEnum, IsString, Matches, MaxLength, MinLength } from "class-validator";
 import { UserRole } from "@prisma/client";
+import { STRONG_PASSWORD_MESSAGE, STRONG_PASSWORD_PATTERN } from "../../auth/password-policy";
 
 export class CreateUserDto {
   @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
@@ -15,8 +16,9 @@ export class CreateUserDto {
   email!: string;
 
   @IsString()
-  @MinLength(8)
+  @MinLength(12)
   @MaxLength(128)
+  @Matches(STRONG_PASSWORD_PATTERN, { message: STRONG_PASSWORD_MESSAGE })
   password!: string;
 
   @IsEnum(UserRole)

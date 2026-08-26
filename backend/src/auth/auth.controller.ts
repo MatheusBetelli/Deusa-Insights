@@ -13,11 +13,10 @@ export const AUTH_COOKIE_NAME = "auth_token";
 const COOKIE_MAX_AGE_MS = 8 * 60 * 60 * 1000;
 
 export function getAuthCookieOptions(rememberMe = true): CookieOptions {
-  const isProduction = process.env.NODE_ENV === "production";
+  const isProduction = process.env.NODE_ENV?.trim().toLowerCase() === "production";
   const configuredSameSite = process.env.AUTH_COOKIE_SAME_SITE?.trim().toLowerCase();
-  const sameSite = configuredSameSite === "none" || configuredSameSite === "strict"
-    ? configuredSameSite
-    : "lax";
+  const sameSite =
+    configuredSameSite === "none" || configuredSameSite === "strict" ? configuredSameSite : "lax";
   const options: CookieOptions = {
     httpOnly: true,
     secure: isProduction,
@@ -33,11 +32,8 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post("login")
-  @Throttle({ default: { ttl: 60000, limit: 30 } })
-  async login(
-    @Body() dto: LoginDto,
-    @Res({ passthrough: true }) response: Response,
-  ) {
+  @Throttle({ default: { ttl: 60000, limit: 10 } })
+  async login(@Body() dto: LoginDto, @Res({ passthrough: true }) response: Response) {
     const { accessToken, user } = await this.authService.login(dto);
     response.cookie(AUTH_COOKIE_NAME, accessToken, getAuthCookieOptions(dto.rememberMe));
     return { user };
