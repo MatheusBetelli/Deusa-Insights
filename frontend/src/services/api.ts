@@ -1,4 +1,5 @@
 import { AuthService } from "@/lib/auth";
+import { publicRuntimeEnv } from "@/lib/runtime-env";
 
 class ApiError extends Error {
   status?: number;
@@ -10,8 +11,8 @@ class ApiError extends Error {
   }
 }
 
-const CONFIGURED_API_URL = import.meta.env.VITE_API_URL?.trim();
-const API_URL = CONFIGURED_API_URL || (import.meta.env.PROD ? "" : "http://127.0.0.1:3001");
+const CONFIGURED_API_URL = publicRuntimeEnv.VITE_API_URL?.trim();
+const API_URL = CONFIGURED_API_URL || (publicRuntimeEnv.PROD ? "" : "http://127.0.0.1:3001");
 const REQUEST_TIMEOUT_MS = 45_000;
 
 function buildUrl(path: string, query?: Record<string, string | number | undefined | null>) {

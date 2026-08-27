@@ -11,6 +11,8 @@ const frontendDirectory = join(scriptsDirectory, "..", "frontend");
 const files = collectSpecFiles(join(frontendDirectory, "src"));
 const declaredTests = countDeclaredTests(files);
 
+process.env.NODE_ENV ??= "test";
+
 test("frontend test suite discovery is complete", () => {
   assert.ok(files.length >= 8, `Expected at least 8 spec files, found ${files.length}`);
   assert.ok(declaredTests >= 16, `Expected at least 16 declared tests, found ${declaredTests}`);

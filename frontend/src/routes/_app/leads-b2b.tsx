@@ -14,6 +14,7 @@ import {
   statusLabels,
 } from "@/lib/commercial-formatters";
 import { ESTADOS_UF } from "@/lib/constants";
+import { publicRuntimeEnv } from "@/lib/runtime-env";
 import { AuthService } from "@/lib/auth";
 import { citiesService } from "@/services/citiesService";
 import { cnaesService } from "@/services/cnaesService";
@@ -111,7 +112,7 @@ export const Route = createFileRoute("/_app/leads-b2b")({
 });
 
 const PAGE_SIZE = 25;
-const STORE_URL = import.meta.env.VITE_STORE_URL || "https://loja.deusalimentos.com.br";
+const STORE_URL = publicRuntimeEnv.VITE_STORE_URL || "https://loja.deusalimentos.com.br";
 
 type SortBy = NonNullable<LeadQuery["sortBy"]>;
 

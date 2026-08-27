@@ -22,7 +22,9 @@ function createContext(
 ): ExecutionContext {
   const handler = () => undefined;
   if (options.readOnly) Reflect.defineMetadata(FROZEN_DATASET_READ_ONLY_KEY, true, handler);
-  if (options.commercialAction) Reflect.defineMetadata(COMMERCIAL_ACTION_MUTATION_KEY, true, handler);
+  if (options.commercialAction) {
+    Reflect.defineMetadata(COMMERCIAL_ACTION_MUTATION_KEY, true, handler);
+  }
   return {
     getHandler: () => handler,
     getClass: () => class TestController {},

@@ -1,8 +1,10 @@
+import { publicRuntimeEnv } from "@/lib/runtime-env";
+
 const LEGACY_AUTH_TOKEN_KEY = "deusa_auth_token";
 const USER_DATA_KEY = "deusa_user_data";
 
-const CONFIGURED_API_URL = import.meta.env.VITE_API_URL?.trim();
-const API_URL = CONFIGURED_API_URL || (import.meta.env.PROD ? "" : "http://127.0.0.1:3001");
+const CONFIGURED_API_URL = publicRuntimeEnv.VITE_API_URL?.trim();
+const API_URL = CONFIGURED_API_URL || (publicRuntimeEnv.PROD ? "" : "http://127.0.0.1:3001");
 const REQUEST_TIMEOUT_MS = 45_000;
 
 function buildAuthUrl(path: string): string {

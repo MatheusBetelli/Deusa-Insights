@@ -47,25 +47,13 @@ Para executar o ambiente localmente:
 
 ### A. Criar o Projeto e Connection Strings
 1. Acesse [supabase.com](https://supabase.com) e crie um novo projeto.
-2. Crie uma role exclusiva para runtime sem privilégios de `SUPERUSER`, `BYPASSRLS` ou DDL. A role lê a carteira congelada e só grava usuários de autenticação:
+2. Crie uma role exclusiva para runtime sem privilégios de `SUPERUSER`, `BYPASSRLS` ou DDL. A role lê a carteira congelada e só grava o mínimo necessário para autenticação e ações comerciais manuais:
    ```sql
    -- No Supabase SQL Editor:
    CREATE ROLE deusa_app_user WITH LOGIN PASSWORD 'use-um-segredo-do-vault'
      NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
-   GRANT CONNECT ON DATABASE postgres TO deusa_app_user;
-   GRANT USAGE ON SCHEMA public TO deusa_app_user;
-   GRANT SELECT ON ALL TABLES IN SCHEMA public TO deusa_app_user;
-   GRANT INSERT, UPDATE, DELETE ON TABLE public.users TO deusa_app_user;
-   GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO deusa_app_user;
-   REVOKE INSERT, UPDATE, DELETE ON TABLE
-     public.cities, public.cnaes, public.companies, public.company_cnaes,
-     public.client_accounts, public.leads, public.lead_interactions,
-     public.import_jobs, public.company_details, public.profiles,
-     public.user_mappings
-   FROM deusa_app_user;
-   ALTER DEFAULT PRIVILEGES IN SCHEMA public
-     GRANT SELECT ON TABLES TO deusa_app_user;
    ```
+   A migration `20260827123000_lock_supabase_data_api` aplica RLS, revoga privilégios de `anon`/`authenticated` e concede à role `deusa_app_user` somente `SELECT` geral, writes de autenticação, updates comerciais limitados em `leads`, inserts em `lead_interactions` e inserts/updates controlados em `company_contacts`. Crie a role antes de `prisma migrate deploy`; se ela for criada depois, reaplique o SQL dessa migration de forma controlada.
 3. Em `Project Settings -> Database -> Connection String`:
    - **Transaction Pooler** para `DATABASE_URL` da API no Cloud Run:
      `postgresql://deusa_app_user.[PROJECT_REF]:[SENHA]@aws-0-[REGIAO].pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=5&pool_timeout=10`
@@ -75,6 +63,9 @@ Para executar o ambiente localmente:
 
 ### B. Banco Congelado
 O banco Supabase existente é a SSOT. Deploys rotineiros não executam seed, importação, deduplicação, geocodificação nem restauração de dump. `DIRECT_URL` pertence exclusivamente à role de migração e só pode ser usada por um job controlado para `prisma migrate deploy` após backup e revisão do SQL.
+
+### C. Data API
+O frontend não usa Supabase diretamente. Mantenha a Data API/PostgREST desabilitada quando possível. Se ela permanecer ligada no projeto Supabase gerenciado, as roles `anon` e `authenticated` não devem possuir `USAGE` no schema `public` nem privilégios em tabelas/sequences. Nunca exponha `service_role`, `DATABASE_URL`, `DIRECT_URL`, `JWT_SECRET` ou tokens administrativos em variáveis `VITE_*`.
 
 ---
 
@@ -87,9 +78,8 @@ Cadastre os seguintes segredos no **Google Secret Manager**:
 - `ALLOWED_ORIGINS`: Domínio real do frontend (ex: `https://app.deusainsights.com.br`).
 - `FRONTEND_URL`: URL principal do frontend, usada nos links de recuperação de senha.
 - `RESEND_API_KEY` e `RESEND_FROM_EMAIL`: credenciais do serviço de e-mail de recuperação.
-- `ENABLE_LEAD_MUTATIONS=false`: trava obrigatória da carteira congelada.
 
-Não injete `DIRECT_URL` nem `GOOGLE_MAPS_API_KEY` no serviço Cloud Run de rotina. O acesso individual pago, quando formalmente aprovado, deve usar uma revisão temporária e auditada.
+Configure como variáveis não secretas de produção: `ENABLE_LEAD_MUTATIONS=false` para manter a carteira congelada e `ENABLE_COMMERCIAL_ACTIONS=true` para permitir telefone, e-mail, WhatsApp, abordagem, observação, status comercial e envio B2B. Não injete `DIRECT_URL`, `GOOGLE_MAPS_API_KEY`, `service_role` ou chaves Supabase administrativas no serviço Cloud Run de rotina. O acesso individual pago, quando formalmente aprovado, deve usar uma revisão temporária e auditada.
 
 ### B. Build do Container e Push para o Artifact Registry
 ```bash
@@ -130,7 +120,7 @@ gcloud run deploy deusa-backend \
   --concurrency=20 \
   --max-instances=3 \
   --set-secrets="DATABASE_URL=DATABASE_URL:latest,JWT_SECRET=JWT_SECRET:latest,ALLOWED_ORIGINS=ALLOWED_ORIGINS:latest,FRONTEND_URL=FRONTEND_URL:latest,RESEND_API_KEY=RESEND_API_KEY:latest,RESEND_FROM_EMAIL=RESEND_FROM_EMAIL:latest" \
-  --set-env-vars="NODE_ENV=production,ENABLE_LEAD_MUTATIONS=false,AUTH_COOKIE_SAME_SITE=lax"
+  --set-env-vars="NODE_ENV=production,ENABLE_LEAD_MUTATIONS=false,ENABLE_COMMERCIAL_ACTIONS=true,AUTH_COOKIE_SAME_SITE=lax"
 ```
 
 `DIRECT_URL` deve ficar disponível apenas para a etapa controlada de migrations. Com os valores acima, o Prisma abre no máximo 5 conexões por instância e o Cloud Run limita o total teórico da aplicação a 15 conexões.
@@ -163,7 +153,7 @@ O frontend não é uma SPA estática. O entrypoint `frontend/src/server.ts` exec
 
 ```bash
 cd frontend
-VITE_API_URL=https://api.seu-dominio.com npm run deploy
+VITE_API_URL=https://api.seu-dominio.com VITE_STORE_URL=https://loja.deusalimentos.com.br npm run deploy
 ```
 
 Use domínios sob o mesmo site registrável, por exemplo `app.deusainsights.com.br` e `api.deusainsights.com.br`, para manter `SameSite=Lax`. Se a topologia exigir sites diferentes, configure `AUTH_COOKIE_SAME_SITE=none`, mantenha `Secure` e valide a proteção de origem antes do corte.
@@ -194,6 +184,7 @@ Se houver falha após um novo deploy:
 [ ] Connection Strings (DATABASE_URL e DIRECT_URL) testadas
 [ ] `DATABASE_URL` usa role runtime sem `SUPERUSER`, `BYPASSRLS` ou DDL
 [ ] `DIRECT_URL` administrativa não está disponível no container runtime
+[ ] Data API/PostgREST desabilitada ou roles `anon`/`authenticated` sem privilégios em `public`
 [ ] Migrations aplicadas via `npx prisma migrate deploy`
 [ ] CI validou migrations do zero e ausência de drift em PostgreSQL efêmero
 [ ] Backup/PITR confirmado e restauração testada dentro do RTO/RPO acordado
@@ -205,6 +196,7 @@ Se houver falha após um novo deploy:
 [ ] CORS validado apenas para a URL real do frontend
 [ ] CSP do frontend e do backend validada no navegador
 [ ] `ENABLE_LEAD_MUTATIONS=false` confirmado na revisão ativa
+[ ] `ENABLE_COMMERCIAL_ACTIONS=true` confirmado na revisão ativa
 [ ] Limites de conexão, concorrência e número de instâncias conferidos
 [ ] Login, logout e `/auth/me` validados com cookie `HttpOnly`, `Secure` e sem JWT no corpo
 [ ] Cloudflare e Cloud Run usam domínios compatíveis com a política `SameSite`

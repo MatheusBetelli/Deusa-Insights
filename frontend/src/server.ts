@@ -1,5 +1,6 @@
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
+import { publicRuntimeEnv } from "./lib/runtime-env";
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
@@ -10,14 +11,14 @@ let serverEntryPromise: Promise<ServerEntry> | undefined;
 function getContentSecurityPolicy(): string {
   const connectOrigins = new Set<string>(["'self'"]);
 
-  if (import.meta.env.DEV) {
+  if (publicRuntimeEnv.DEV) {
     connectOrigins.add("http://localhost:*");
     connectOrigins.add("http://127.0.0.1:*");
     connectOrigins.add("ws:");
     connectOrigins.add("wss:");
   }
 
-  const configuredApiUrl = import.meta.env.VITE_API_URL?.trim();
+  const configuredApiUrl = publicRuntimeEnv.VITE_API_URL?.trim();
   if (configuredApiUrl) {
     try {
       const parsedUrl = new URL(configuredApiUrl);

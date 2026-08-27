@@ -22,6 +22,7 @@ import {
   potentialLabels,
   statusLabels,
 } from "@/lib/commercial-formatters";
+import { publicRuntimeEnv } from "@/lib/runtime-env";
 import { leadsService } from "@/services/leadsService";
 import { companiesService } from "@/services/companiesService";
 import type { Lead, LeadStatus } from "@/types/lead";
@@ -48,7 +49,7 @@ type LeadDetailsSheetProps = {
   onUpdated?: () => void;
 };
 
-const STORE_URL = import.meta.env.VITE_STORE_URL || "https://loja.deusalimentos.com.br";
+const STORE_URL = publicRuntimeEnv.VITE_STORE_URL || "https://loja.deusalimentos.com.br";
 
 function getEstablishmentSegment(cnae?: string | null): string {
   const norm = (cnae ?? "").replace(/\D/g, "");

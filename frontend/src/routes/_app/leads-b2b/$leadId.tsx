@@ -16,6 +16,7 @@ import {
   potentialLabels,
   statusLabels,
 } from "@/lib/commercial-formatters";
+import { publicRuntimeEnv } from "@/lib/runtime-env";
 import { extractCompanyContacts } from "@/features/leads/components/LeadContactsPopover";
 import { leadsService } from "@/services/leadsService";
 import { companiesService } from "@/services/companiesService";
@@ -42,7 +43,7 @@ export const Route = createFileRoute("/_app/leads-b2b/$leadId")({
   component: LeadDetail,
 });
 
-const STORE_URL = import.meta.env.VITE_STORE_URL || "https://loja.deusalimentos.com.br";
+const STORE_URL = publicRuntimeEnv.VITE_STORE_URL || "https://loja.deusalimentos.com.br";
 
 function LeadDetail() {
   const leadRequestSequence = useRef(0);
