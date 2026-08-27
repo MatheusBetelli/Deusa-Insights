@@ -21,12 +21,33 @@ function logWarn(msg, recommendation) {
   }
 }
 
+function commandOutput(error) {
+  if (!error || typeof error !== "object") return "";
+  const output = error.stdout;
+  if (Buffer.isBuffer(output)) return output.toString("utf8").trim();
+  if (typeof output === "string") return output.trim();
+  return "";
+}
+
+function commandBlockedBySandbox(error) {
+  return error && typeof error === "object" && error.code === "EPERM";
+}
+
+function hasSupportedNodeVersion(version) {
+  const [major, minor] = version.replace("v", "").split(".").map((part) => parseInt(part, 10));
+  if (major > 24) return true;
+  if (major === 24) return true;
+  return major === 22 && minor >= 13;
+}
+
 function checkPort(port) {
   return new Promise((resolve) => {
     const server = net.createServer();
     server.once("error", (err) => {
       if (err.code === "EADDRINUSE") {
         resolve({ inUse: true });
+      } else if (err.code === "EPERM") {
+        resolve({ inUse: false, blocked: true });
       } else {
         resolve({ inUse: false });
       }
@@ -45,15 +66,15 @@ function checkTcpConnection(host, port) {
     socket.setTimeout(2000);
     socket.once("connect", () => {
       socket.destroy();
-      resolve(true);
+      resolve({ connected: true });
     });
-    socket.once("error", () => {
+    socket.once("error", (err) => {
       socket.destroy();
-      resolve(false);
+      resolve({ connected: false, blocked: err.code === "EPERM" });
     });
     socket.once("timeout", () => {
       socket.destroy();
-      resolve(false);
+      resolve({ connected: false });
     });
     socket.connect(port, host);
   });
@@ -69,12 +90,14 @@ async function runDoctor() {
 
   // 2. Node.js Version
   const nodeVersion = process.version;
-  const majorNode = parseInt(nodeVersion.replace("v", "").split(".")[0], 10);
-  if (majorNode >= 20) {
-    logOk(`Node.js versão ${nodeVersion} (Compatível: >=20.x)`);
+  if (hasSupportedNodeVersion(nodeVersion)) {
+    logOk(`Node.js versão ${nodeVersion} (Compatível: ^22.13.0 || >=24.0.0)`);
   } else {
     hasErrors = true;
-    logError(`Node.js incompatível. Esperado: >=20.x. Encontrado: ${nodeVersion}`, "Atualize o Node.js para v20 LTS ou superior (https://nodejs.org).");
+    logError(
+      `Node.js incompatível. Esperado: ^22.13.0 || >=24.0.0. Encontrado: ${nodeVersion}`,
+      "Atualize o Node.js para v22.13+ ou v24+.",
+    );
   }
 
   // 3. npm Version
@@ -82,8 +105,15 @@ async function runDoctor() {
     const npmVer = execSync("npm --version", { encoding: "utf8" }).trim();
     logOk(`npm instalado versão ${npmVer}`);
   } catch (err) {
-    hasErrors = true;
-    logError("npm não encontrado", "Instale o Node.js/npm.");
+    const npmAgent = process.env.npm_config_user_agent;
+    if (npmAgent) {
+      logOk(`npm detectado pelo ambiente: ${npmAgent.split(" ")[0]}`);
+    } else if (commandBlockedBySandbox(err)) {
+      logWarn("Verificação do npm bloqueada pelo sandbox", "Execute 'npm -v' no terminal local.");
+    } else {
+      hasErrors = true;
+      logError("npm não encontrado", "Instale o Node.js/npm.");
+    }
   }
 
   // 4. Docker & Docker Compose
@@ -93,15 +123,36 @@ async function runDoctor() {
     logOk(`Docker encontrado: ${dockerVer}`);
     dockerOk = true;
   } catch (err) {
-    logWarn("Docker CLI não encontrado no PATH", "Instale o Docker Desktop (Windows) ou Docker Engine (Linux).");
+    const output = commandOutput(err);
+    if (output) {
+      logOk(`Docker encontrado: ${output}`);
+      dockerOk = true;
+    } else if (commandBlockedBySandbox(err)) {
+      logWarn(
+        "Verificação do Docker bloqueada pelo sandbox",
+        "Execute 'docker --version' no terminal local.",
+      );
+    } else {
+      logWarn("Docker CLI não encontrado no PATH", "Instale o Docker Desktop (Windows) ou Docker Engine (Linux).");
+    }
   }
 
   if (dockerOk) {
     try {
-      execSync("docker compose version", { encoding: "utf8" });
-      logOk("Docker Compose v2 disponível");
+      const composeVersion = execSync("docker compose version", { encoding: "utf8" }).trim();
+      logOk(`Docker Compose disponível: ${composeVersion}`);
     } catch (err) {
-      logWarn("Docker Compose v2 não detectado via 'docker compose'", "Verifique a instalação do Docker Compose.");
+      const output = commandOutput(err);
+      if (output) {
+        logOk(`Docker Compose disponível: ${output}`);
+      } else if (commandBlockedBySandbox(err)) {
+        logWarn(
+          "Verificação do Docker Compose bloqueada pelo sandbox",
+          "Execute 'docker compose version' no terminal local.",
+        );
+      } else {
+        logWarn("Docker Compose v2 não detectado via 'docker compose'", "Verifique a instalação do Docker Compose.");
+      }
     }
   }
 
@@ -125,9 +176,14 @@ async function runDoctor() {
   }
 
   // 6. Conexão PostgreSQL (Porta 5435)
-  const isPgConnected = await checkTcpConnection("127.0.0.1", 5435);
-  if (isPgConnected) {
+  const pgConnection = await checkTcpConnection("127.0.0.1", 5435);
+  if (pgConnection.connected) {
     logOk("PostgreSQL acessível na porta 5435 (localhost:5435)");
+  } else if (pgConnection.blocked) {
+    logWarn(
+      "Verificação TCP do PostgreSQL bloqueada pelo sandbox",
+      "Execute 'npm run db:start' e 'npx prisma migrate status' no terminal local.",
+    );
   } else {
     logWarn("PostgreSQL não está acessível na porta 5435", "Execute 'npm run db:start' para subir o container Docker do banco.");
   }
@@ -136,6 +192,8 @@ async function runDoctor() {
   const port3001 = await checkPort(3001);
   if (port3001.inUse) {
     logWarn("Porta 3001 (Backend) está em uso", "Se o backend não estiver rodando propositalmente, libere a porta 3001.");
+  } else if (port3001.blocked) {
+    logWarn("Verificação da porta 3001 bloqueada pelo sandbox", "Confira a porta no terminal local se necessário.");
   } else {
     logOk("Porta 3001 (Backend) está livre");
   }
@@ -143,6 +201,8 @@ async function runDoctor() {
   const port8080 = await checkPort(8080);
   if (port8080.inUse) {
     logWarn("Porta 8080 (Frontend) está em uso", "Se o frontend não estiver rodando propositalmente, libere a porta 8080.");
+  } else if (port8080.blocked) {
+    logWarn("Verificação da porta 8080 bloqueada pelo sandbox", "Confira a porta no terminal local se necessário.");
   } else {
     logOk("Porta 8080 (Frontend) está livre");
   }

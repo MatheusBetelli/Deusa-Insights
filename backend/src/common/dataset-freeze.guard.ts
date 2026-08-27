@@ -33,7 +33,7 @@ export function areDatasetMutationsEnabled(configService: ConfigService): boolea
   return configuredValue;
 }
 
-export function areCommercialActionsEnabled(configService: ConfigService): boolean {
+function areCommercialActionsEnabled(configService: ConfigService): boolean {
   const configuredValue = parseBooleanFlag(
     configService.get<string | boolean>("ENABLE_COMMERCIAL_ACTIONS"),
   );
