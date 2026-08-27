@@ -37,6 +37,72 @@ test("convert bloqueia conversao manual e exige confirmacao via ERP/B2B", async 
   );
 });
 
+test("create rejeita status CONVERTED manual", async () => {
+  const service = new LeadsService({} as never);
+
+  await assert.rejects(
+    () =>
+      service.create(
+        { companyId: "company-1", status: "CONVERTED" as never },
+        { sub: "admin-1", email: "admin@example.com", role: "ADMIN" },
+      ),
+    BadRequestException,
+  );
+});
+
+test("update não rebaixa cliente confirmado por ação comercial manual", async () => {
+  let updateCalls = 0;
+  const company = {
+    id: "company-1",
+    cnpj: "11222333000181",
+    razaoSocial: "Mercado Confirmado",
+    nomeFantasia: "Mercado Confirmado",
+    situacaoCadastral: "ATIVA",
+    cnaePrincipal: "4711302",
+    cnaes: [],
+    details: null,
+    contacts: [],
+    clientAccounts: [{ isCurrentClient: true }],
+    porte: null,
+    cidade: "Garça",
+    uf: "SP",
+    latitude: null,
+    longitude: null,
+    logradouro: null,
+    numero: null,
+    bairro: null,
+    cep: null,
+  };
+  const prisma = {
+    lead: {
+      findFirst: async () => ({
+        id: "lead-1",
+        companyId: company.id,
+        status: "CONVERTED",
+        score: 80,
+        potentialLevel: "HIGH",
+        company,
+        assignedTo: null,
+        interactions: [],
+      }),
+      update: async () => {
+        updateCalls += 1;
+      },
+    },
+  };
+
+  await assert.rejects(
+    () =>
+      new LeadsService(prisma as never).update(
+        "lead-1",
+        { status: "INTERESTED" as never },
+        { sub: "admin-1", email: "admin@example.com", role: "ADMIN" },
+      ),
+    BadRequestException,
+  );
+  assert.equal(updateCalls, 0);
+});
+
 test("consultas de vendedor aplicam ownership no banco", async () => {
   let capturedWhere: unknown;
   const prisma = {

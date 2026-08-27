@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { NotFoundException } from "@nestjs/common";
+import { BadRequestException, NotFoundException } from "@nestjs/common";
 import { LeadInteractionsService } from "./lead-interactions.service";
 
 const salesActor = {
@@ -55,6 +55,108 @@ test("interação em lead de outra carteira falha antes de criar perfil ou regis
         salesActor,
       ),
     NotFoundException,
+  );
+  assert.equal(userQueries, 0);
+});
+
+test("interação não pode confirmar cliente real por status manual", async () => {
+  let transactionCalls = 0;
+  const prisma = {
+    $transaction: async () => {
+      transactionCalls += 1;
+    },
+  };
+
+  await assert.rejects(
+    () =>
+      new LeadInteractionsService(prisma as never).create(
+        "lead-1",
+        {
+          type: "STATUS_CHANGE",
+          description: "Tentativa de conversão manual",
+          newStatus: "CONVERTED" as never,
+        },
+        salesActor,
+      ),
+    BadRequestException,
+  );
+  assert.equal(transactionCalls, 0);
+});
+
+test("B2B_LINK_SENT registra interação e avança o lead para LINK_B2B_SENT", async () => {
+  let createdInteraction: Record<string, unknown> | undefined;
+  let updatedLead: Record<string, unknown> | undefined;
+  const transactionClient = {
+    lead: {
+      findFirst: async () => ({ id: "lead-1", status: "INTERESTED" }),
+      updateMany: async (args: { data: Record<string, unknown> }) => {
+        updatedLead = args.data;
+        return { count: 1 };
+      },
+    },
+    user: {
+      findUnique: async () => ({
+        id: "sales-1",
+        email: "sales@example.com",
+        name: "Sales",
+        role: "SALES",
+      }),
+    },
+    profile: {
+      upsert: async () => ({ id: "profile-1" }),
+    },
+    userMapping: {
+      upsert: async () => ({ cuid: "sales-1", uuid: "profile-1" }),
+    },
+    leadInteraction: {
+      create: async (args: { data: Record<string, unknown> }) => {
+        createdInteraction = args.data;
+        return { id: "interaction-1", ...args.data };
+      },
+    },
+  };
+  const prisma = {
+    $transaction: async (callback: (tx: typeof transactionClient) => Promise<unknown>) =>
+      callback(transactionClient),
+  };
+
+  await new LeadInteractionsService(prisma as never).create(
+    "lead-1",
+    { type: "B2B_LINK_SENT", description: "Link enviado pelo WhatsApp" },
+    salesActor,
+  );
+
+  assert.equal(createdInteraction?.type, "B2B_LINK_SENT");
+  assert.equal(createdInteraction?.userId, "profile-1");
+  assert.equal(updatedLead?.status, "LINK_B2B_SENT");
+});
+
+test("cliente confirmado não pode ter status alterado por interação B2B manual", async () => {
+  let userQueries = 0;
+  const transactionClient = {
+    lead: {
+      findFirst: async () => ({ id: "lead-1", status: "CONVERTED" }),
+    },
+    user: {
+      findUnique: async () => {
+        userQueries += 1;
+        return null;
+      },
+    },
+  };
+  const prisma = {
+    $transaction: async (callback: (tx: typeof transactionClient) => Promise<unknown>) =>
+      callback(transactionClient),
+  };
+
+  await assert.rejects(
+    () =>
+      new LeadInteractionsService(prisma as never).create(
+        "lead-1",
+        { type: "B2B_LINK_SENT", description: "Tentativa manual" },
+        salesActor,
+      ),
+    BadRequestException,
   );
   assert.equal(userQueries, 0);
 });
