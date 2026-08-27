@@ -13,7 +13,7 @@ import {
 import { AuthGuard } from "../auth/auth.guard";
 import { Roles } from "../auth/roles.decorator";
 import { RolesGuard } from "../auth/roles.guard";
-import { DatasetFreezeGuard } from "../common/dataset-freeze.guard";
+import { CommercialActionMutation, DatasetFreezeGuard } from "../common/dataset-freeze.guard";
 import { AuthenticatedHttpRequest } from "../common/auditable-http.types";
 import { UserRole } from "@prisma/client";
 import { CreateLeadDto } from "./dto/create-lead.dto";
@@ -61,6 +61,7 @@ export class LeadsController {
   }
 
   @Patch(":id")
+  @CommercialActionMutation()
   update(
     @Param("id") id: string,
     @Body() dto: UpdateLeadDto,
@@ -70,11 +71,13 @@ export class LeadsController {
   }
 
   @Post(":id/convert")
+  @CommercialActionMutation()
   convert(@Param("id") id: string, @Req() request: AuthenticatedHttpRequest) {
     return this.leadsService.convert(id, request.user);
   }
 
   @Post(":id/discard")
+  @CommercialActionMutation()
   discard(@Param("id") id: string, @Req() request: AuthenticatedHttpRequest) {
     return this.leadsService.discard(id, request.user);
   }

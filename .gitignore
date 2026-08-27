@@ -12,7 +12,8 @@ dist
 dist-ssr
 .output
 .vinxi
-.tanstack/**
+.tanstack/
+**/.tanstack/
 .nitro
 *.local
 

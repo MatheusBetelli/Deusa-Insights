@@ -1,5 +1,5 @@
 import { apiRequest } from "./api";
-import type { Company, CompanyQuery } from "@/types/company";
+import type { Company, CompanyContact, CompanyQuery } from "@/types/company";
 import type { PaginatedResponse } from "@/types/pagination";
 import type { CompanyDetailsResponse, UpsertCompanyDetailsPayload } from "@/types/company-details";
 
@@ -15,6 +15,18 @@ export type UpdateCommercialProfilePayload = {
   cidade?: string;
   uf?: string;
 };
+
+export type CreateCompanyContactPayload = {
+  type: CompanyContact["type"];
+  value: string;
+  source?: CompanyContact["source"];
+  isPrimary?: boolean;
+  active?: boolean;
+};
+
+export type UpdateCompanyContactPayload = Partial<
+  Pick<CompanyContact, "value" | "source" | "isPrimary" | "active">
+>;
 
 export const companiesService = {
   getCompanies: (query?: CompanyQuery) => apiRequest<Company[]>("/companies", {}, query),
@@ -35,6 +47,17 @@ export const companiesService = {
     }),
   updateCommercialProfile: (id: string, payload: UpdateCommercialProfilePayload) =>
     apiRequest<Company>(`/companies/${id}/commercial-profile`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  getContacts: (id: string) => apiRequest<CompanyContact[]>(`/companies/${id}/contacts`),
+  createContact: (id: string, payload: CreateCompanyContactPayload) =>
+    apiRequest<CompanyContact>(`/companies/${id}/contacts`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  updateContact: (id: string, contactId: string, payload: UpdateCompanyContactPayload) =>
+    apiRequest<CompanyContact>(`/companies/${id}/contacts/${contactId}`, {
       method: "PATCH",
       body: JSON.stringify(payload),
     }),

@@ -111,6 +111,7 @@ export const Route = createFileRoute("/_app/leads-b2b")({
 });
 
 const PAGE_SIZE = 25;
+const STORE_URL = import.meta.env.VITE_STORE_URL || "https://loja.deusalimentos.com.br";
 
 type SortBy = NonNullable<LeadQuery["sortBy"]>;
 
@@ -396,6 +397,24 @@ function LeadsB2B() {
     }
   }
 
+  async function quickRecordB2BSent(lead: Lead) {
+    try {
+      const activeUserId = currentUser?.id || lead.assignedToId || "admin";
+      await leadsService.createInteraction(lead.id, {
+        userId: activeUserId,
+        type: "B2B_LINK_SENT",
+        description: `Link B2B enviado: ${STORE_URL}`,
+        newStatus: "LINK_B2B_SENT",
+      });
+      toast.success("Envio do link B2B registrado no histórico.");
+      await loadLeads();
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Não foi possível registrar o envio do link B2B.",
+      );
+    }
+  }
+
   const activeFilters = [
     query.trim() ? { label: "Busca", value: query.trim(), clear: () => setQuery("") } : null,
     uf !== "Todos" ? { label: "Estado", value: uf, clear: () => setUf("Todos") } : null,
@@ -466,7 +485,7 @@ function LeadsB2B() {
           <MetricCard
             label="Oportunidades de alta prioridade"
             value={highPotentialCount}
-            description="Prioridade Alta ou Crítica (Score ≥ 65)"
+            description="Prioridade Alta ou Crítica"
             accent="#ED1C24"
           />
         </section>
@@ -775,6 +794,7 @@ function LeadsB2B() {
                             </span>
                             <ScoreBreakdownTooltip
                               score={lead.score}
+                              potentialLevel={lead.potentialLevel}
                               variant="subtle"
                               breakdown={lead.scoreBreakdown}
                             />
@@ -846,10 +866,10 @@ function LeadsB2B() {
                                 Enviar para negociação
                               </DropdownMenuItem>
                               <DropdownMenuItem
-                                onClick={() => void quickUpdateStatus(lead, "CONVERTED")}
-                                className="cursor-pointer font-semibold text-emerald-700"
+                                onClick={() => void quickRecordB2BSent(lead)}
+                                className="cursor-pointer"
                               >
-                                Converter em cliente
+                                Marcar B2B enviado
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem

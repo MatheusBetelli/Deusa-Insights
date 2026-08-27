@@ -4,7 +4,7 @@
 project_id = "deusa-insights"
 
 [api]
-enabled = true
+enabled = false
 port = 54321
 schemas = ["public", "graphql_public"]
 extra_search_path = ["public", "extensions"]

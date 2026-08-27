@@ -26,4 +26,5 @@ export type MapOpportunity = {
   email?: string | null;
   cnaePrincipal?: string | null;
   responsibleName?: string | null;
+  scoreReasons?: string[];
 };

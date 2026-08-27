@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException, Optional } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { LeadStatus, Prisma } from "@prisma/client";
 import {
   calculateLeadScore,
@@ -8,6 +9,7 @@ import {
 } from "../common/scoring";
 import { buildCnaeWhereInput, isValidOpportunity } from "../common/opportunity-filter";
 import { PrismaService } from "../prisma/prisma.service";
+import { areDatasetMutationsEnabled } from "../common/dataset-freeze.guard";
 import {
   assertSalesCannotManageLeadAssignment,
   buildLeadAccessWhere,
@@ -31,6 +33,7 @@ const leadInclude = {
     include: {
       cnaes: true,
       details: true,
+      contacts: true,
       clientAccounts: {
         where: { isCurrentClient: true },
         select: { isCurrentClient: true },
@@ -90,6 +93,23 @@ function hasSpatialCoordinates(company: SpatialCompany): company is SpatialCompa
   );
 }
 
+function getCommercialPhone(company: {
+  telefoneEncontrado?: string | null;
+  details?: { telefone?: string | null } | null;
+  contacts?: Array<{
+    type: string;
+    value: string;
+    active: boolean;
+    isPrimary: boolean;
+  }>;
+}): string | null {
+  const contact =
+    company.contacts
+      ?.filter((item) => item.active && (item.type === "PHONE" || item.type === "WHATSAPP"))
+      .sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary))[0] ?? null;
+  return contact?.value || company.details?.telefone || company.telefoneEncontrado || null;
+}
+
 function haversineDistanceKm(
   first: SpatialCompany & { latitude: number; longitude: number },
   second: SpatialCompany & { latitude: number; longitude: number },
@@ -123,7 +143,10 @@ function areSpatialNeighbors(first: SpatialCompany, second: SpatialCompany): boo
 
 @Injectable()
 export class LeadsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly configService?: ConfigService,
+  ) {}
 
   async findAll(query: LeadQueryDto = {}, actor: LeadAccessActor) {
     const page = Math.max(1, query.page ?? 1);
@@ -171,6 +194,7 @@ export class LeadsService {
         numero: lead.company.numero,
         bairro: lead.company.bairro,
         cep: lead.company.cep,
+        telefone: getCommercialPhone(lead.company),
         statusLead: lead.status,
         neighborCount,
       });
@@ -180,6 +204,7 @@ export class LeadsService {
         score: fullScore.score,
         potentialLevel: fullScore.level,
         scoreBreakdown: fullScore.breakdown,
+        scoreReasons: fullScore.reasons,
       };
     });
 
@@ -285,7 +310,17 @@ export class LeadsService {
     const lead = await this.prisma.lead.findFirst({
       where: scopeLeadWhere({ id }, actor),
       include: {
-        company: { include: { cnaes: true } },
+        company: {
+          include: {
+            cnaes: true,
+            details: true,
+            contacts: true,
+            clientAccounts: {
+              where: { isCurrentClient: true },
+              select: { isCurrentClient: true },
+            },
+          },
+        },
         assignedTo: { select: safeAssignedToSelect },
         interactions: {
           include: { user: { select: safeAssignedToSelect } },
@@ -310,6 +345,7 @@ export class LeadsService {
       numero: lead.company.numero,
       bairro: lead.company.bairro,
       cep: lead.company.cep,
+      telefone: getCommercialPhone(lead.company),
       statusLead: lead.status,
     });
 
@@ -318,10 +354,12 @@ export class LeadsService {
       score: fullScore.score,
       potentialLevel: fullScore.level,
       scoreBreakdown: fullScore.breakdown,
+      scoreReasons: fullScore.reasons,
     };
   }
 
   async create(dto: CreateLeadDto, actor: LeadAccessActor) {
+    this.assertManualStatusDoesNotConfirmClient(dto.status);
     assertSalesCannotManageLeadAssignment(actor, dto);
     const company = await this.prisma.company.findUnique({
       where: { id: dto.companyId },
@@ -364,8 +402,11 @@ export class LeadsService {
   }
 
   async update(id: string, dto: UpdateLeadDto, actor: LeadAccessActor) {
+    this.assertManualStatusDoesNotConfirmClient(dto.status);
     assertSalesCannotManageLeadAssignment(actor, dto);
-    await this.findById(id, actor);
+    this.assertFrozenDatasetSafeLeadUpdate(dto);
+    const existingLead = await this.findById(id, actor);
+    this.assertConfirmedClientStatusIsImmutable(existingLead.status, dto.status);
     const { assignedToId, ...scalarFields } = dto;
 
     const updatePayload: Prisma.LeadUpdateInput = {
@@ -463,55 +504,10 @@ export class LeadsService {
   }
 
   async convert(id: string, actor: LeadAccessActor) {
-    return this.prisma.$transaction(async (transaction) => {
-      const lead = await transaction.lead.findFirst({
-        where: scopeLeadWhere({ id }, actor),
-        include: { company: true },
-      });
-      if (!lead) throw new NotFoundException("Lead não encontrado");
-
-      const updated = await transaction.lead.updateMany({
-        where: scopeLeadWhere({ id }, actor),
-        data: { status: LeadStatus.CONVERTED, lastContactAt: new Date() },
-      });
-      if (updated.count !== 1) throw new NotFoundException("Lead não encontrado");
-
-      const updatedLead = await transaction.lead.findUniqueOrThrow({
-        where: { id },
-        include: { company: true, assignedTo: { select: safeAssignedToSelect } },
-      });
-
-      const existingClient = await transaction.clientAccount.findFirst({
-        where: { companyId: lead.companyId },
-        orderBy: { createdAt: "asc" },
-      });
-      if (existingClient) {
-        if (!existingClient.isCurrentClient) {
-          await transaction.clientAccount.update({
-            where: { id: existingClient.id },
-            data: { isCurrentClient: true },
-          });
-        }
-      } else {
-        await transaction.clientAccount.upsert({
-          where: { codigoClienteDeusa: `LEAD-${lead.companyId}` },
-          update: { isCurrentClient: true, companyId: lead.companyId },
-          create: {
-            codigoClienteDeusa: `LEAD-${lead.companyId}`,
-            companyId: lead.companyId,
-            razaoSocial: lead.company.razaoSocial,
-            nomeFantasia: lead.company.nomeFantasia,
-            cnpj: lead.company.cnpj,
-            cidade: lead.company.cidade,
-            uf: lead.company.uf,
-            isCurrentClient: true,
-            importedFromExcel: false,
-          },
-        });
-      }
-
-      return updatedLead;
-    });
+    await this.findById(id, actor);
+    throw new BadRequestException(
+      "Conversão em Cliente Deusa só pode ser confirmada por B2B/ERP ou importação oficial de clientes.",
+    );
   }
 
   discard(id: string, actor: LeadAccessActor) {
@@ -628,6 +624,41 @@ export class LeadsService {
       counts.set(lead.company.id, count);
     }
     return counts;
+  }
+
+  private assertManualStatusDoesNotConfirmClient(status?: LeadStatus): void {
+    if (status === LeadStatus.CONVERTED) {
+      throw new BadRequestException(
+        "Status CONVERTED é reservado para confirmação via B2B/ERP ou importação oficial de clientes.",
+      );
+    }
+  }
+
+  private assertConfirmedClientStatusIsImmutable(
+    currentStatus: LeadStatus,
+    nextStatus?: LeadStatus,
+  ): void {
+    if (currentStatus === LeadStatus.CONVERTED && nextStatus !== undefined) {
+      throw new BadRequestException(
+        "Cliente Deusa confirmado não pode ter status alterado por ação comercial manual.",
+      );
+    }
+  }
+
+  private assertFrozenDatasetSafeLeadUpdate(dto: UpdateLeadDto): void {
+    if (!this.configService || areDatasetMutationsEnabled(this.configService)) return;
+
+    const forbiddenFields = [
+      dto.assignedToId !== undefined ? "assignedToId" : null,
+      dto.score !== undefined ? "score" : null,
+      dto.potentialLevel !== undefined ? "potentialLevel" : null,
+    ].filter((field): field is string => Boolean(field));
+
+    if (forbiddenFields.length > 0) {
+      throw new BadRequestException(
+        `Dataset congelado: os campos ${forbiddenFields.join(", ")} não podem ser alterados por ação comercial.`,
+      );
+    }
   }
 
   private targetCnaesCache: { data: string[]; expiresAt: number } | null = null;

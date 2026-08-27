@@ -12,21 +12,32 @@ import { AuditableHttpRequest, getRequestPath } from "./auditable-http.types";
 
 const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 export const FROZEN_DATASET_READ_ONLY_KEY = "frozenDatasetReadOnly";
+export const COMMERCIAL_ACTION_MUTATION_KEY = "commercialActionMutation";
 export const FrozenDatasetReadOnly = () => SetMetadata(FROZEN_DATASET_READ_ONLY_KEY, true);
+export const CommercialActionMutation = () => SetMetadata(COMMERCIAL_ACTION_MUTATION_KEY, true);
+
+function parseBooleanFlag(value: string | boolean | undefined | null): boolean | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  if (typeof value === "boolean") return value;
+  return value.trim().toLowerCase() === "true";
+}
 
 export function areDatasetMutationsEnabled(configService: ConfigService): boolean {
   const nodeEnv = configService.get<string>("NODE_ENV")?.trim().toLowerCase() ?? "development";
-  const configuredValue = configService.get<string | boolean>("ENABLE_LEAD_MUTATIONS");
+  const configuredValue = parseBooleanFlag(configService.get<string | boolean>("ENABLE_LEAD_MUTATIONS"));
 
-  if (configuredValue === undefined || configuredValue === null || configuredValue === "") {
+  if (configuredValue === undefined) {
     return nodeEnv !== "production";
   }
 
-  if (typeof configuredValue === "boolean") {
-    return configuredValue;
-  }
+  return configuredValue;
+}
 
-  return configuredValue.trim().toLowerCase() === "true";
+export function areCommercialActionsEnabled(configService: ConfigService): boolean {
+  const configuredValue = parseBooleanFlag(
+    configService.get<string | boolean>("ENABLE_COMMERCIAL_ACTIONS"),
+  );
+  return configuredValue ?? true;
 }
 
 @Injectable()
@@ -43,15 +54,22 @@ export class DatasetFreezeGuard implements CanActivate {
       FROZEN_DATASET_READ_ONLY_KEY,
       [context.getHandler(), context.getClass()],
     );
+    const isCommercialAction = this.reflector.getAllAndOverride<boolean>(
+      COMMERCIAL_ACTION_MUTATION_KEY,
+      [context.getHandler(), context.getClass()],
+    );
     if (!MUTATING_METHODS.has(request.method.toUpperCase()) || isReadOnlyHandler) {
       return true;
     }
     if (areDatasetMutationsEnabled(this.configService)) {
       return true;
     }
+    if (isCommercialAction && areCommercialActionsEnabled(this.configService)) {
+      return true;
+    }
 
     this.auditLogger.logEvent({
-      action: "DATA_MUTATION_BLOCKED",
+      action: isCommercialAction ? "COMMERCIAL_ACTION_MUTATION_BLOCKED" : "DATA_MUTATION_BLOCKED",
       outcome: "BLOCKED",
       userId: request.user?.sub,
       userEmail: request.user?.email,
@@ -63,7 +81,9 @@ export class DatasetFreezeGuard implements CanActivate {
     });
 
     throw new ForbiddenException(
-      "Alteracoes de leads, empresas e importacoes estao desabilitadas neste ambiente",
+      isCommercialAction
+        ? "Acoes comerciais estao desabilitadas neste ambiente"
+        : "Alteracoes de leads, empresas e importacoes estao desabilitadas neste ambiente",
     );
   }
 }

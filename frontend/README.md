@@ -26,14 +26,18 @@ Interface web do Deusa Analytics, desenvolvida com React, Vite, TypeScript, Tail
    npm install
    ```
 4. Crie/verifique o arquivo de configuração de variáveis de ambiente `.env`:
+
    ```bash
    cp .env.example .env
    ```
+
    O arquivo deve conter a URL do backend:
-   ```env   cp .env.example .env
+
+   ```env cp .env.example .env
 
    VITE_API_URL=http://127.0.0.1:3001
    ```
+
 5. Inicie o servidor de desenvolvimento:
    ```bash
    npm run dev

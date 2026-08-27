@@ -1,14 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ForbiddenException, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, NotFoundException } from "@nestjs/common";
 import { LeadsService } from "./leads.service";
 
-type AccountUpsertArgs = {
-  where: { codigoClienteDeusa: string };
-  create: { cnpj: string; importedFromExcel: boolean };
-};
-
-test("convert grava lead e cliente de forma atômica com identificador idempotente", async () => {
+test("convert bloqueia conversao manual e exige confirmacao via ERP/B2B", async () => {
   const company = {
     id: "company-1",
     cnpj: "11222333000181",
@@ -20,8 +15,7 @@ test("convert grava lead e cliente de forma atômica com identificador idempoten
     uf: "SP",
     cnaes: [],
   };
-  let accountUpsert: AccountUpsertArgs | undefined;
-  const transactionClient = {
+  const prisma = {
     lead: {
       findFirst: async () => ({
         id: "lead-1",
@@ -29,32 +23,18 @@ test("convert grava lead e cliente de forma atômica com identificador idempoten
         status: "NEW",
         company,
       }),
-      updateMany: async () => ({ count: 1 }),
-      findUniqueOrThrow: async () => ({ id: "lead-1", company }),
-    },
-    clientAccount: {
-      findFirst: async () => null,
-      update: async () => ({}),
-      upsert: async (args: AccountUpsertArgs) => {
-        accountUpsert = args;
-        return {};
-      },
     },
   };
-  const prisma = {
-    $transaction: async (callback: (client: typeof transactionClient) => Promise<unknown>) =>
-      callback(transactionClient),
-  };
 
-  await new LeadsService(prisma as never).convert("lead-1", {
-    sub: "admin-1",
-    email: "admin@example.com",
-    role: "ADMIN",
-  });
-
-  assert.equal(accountUpsert?.where.codigoClienteDeusa, "LEAD-company-1");
-  assert.equal(accountUpsert?.create.cnpj, "11222333000181");
-  assert.equal(accountUpsert?.create.importedFromExcel, false);
+  await assert.rejects(
+    () =>
+      new LeadsService(prisma as never).convert("lead-1", {
+        sub: "admin-1",
+        email: "admin@example.com",
+        role: "ADMIN",
+      }),
+    BadRequestException,
+  );
 });
 
 test("consultas de vendedor aplicam ownership no banco", async () => {

@@ -101,6 +101,7 @@ export type FullScoreResult = {
   score: number;
   level: PotentialLevel;
   breakdown: ScoreBreakdown;
+  reasons: string[];
 };
 
 function normalize(value?: string | null): string {
@@ -235,10 +236,21 @@ export function calculateOpportunityScoreDetails(input: ScoreInput): FullScoreRe
   const territorioPts = Math.round((Math.min(100, territorioScore) / 100) * 5);
 
   let totalScore = Math.max(0, Math.min(100, perfilPts + potencialPts + logisticaPts + dadosPts + prontidaoPts + territorioPts));
+  const reasons = [
+    isTargetCnae
+      ? `CNAE dentro do escopo comercial Deusa (+${perfilPts}/30)`
+      : "CNAE fora do escopo comercial prioritário",
+    `Densidade de estabelecimentos próximos: ${input.neighborCount ?? "não calculada"} (+${potencialPts}/25)`,
+    `Distância estimada até Garça/SP: ${distanceKm} km (+${logisticaPts}/20)`,
+    `Qualidade cadastral e coordenadas (+${dadosPts}/10)`,
+    `Porte/nome fantasia indicam prontidão comercial (+${prontidaoPts}/10)`,
+    `Cidade e situação cadastral (+${territorioPts}/5)`,
+  ];
 
   // Trava de Segurança: Se não é um CNAE Alvo ou não está Ativa, limita o score em no máximo 30 (nível LOW)
   if (!isTargetCnae || (status !== "ativa" && status !== "ativo")) {
     totalScore = Math.min(30, totalScore);
+    reasons.push("Score limitado porque a empresa não está ativa ou não pertence ao CNAE alvo.");
   }
 
   const level = getPotentialLevel(totalScore);
@@ -256,6 +268,7 @@ export function calculateOpportunityScoreDetails(input: ScoreInput): FullScoreRe
       distanceKm,
       neighborCount: input.neighborCount ?? undefined,
     },
+    reasons,
   };
 }
 

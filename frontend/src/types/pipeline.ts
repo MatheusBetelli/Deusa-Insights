@@ -7,6 +7,7 @@ export type PipelineCard = {
   status: LeadStatus;
   score: number;
   potentialLevel: PotentialLevel;
+  scoreReasons?: string[];
   assignedTo: string | null;
 };
 

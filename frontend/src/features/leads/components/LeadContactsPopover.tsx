@@ -1,6 +1,7 @@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Phone, MessageCircle, Mail, PhoneCall, ChevronDown } from "lucide-react";
+import { Phone, MessageCircle, Mail, PhoneCall, ChevronDown, Copy } from "lucide-react";
 import type { Company } from "@/types/company";
+import { toast } from "sonner";
 
 export interface ContactItem {
   id: string;
@@ -9,6 +10,7 @@ export interface ContactItem {
   value: string;
   raw: string;
   isMobile: boolean;
+  canWhatsapp: boolean;
 }
 
 // Cidade -> DDD padrão de fallback caso número tenha apenas 8 ou 9 dígitos sem DDD
@@ -99,11 +101,22 @@ export function extractCompanyContacts(company: Company): ContactItem[] {
   const seenEmails = new Set<string>();
   const defaultDdd = getCityDdd(company.cidade);
 
-  // Ordem de prioridade de telefones: Google Places (telefoneEncontrado) -> Manual (details.telefone) -> Receita (telefone)
-  const rawPhones: { source: string; raw: string }[] = [
-    { source: "google", raw: company.telefoneEncontrado ?? "" },
-    { source: "manual", raw: company.details?.telefone ?? "" },
-    { source: "receita", raw: company.telefone ?? "" },
+  const persistedContacts = (company.contacts ?? [])
+    .filter((contact) => contact.active)
+    .sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary));
+
+  // Ordem de prioridade de telefones: contatos comerciais persistidos -> Google Places -> legado/manual -> Receita
+  const rawPhones: { source: string; raw: string; whatsapp: boolean }[] = [
+    ...persistedContacts
+      .filter((contact) => contact.type === "PHONE" || contact.type === "WHATSAPP")
+      .map((contact) => ({
+        source: contact.source.toLowerCase(),
+        raw: contact.value,
+        whatsapp: contact.type === "WHATSAPP",
+      })),
+    { source: "google", raw: company.telefoneEncontrado ?? "", whatsapp: false },
+    { source: "manual", raw: company.details?.telefone ?? "", whatsapp: false },
+    { source: "receita", raw: company.telefone ?? "", whatsapp: false },
   ].filter((p) => p.raw && p.raw.trim().length >= 8);
 
   for (const item of rawPhones) {
@@ -113,16 +126,20 @@ export function extractCompanyContacts(company: Company): ContactItem[] {
       contacts.push({
         id: `phone-${parsed.fullDigits}`,
         type: "phone",
-        label: parsed.isMobile ? "Celular / WhatsApp" : "Telefone comercial",
+        label: item.whatsapp || parsed.isMobile ? "WhatsApp comercial" : "Telefone comercial",
         value: parsed.display,
         raw: parsed.fullDigits,
         isMobile: parsed.isMobile,
+        canWhatsapp: item.whatsapp || parsed.isMobile,
       });
     }
   }
 
-  // E-mails: Manual (details.email) tem precedência sobre Receita (email)
+  // E-mails: contatos comerciais persistidos -> legado/manual -> Receita
   const rawEmails: { source: string; raw: string }[] = [
+    ...persistedContacts
+      .filter((contact) => contact.type === "EMAIL")
+      .map((contact) => ({ source: contact.source.toLowerCase(), raw: contact.value })),
     { source: "manual", raw: company.details?.email ?? "" },
     { source: "receita", raw: company.email ?? "" },
   ].filter((e) => e.raw && e.raw.trim().length > 4 && e.raw.includes("@"));
@@ -144,11 +161,21 @@ export function extractCompanyContacts(company: Company): ContactItem[] {
         value: cleanE,
         raw: cleanE,
         isMobile: false,
+        canWhatsapp: false,
       });
     }
   }
 
   return contacts;
+}
+
+async function copyContactValue(label: string, value: string) {
+  try {
+    await navigator.clipboard.writeText(value);
+    toast.success(`${label} copiado.`);
+  } catch {
+    toast.error(`Não foi possível copiar ${label.toLowerCase()} neste navegador.`);
+  }
 }
 
 interface LeadContactsPopoverProps {
@@ -195,7 +222,7 @@ export function LeadContactsPopover({ company }: LeadContactsPopoverProps) {
         <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
           {contacts.map((contact) => {
             if (contact.type === "phone") {
-              const waUrl = contact.isMobile ? `https://wa.me/${contact.raw}` : null;
+              const waUrl = contact.canWhatsapp ? `https://wa.me/${contact.raw}` : null;
               return (
                 <div
                   key={contact.id}
@@ -226,6 +253,14 @@ export function LeadContactsPopover({ company }: LeadContactsPopoverProps) {
                         WhatsApp
                       </a>
                     )}
+                    <button
+                      type="button"
+                      onClick={() => void copyContactValue("Telefone", contact.value)}
+                      className="inline-flex h-7 items-center gap-1 rounded border border-[#DDE5EF] bg-white px-2.5 text-[11px] font-bold text-[#0B1F33] transition hover:border-[#1061AF] hover:text-[#1061AF]"
+                    >
+                      <Copy className="h-3 w-3" />
+                      Copiar
+                    </button>
                   </div>
                 </div>
               );
@@ -245,13 +280,23 @@ export function LeadContactsPopover({ company }: LeadContactsPopoverProps) {
                 >
                   {contact.value}
                 </div>
-                <a
-                  href={`mailto:${contact.value}`}
-                  className="inline-flex h-7 items-center gap-1 rounded bg-[#0B1F33] px-2.5 text-[11px] font-bold text-white transition hover:bg-[#1061AF]"
-                >
-                  <Mail className="h-3 w-3" />
-                  Enviar e-mail
-                </a>
+                <div className="flex items-center gap-1.5">
+                  <a
+                    href={`mailto:${contact.value}`}
+                    className="inline-flex h-7 items-center gap-1 rounded bg-[#0B1F33] px-2.5 text-[11px] font-bold text-white transition hover:bg-[#1061AF]"
+                  >
+                    <Mail className="h-3 w-3" />
+                    Enviar e-mail
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => void copyContactValue("E-mail", contact.value)}
+                    className="inline-flex h-7 items-center gap-1 rounded border border-[#DDE5EF] bg-white px-2.5 text-[11px] font-bold text-[#0B1F33] transition hover:border-[#1061AF] hover:text-[#1061AF]"
+                  >
+                    <Copy className="h-3 w-3" />
+                    Copiar
+                  </button>
+                </div>
               </div>
             );
           })}

@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
+import { LeadStatus, PotentialLevel, Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import {
   buildLeadAccessWhere,
@@ -18,6 +18,18 @@ export type HeatmapQueryParams = {
   estado?: string;
   municipio?: string;
   cnae?: string;
+};
+
+export type MapOpportunityQueryParams = {
+  uf?: string;
+  city?: string;
+  search?: string;
+  companyId?: string;
+  cnae?: string;
+  potentialLevel?: PotentialLevel;
+  bbox?: string;
+  minScore?: number;
+  client?: boolean;
 };
 
 // Estrutura exata retornada pelo endpoint GET /map/heatmap
@@ -64,6 +76,14 @@ type MapOpportunityPoint = {
   email: string | null;
   cnaePrincipal: string | null;
   responsibleName: string | null;
+  scoreReasons?: string[];
+};
+
+type ParsedBbox = {
+  west: number;
+  south: number;
+  east: number;
+  north: number;
 };
 
 function joinSqlFragments(fragments: Prisma.Sql[], separator: Prisma.Sql): Prisma.Sql {
@@ -105,6 +125,108 @@ function buildHeatmapConditions(params: HeatmapQueryParams): Prisma.Sql[] {
   return conditions;
 }
 
+function parseBbox(bbox?: string): ParsedBbox | null {
+  if (!bbox) return null;
+  const parts = bbox.split(",").map((value) => Number(value.trim()));
+  if (parts.length !== 4 || parts.some((value) => Number.isNaN(value))) return null;
+  const [west, south, east, north] = parts;
+  if (south > north || west > east) return null;
+  if (south < -90 || north > 90 || west < -180 || east > 180) return null;
+  return { west, south, east, north };
+}
+
+function buildCompanySearch(search?: string): Prisma.CompanyWhereInput | undefined {
+  const term = search?.trim();
+  if (!term) return undefined;
+
+  const or: Prisma.CompanyWhereInput[] = [
+    { razaoSocial: { contains: term, mode: "insensitive" } },
+    { nomeFantasia: { contains: term, mode: "insensitive" } },
+    { cidade: { contains: term, mode: "insensitive" } },
+    { bairro: { contains: term, mode: "insensitive" } },
+    { logradouro: { contains: term, mode: "insensitive" } },
+  ];
+  const digits = term.replace(/\D/g, "");
+  if (digits.length >= 3) or.push({ cnpj: { contains: digits } });
+  return { OR: or };
+}
+
+function buildMapWhere(
+  actor: LeadAccessActor,
+  params: MapOpportunityQueryParams,
+): Prisma.LeadWhereInput {
+  const recordId = params.companyId?.trim();
+  if (recordId) {
+    const cnpj = recordId.replace(/\D/g, "");
+    const recordOr: Prisma.LeadWhereInput[] = [
+      { id: recordId },
+      { companyId: recordId },
+    ];
+    if (cnpj.length >= 3) recordOr.push({ company: { cnpj: cnpj } });
+    return {
+      AND: [buildLeadAccessWhere(actor), { OR: recordOr }],
+    };
+  }
+
+  const companyAnd: Prisma.CompanyWhereInput[] = [
+    { situacaoCadastral: "ATIVA" },
+    buildCnaeWhereInput(params.cnae),
+  ];
+
+  if (params.uf && params.uf !== "Todos") {
+    companyAnd.push({ uf: params.uf.toUpperCase() });
+  }
+  if (params.city && params.city !== "Todas") {
+    companyAnd.push({ cidade: { equals: params.city, mode: "insensitive" } });
+  }
+  if (params.client === true) {
+    companyAnd.push({ clientAccounts: { some: { isCurrentClient: true } } });
+  } else if (params.client === false) {
+    companyAnd.push({ clientAccounts: { none: { isCurrentClient: true } } });
+  }
+
+  const bbox = parseBbox(params.bbox);
+  if (bbox) {
+    companyAnd.push({
+      latitude: { gte: bbox.south, lte: bbox.north },
+      longitude: { gte: bbox.west, lte: bbox.east },
+    });
+  }
+
+  const search = buildCompanySearch(params.search);
+  if (search) companyAnd.push(search);
+
+  return {
+    AND: [buildLeadAccessWhere(actor), { company: { AND: companyAnd } }],
+    status: { notIn: [LeadStatus.NOT_INTERESTED, LeadStatus.INACTIVE] },
+    potentialLevel: params.potentialLevel,
+    score: params.minScore !== undefined ? { gte: params.minScore } : undefined,
+  };
+}
+
+function selectPhone(company: {
+  telefoneEncontrado?: string | null;
+  details?: { telefone?: string | null } | null;
+  contacts?: Array<{ type: string; value: string; active: boolean; isPrimary: boolean }>;
+}) {
+  const contact =
+    company.contacts
+      ?.filter((item) => item.active && (item.type === "PHONE" || item.type === "WHATSAPP"))
+      .sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary))[0] ?? null;
+  return contact?.value || company.details?.telefone || company.telefoneEncontrado || null;
+}
+
+function selectEmail(company: {
+  details?: { email?: string | null } | null;
+  contacts?: Array<{ type: string; value: string; active: boolean; isPrimary: boolean }>;
+}) {
+  const contact =
+    company.contacts
+      ?.filter((item) => item.active && item.type === "EMAIL")
+      .sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary))[0] ?? null;
+  return contact?.value || company.details?.email || null;
+}
+
 function resolveHeatmapCoordinates(
   row: HeatmapRow,
 ): { latitude: number; longitude: number } | null {
@@ -142,24 +264,20 @@ export class MapOpportunitiesService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(actor: LeadAccessActor): Promise<MapOpportunityPoint[]> {
-    const cacheKey = leadAccessCacheKey(actor);
+  async findAll(
+    actor: LeadAccessActor,
+    params: MapOpportunityQueryParams = {},
+  ): Promise<MapOpportunityPoint[]> {
+    const cacheKey = `${leadAccessCacheKey(actor)}:${JSON.stringify(params)}`;
     const cached = this.mapCache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) {
       return cached.data;
     }
     // Buscar apenas leads ativos criados pelos fluxos autorizados.
     const leads = await this.prisma.lead.findMany({
-      where: {
-        AND: [buildLeadAccessWhere(actor)],
-        status: { notIn: ["NOT_INTERESTED", "INACTIVE"] },
-        company: {
-          situacaoCadastral: "ATIVA",
-          ...buildCnaeWhereInput(),
-        },
-      },
+      where: buildMapWhere(actor, params),
       include: {
-        company: { include: { details: true, cnaes: true, clientAccounts: true } },
+        company: { include: { details: true, contacts: true, cnaes: true, clientAccounts: true } },
         assignedTo: { select: { name: true } },
       },
       orderBy: { score: "desc" },
@@ -284,8 +402,8 @@ export class MapOpportunitiesService {
         origemCoordenada,
         statusVerificacaoEndereco: lead.company.statusVerificacaoEndereco,
         confiancaVerificacao,
-        telefone: lead.company.details?.telefone || lead.company.telefoneEncontrado || null,
-        email: lead.company.details?.email || null,
+        telefone: selectPhone(lead.company),
+        email: selectEmail(lead.company),
         cnaePrincipal:
           (isValidOpportunityCnae(lead.company.cnaePrincipal)
             ? lead.company.cnaePrincipal

@@ -1,3 +1,5 @@
+import type { CompanyContact } from "./company";
+
 type CompanyClassification = {
   type: string;
   size: string;
@@ -19,6 +21,7 @@ type CompanyDetails = {
 
 export type CompanyDetailsResponse = {
   details: CompanyDetails | null;
+  contacts?: CompanyContact[];
   classification: CompanyClassification;
 };
 

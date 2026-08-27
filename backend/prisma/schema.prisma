@@ -20,6 +20,7 @@ enum LeadStatus {
   NO_CONTACT
   CONTACTED
   INTERESTED
+  LINK_B2B_SENT
   NEGOTIATION
   CONVERTED
   NOT_INTERESTED
@@ -38,6 +39,18 @@ enum ImportStatus {
   RUNNING
   SUCCESS
   ERROR
+}
+
+enum ContactType {
+  PHONE
+  WHATSAPP
+  EMAIL
+}
+
+enum ContactSource {
+  IMPORT
+  PUBLIC
+  MANUAL
 }
 
 // ── Tabela Legada de Usuários (Mantida intacta durante transição) ─────────────
@@ -176,6 +189,7 @@ model Company {
   cnaes                     CompanyCnae[]
   lead                      Lead?
   details                   CompanyDetails?
+  contacts                  CompanyContact[]
   clientAccounts            ClientAccount[]
 
   @@unique([source, externalId])
@@ -312,4 +326,27 @@ model CompanyDetails {
   company          Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@map("company_details")
+}
+
+model CompanyContact {
+  id              String        @id @default(cuid())
+  companyId       String
+  type            ContactType
+  value           String
+  source          ContactSource @default(MANUAL)
+  createdBy       String?       @db.Uuid
+  createdByLegacy String?
+  isPrimary       Boolean       @default(false)
+  active          Boolean       @default(true)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  company         Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, type, value])
+  @@index([companyId])
+  @@index([type])
+  @@index([source])
+  @@index([active])
+  @@map("company_contacts")
 }

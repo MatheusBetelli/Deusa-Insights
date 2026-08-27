@@ -104,6 +104,16 @@ test("updateCommercialProfile grava cadastro e contatos na mesma transação", a
         return { id: "company-1" };
       },
     },
+    companyContact: {
+      updateMany: async () => {
+        calls.push("updateMany-contacts");
+        return { count: 0 };
+      },
+      upsert: async () => {
+        calls.push("upsert-contact");
+        return { companyId: "company-1" };
+      },
+    },
     companyDetails: {
       upsert: async () => {
         calls.push("upsert-details");
@@ -134,7 +144,8 @@ test("updateCommercialProfile grava cadastro e contatos na mesma transação", a
     "transaction-start",
     "read-company",
     "update-company",
-    "upsert-details",
+    "updateMany-contacts",
+    "upsert-contact",
     "read-result",
     "transaction-finish",
   ]);

@@ -30,6 +30,7 @@ import type { CompanyDetailsResponse } from "@/types/company-details";
 import {
   Building2,
   CheckCircle2,
+  Copy,
   Loader2,
   MapPin,
   MessageSquare,
@@ -57,6 +58,12 @@ function getEstablishmentSegment(cnae?: string | null): string {
   if (norm === "4712100") return "MINIMERCADO / MERCEARIA";
   if (norm === "4722901") return "AÇOUGUE";
   return "MINIMERCADO / MERCEARIA";
+}
+
+function inferManualPhoneType(value: string): "PHONE" | "WHATSAPP" {
+  const digits = value.replace(/\D/g, "");
+  const local = digits.startsWith("55") ? digits.slice(2) : digits;
+  return local.length === 11 && local.slice(2).startsWith("9") ? "WHATSAPP" : "PHONE";
 }
 
 export function LeadDetailsSheet({ leadId, open, onOpenChange, onUpdated }: LeadDetailsSheetProps) {
@@ -94,7 +101,18 @@ export function LeadDetailsSheet({ leadId, open, onOpenChange, onUpdated }: Lead
       const detailsData = await companiesService.getCompanyDetails(leadData.companyId);
       if (requestId !== leadRequestSequence.current) return;
 
-      setLead(leadData);
+      setLead(
+        detailsData
+          ? {
+              ...leadData,
+              company: {
+                ...leadData.company,
+                details: detailsData.details,
+                contacts: detailsData.contacts ?? leadData.company.contacts,
+              },
+            }
+          : leadData,
+      );
       setStatus(leadData.status);
 
       if (detailsData) {
@@ -157,15 +175,36 @@ export function LeadDetailsSheet({ leadId, open, onOpenChange, onUpdated }: Lead
     if (!lead) return;
     setSavingDetails(true);
     try {
-      const response = await companiesService.upsertCompanyDetails(lead.companyId, {
-        telefone,
-        email,
-        naturezaJuridica,
-      });
-      setDetailsResponse(response);
+      const tasks = [];
+      if (telefone.trim()) {
+        tasks.push(
+          companiesService.createContact(lead.companyId, {
+            type: inferManualPhoneType(telefone),
+            value: telefone.trim(),
+            source: "MANUAL",
+            isPrimary: true,
+          }),
+        );
+      }
+      if (email.trim()) {
+        tasks.push(
+          companiesService.createContact(lead.companyId, {
+            type: "EMAIL",
+            value: email.trim(),
+            source: "MANUAL",
+            isPrimary: true,
+          }),
+        );
+      }
+      if (tasks.length === 0) {
+        toast.error("Informe telefone ou e-mail para adicionar um contato comercial.");
+        return;
+      }
+      await Promise.all(tasks);
       setIsEditingData(false);
-      toast.success("Dados cadastrais salvos com sucesso.");
+      toast.success("Contatos comerciais salvos sem alterar o cadastro importado.");
       onUpdated?.();
+      await loadLead();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Não foi possível salvar os dados.");
     } finally {
@@ -198,10 +237,10 @@ export function LeadDetailsSheet({ leadId, open, onOpenChange, onUpdated }: Lead
     }
   }
 
-  function handleSendStoreLink() {
+  async function handleSendStoreLink() {
     if (!lead) return;
     const contacts = extractCompanyContacts(lead.company);
-    const mobileContact = contacts.find((c) => c.type === "phone" && c.isMobile);
+    const mobileContact = contacts.find((c) => c.type === "phone" && c.canWhatsapp);
     const message = encodeURIComponent(
       `Olá! Somos da Deusa Alimentos. Segue o link da nossa loja oficial B2B para pedidos: ${STORE_URL}`,
     );
@@ -209,6 +248,33 @@ export function LeadDetailsSheet({ leadId, open, onOpenChange, onUpdated }: Lead
       window.open(`https://wa.me/${mobileContact.raw}?text=${message}`, "_blank");
     } else {
       window.open(`https://wa.me/?text=${message}`, "_blank");
+    }
+
+    const activeUserId = currentUser?.id || lead.assignedToId || "admin";
+    try {
+      await leadsService.createInteraction(lead.id, {
+        userId: activeUserId,
+        type: "B2B_LINK_SENT",
+        description: `Link B2B enviado: ${STORE_URL}`,
+        newStatus: "LINK_B2B_SENT",
+      });
+      setStatus("LINK_B2B_SENT");
+      toast.success("Envio do link B2B registrado no histórico.");
+      onUpdated?.();
+      await loadLead();
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Não foi possível registrar o envio do link B2B.",
+      );
+    }
+  }
+
+  async function handleCopyStoreLink() {
+    try {
+      await navigator.clipboard.writeText(STORE_URL);
+      toast.success("Link B2B copiado.");
+    } catch {
+      toast.error("Não foi possível copiar o link B2B neste navegador.");
     }
   }
 
@@ -301,12 +367,22 @@ export function LeadDetailsSheet({ leadId, open, onOpenChange, onUpdated }: Lead
 
                   <button
                     type="button"
-                    onClick={handleSendStoreLink}
+                    onClick={() => void handleSendStoreLink()}
                     className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[#DDE5EF] bg-white px-3 text-xs font-semibold text-[#0B1F33] transition hover:border-[#128C7E] hover:text-[#128C7E] cursor-pointer shadow-2xs"
                     title="Enviar link da loja virtual B2B via WhatsApp"
                   >
                     <ShoppingBag className="h-3.5 w-3.5 text-[#128C7E]" />
-                    <span>Enviar link da loja</span>
+                    <span>Enviar loja</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => void handleCopyStoreLink()}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[#DDE5EF] bg-white px-3 text-xs font-semibold text-[#0B1F33] transition hover:border-[#1061AF] hover:text-[#1061AF] cursor-pointer shadow-2xs"
+                    title="Copiar link da plataforma B2B"
+                  >
+                    <Copy className="h-3.5 w-3.5 text-[#1061AF]" />
+                    <span>Copiar B2B</span>
                   </button>
                 </div>
               </section>
@@ -321,6 +397,7 @@ export function LeadDetailsSheet({ leadId, open, onOpenChange, onUpdated }: Lead
                     <span className="text-xs text-[#64748B] font-medium">Prioridade:</span>
                     <ScoreBreakdownTooltip
                       score={lead.score}
+                      potentialLevel={lead.potentialLevel}
                       breakdown={lead.scoreBreakdown}
                       variant="default"
                     />
@@ -460,9 +537,9 @@ export function LeadDetailsSheet({ leadId, open, onOpenChange, onUpdated }: Lead
                       <input
                         type="text"
                         value={naturezaJuridica}
-                        onChange={(e) => setNaturezaJuridica(e.target.value)}
-                        className="h-10 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-xs text-[#0B1F33] outline-none focus:border-[#1061AF]"
-                        placeholder="Ex: Sociedade Empresária Limitada"
+                        readOnly
+                        className="h-10 w-full rounded-lg border border-[#DDE5EF] bg-slate-100 px-3 text-xs text-[#64748B] outline-none"
+                        placeholder="Informação importada, não editável nesta ação comercial"
                       />
                     </label>
                     <div className="flex justify-end gap-2 pt-1">
@@ -484,7 +561,7 @@ export function LeadDetailsSheet({ leadId, open, onOpenChange, onUpdated }: Lead
                         ) : (
                           <Save className="h-4 w-4 text-[#FFF200]" />
                         )}
-                        Salvar dados
+                        Salvar contatos
                       </button>
                     </div>
                   </div>
@@ -501,8 +578,8 @@ export function LeadDetailsSheet({ leadId, open, onOpenChange, onUpdated }: Lead
                     { id: "NEW", label: "Novo" },
                     { id: "CONTACTED", label: "Contatado" },
                     { id: "INTERESTED", label: "Interessado" },
+                    { id: "LINK_B2B_SENT", label: "Link B2B enviado" },
                     { id: "NEGOTIATION", label: "Em negociação" },
-                    { id: "CONVERTED", label: "Cliente" },
                     { id: "NOT_INTERESTED", label: "Descartado" },
                     { id: "INACTIVE", label: "Inativo / Fechado" },
                   ].map((item) => {

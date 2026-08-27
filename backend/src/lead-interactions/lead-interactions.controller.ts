@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, Post, Req, UseGuards } from "@nestjs/common";
 import { AuthGuard } from "../auth/auth.guard";
-import { DatasetFreezeGuard } from "../common/dataset-freeze.guard";
+import { CommercialActionMutation, DatasetFreezeGuard } from "../common/dataset-freeze.guard";
 import { AuthenticatedHttpRequest } from "../common/auditable-http.types";
 import { CreateLeadInteractionDto } from "./dto/create-lead-interaction.dto";
 import { LeadInteractionsService } from "./lead-interactions.service";
@@ -16,6 +16,7 @@ export class LeadInteractionsController {
   }
 
   @Post()
+  @CommercialActionMutation()
   create(
     @Param("id") leadId: string,
     @Body() dto: CreateLeadInteractionDto,

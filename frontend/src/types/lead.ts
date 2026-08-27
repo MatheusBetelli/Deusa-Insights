@@ -6,6 +6,7 @@ export type LeadStatus =
   | "NO_CONTACT"
   | "CONTACTED"
   | "INTERESTED"
+  | "LINK_B2B_SENT"
   | "NEGOTIATION"
   | "CONVERTED"
   | "NOT_INTERESTED"
@@ -46,6 +47,7 @@ export type Lead = {
   score: number;
   potentialLevel: PotentialLevel;
   scoreBreakdown?: ScoreBreakdown;
+  scoreReasons?: string[];
   assignedToId: string | null;
   notes: string | null;
   lastContactAt: string | null;

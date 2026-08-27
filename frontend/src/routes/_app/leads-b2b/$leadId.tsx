@@ -16,12 +16,14 @@ import {
   potentialLabels,
   statusLabels,
 } from "@/lib/commercial-formatters";
+import { extractCompanyContacts } from "@/features/leads/components/LeadContactsPopover";
 import { leadsService } from "@/services/leadsService";
 import { companiesService } from "@/services/companiesService";
 import type { Lead, LeadInteraction, LeadStatus } from "@/types/lead";
 import {
   ArrowLeft,
   CalendarClock,
+  Copy,
   Mail,
   MapPin,
   MessageSquare,
@@ -29,6 +31,7 @@ import {
   Pencil,
   Phone,
   PhoneCall,
+  ShoppingBag,
   UserCheck,
   X,
 } from "lucide-react";
@@ -38,6 +41,8 @@ import { AuthService } from "@/lib/auth";
 export const Route = createFileRoute("/_app/leads-b2b/$leadId")({
   component: LeadDetail,
 });
+
+const STORE_URL = import.meta.env.VITE_STORE_URL || "https://loja.deusalimentos.com.br";
 
 function LeadDetail() {
   const leadRequestSequence = useRef(0);
@@ -80,8 +85,9 @@ function LeadDetail() {
   function handleOpenEditModal() {
     if (!lead) return;
     const c = lead.company;
-    const ph = c.details?.telefone || c.telefoneEncontrado || c.telefone || "";
-    const em = c.details?.email || c.email || "";
+    const contacts = extractCompanyContacts(c);
+    const ph = contacts.find((contact) => contact.type === "phone")?.value || "";
+    const em = contacts.find((contact) => contact.type === "email")?.value || "";
     setEditForm({
       telefone: ph,
       email: em,
@@ -102,24 +108,42 @@ function LeadDetail() {
     if (!lead) return;
 
     try {
-      await companiesService.updateCommercialProfile(lead.company.id, {
-        telefone: editForm.telefone.trim() || undefined,
-        email: editForm.email.trim() || undefined,
-        nomeFantasia: editForm.nomeFantasia.trim() || undefined,
-        razaoSocial: editForm.razaoSocial.trim() || undefined,
-        logradouro: editForm.logradouro.trim() || undefined,
-        numero: editForm.numero.trim() || undefined,
-        bairro: editForm.bairro.trim() || undefined,
-        cep: editForm.cep.trim() || undefined,
-        cidade: editForm.cidade.trim() || undefined,
-        uf: editForm.uf.trim() ? editForm.uf.trim().toUpperCase() : undefined,
-      });
+      const tasks = [];
+      const phoneDigits = editForm.telefone.replace(/\D/g, "");
+      if (phoneDigits) {
+        tasks.push(
+          companiesService.createContact(lead.company.id, {
+            type:
+              phoneDigits.length === 11 && phoneDigits.slice(2).startsWith("9")
+                ? "WHATSAPP"
+                : "PHONE",
+            value: editForm.telefone.trim(),
+            source: "MANUAL",
+            isPrimary: true,
+          }),
+        );
+      }
+      if (editForm.email.trim()) {
+        tasks.push(
+          companiesService.createContact(lead.company.id, {
+            type: "EMAIL",
+            value: editForm.email.trim(),
+            source: "MANUAL",
+            isPrimary: true,
+          }),
+        );
+      }
+      if (tasks.length === 0) {
+        toast.error("Informe telefone ou e-mail para adicionar um contato comercial.");
+        return;
+      }
+      await Promise.all(tasks);
 
-      toast.success("Cadastro e contatos do mercado atualizados com sucesso!");
+      toast.success("Contatos comerciais salvos sem alterar o cadastro importado.");
       setShowEditModal(false);
       await loadLead();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Falha ao atualizar cadastro.");
+      toast.error(err instanceof Error ? err.message : "Falha ao salvar contatos.");
     }
   }
 
@@ -170,14 +194,13 @@ function LeadDetail() {
         newStatus = "INTERESTED";
         if (!descriptionText) descriptionText = "Cliente demonstrou interesse nos produtos Deusa.";
         break;
+      case "LINK_B2B_SENT":
+        newStatus = "LINK_B2B_SENT";
+        if (!descriptionText) descriptionText = `Link B2B enviado: ${STORE_URL}`;
+        break;
       case "NEGOTIATION":
         newStatus = "NEGOTIATION";
         if (!descriptionText) descriptionText = "Negociação comercial iniciada / Proposta enviada.";
-        break;
-      case "CONVERTED":
-        newStatus = "CONVERTED";
-        if (!descriptionText)
-          descriptionText = "Oportunidade convertida! Cliente ativo cadastrado.";
         break;
       case "NOT_INTERESTED":
         newStatus = "NOT_INTERESTED";
@@ -191,7 +214,7 @@ function LeadDetail() {
     try {
       await leadsService.createInteraction(lead.id, {
         userId,
-        type: interactionForm.type,
+        type: newStatus === "LINK_B2B_SENT" ? "B2B_LINK_SENT" : interactionForm.type,
         description: descriptionText,
         newStatus,
         nextActionAt: interactionForm.nextActionDate
@@ -239,6 +262,58 @@ function LeadDetail() {
       await loadLead();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Falha ao agendar visita.");
+    }
+  }
+
+  async function handleSendStoreLink() {
+    if (!lead) return;
+    const contacts = extractCompanyContacts(lead.company);
+    const mobileContact = contacts.find(
+      (contact) => contact.type === "phone" && contact.canWhatsapp,
+    );
+    const message = encodeURIComponent(
+      `Olá! Somos da Deusa Alimentos. Segue o link da nossa loja oficial B2B para pedidos: ${STORE_URL}`,
+    );
+
+    if (mobileContact) {
+      window.open(`https://wa.me/${mobileContact.raw}?text=${message}`, "_blank");
+    } else {
+      window.open(`https://wa.me/?text=${message}`, "_blank");
+    }
+
+    const currentUser = AuthService.getUser();
+    const userId = currentUser?.id || lead.assignedToId || "admin";
+    try {
+      await leadsService.createInteraction(lead.id, {
+        userId,
+        type: "B2B_LINK_SENT",
+        description: `Link B2B enviado: ${STORE_URL}`,
+        newStatus: "LINK_B2B_SENT",
+      });
+      toast.success("Envio do link B2B registrado no histórico.");
+      await loadLead();
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Não foi possível registrar o envio do link B2B.",
+      );
+    }
+  }
+
+  async function handleCopyStoreLink() {
+    try {
+      await navigator.clipboard.writeText(STORE_URL);
+      toast.success("Link B2B copiado.");
+    } catch {
+      toast.error("Não foi possível copiar o link B2B neste navegador.");
+    }
+  }
+
+  async function handleCopyContactValue(label: string, value: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success(`${label} copiado.`);
+    } catch {
+      toast.error(`Não foi possível copiar ${label.toLowerCase()} neste navegador.`);
     }
   }
 
@@ -295,19 +370,26 @@ function LeadDetail() {
     /^\d{14}$/.test(company.cnpj.replace(/\D/g, "")) &&
     !company.cnpj.startsWith("G-") &&
     !company.cnpj.startsWith("GOOGLE-");
-  const phone = company.details?.telefone || company.telefoneEncontrado || company.telefone || null;
-  const email = company.details?.email || company.email || null;
-  const phoneDigits = phone ? phone.replace(/\D/g, "") : "";
-  const waUrl =
-    phoneDigits.length >= 10
-      ? `https://wa.me/55${phoneDigits}?text=${encodeURIComponent(`Olá, gostaria de apresentar as soluções comerciais da Deusa Alimentos para o ${companyName(company)}.`)}`
-      : null;
-  const telUrl = phone ? `tel:${phoneDigits}` : null;
+  const contacts = extractCompanyContacts(company);
+  const phoneContact = contacts.find((contact) => contact.type === "phone");
+  const emailContact = contacts.find((contact) => contact.type === "email");
+  const phone = phoneContact?.value || null;
+  const email = emailContact?.value || null;
+  const phoneCopyValue = phoneContact?.value ?? "";
+  const emailCopyValue = emailContact?.value ?? "";
+  const waUrl = phoneContact?.canWhatsapp
+    ? `https://wa.me/${phoneContact.raw}?text=${encodeURIComponent(`Olá, gostaria de apresentar as soluções comerciais da Deusa Alimentos para o ${companyName(company)}.`)}`
+    : null;
+  const telUrl = phoneContact ? `tel:${phoneContact.raw}` : null;
   const mailUrl = email ? `mailto:${email}` : null;
   const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${companyName(company)}, ${company.logradouro || ""} ${company.numero || ""}, ${company.cidade}/${company.uf}`)}`;
 
   const scoreColor =
-    lead.score >= 80 ? "text-[#ED1C24]" : lead.score >= 65 ? "text-[#C2410C]" : "text-[#1061AF]";
+    lead.potentialLevel === "CRITICAL"
+      ? "text-[#ED1C24]"
+      : lead.potentialLevel === "HIGH"
+        ? "text-[#C2410C]"
+        : "text-[#1061AF]";
   const levelBadgeClass =
     lead.potentialLevel === "CRITICAL"
       ? "bg-red-50 text-red-700 border-red-200"
@@ -350,7 +432,7 @@ function LeadDetail() {
             className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#DDE5EF] bg-white px-3.5 text-xs font-bold text-[#0B1F33] transition hover:border-[#1061AF]"
           >
             <Pencil className="h-3.5 w-3.5 text-[#1061AF]" />
-            Editar cadastro
+            Editar contatos
           </button>
           <button
             onClick={() => setShowInteractionModal(true)}
@@ -358,6 +440,20 @@ function LeadDetail() {
           >
             <PhoneCall className="h-4 w-4 text-[#FFF200]" />
             Registrar contato
+          </button>
+          <button
+            onClick={() => void handleSendStoreLink()}
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#128C7E] px-4 text-xs font-bold text-white transition hover:bg-[#075E54]"
+          >
+            <ShoppingBag className="h-4 w-4" />
+            Enviar loja
+          </button>
+          <button
+            onClick={() => void handleCopyStoreLink()}
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#DDE5EF] bg-white px-3.5 text-xs font-bold text-[#0B1F33] transition hover:border-[#1061AF]"
+          >
+            <Copy className="h-3.5 w-3.5 text-[#1061AF]" />
+            Copiar B2B
           </button>
         </div>
       </div>
@@ -490,7 +586,7 @@ function LeadDetail() {
           presencial.
         </p>
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           {/* Canal WhatsApp */}
           <div
             className={`rounded-xl border p-4 transition ${waUrl ? "border-emerald-200 bg-emerald-50/40" : "border-[#E2E8F0] bg-[#F8FAFC] opacity-60"}`}
@@ -532,12 +628,21 @@ function LeadDetail() {
               {phone || "Não cadastrado"}
             </div>
             {telUrl ? (
-              <a
-                href={telUrl}
-                className="mt-3 inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg bg-[#1061AF] text-xs font-bold text-white transition hover:bg-[#0B1F33]"
-              >
-                Fazer ligação
-              </a>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <a
+                  href={telUrl}
+                  className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-[#1061AF] text-xs font-bold text-white transition hover:bg-[#0B1F33]"
+                >
+                  Fazer ligação
+                </a>
+                <button
+                  type="button"
+                  onClick={() => void handleCopyContactValue("Telefone", phoneCopyValue)}
+                  className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-blue-200 bg-white text-xs font-bold text-[#1061AF] transition hover:bg-blue-50"
+                >
+                  Copiar
+                </button>
+              </div>
             ) : (
               <span className="mt-3 block text-center text-[11px] text-[#64748B]">
                 Canal indisponível
@@ -557,17 +662,47 @@ function LeadDetail() {
               {email || "Não cadastrado"}
             </div>
             {mailUrl ? (
-              <a
-                href={mailUrl}
-                className="mt-3 inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg bg-sky-700 text-xs font-bold text-white transition hover:bg-sky-800"
-              >
-                Enviar e-mail
-              </a>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <a
+                  href={mailUrl}
+                  className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-sky-700 text-xs font-bold text-white transition hover:bg-sky-800"
+                >
+                  Enviar e-mail
+                </a>
+                <button
+                  type="button"
+                  onClick={() => void handleCopyContactValue("E-mail", emailCopyValue)}
+                  className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-sky-200 bg-white text-xs font-bold text-sky-700 transition hover:bg-sky-50"
+                >
+                  Copiar
+                </button>
+              </div>
             ) : (
               <span className="mt-3 block text-center text-[11px] text-[#64748B]">
                 Canal indisponível
               </span>
             )}
+          </div>
+
+          {/* Ação Enviar Loja B2B */}
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-4">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase text-[#0B1F33]">Loja B2B</span>
+              <ShoppingBag className="h-4 w-4 text-emerald-700" />
+            </div>
+            <div className="mt-2 text-xs font-semibold text-[#0B1F33] truncate">{STORE_URL}</div>
+            <button
+              onClick={() => void handleSendStoreLink()}
+              className="mt-3 inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg bg-[#128C7E] text-xs font-bold text-white transition hover:bg-[#075E54]"
+            >
+              Enviar loja
+            </button>
+            <button
+              onClick={() => void handleCopyStoreLink()}
+              className="mt-2 inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-white text-xs font-bold text-emerald-800 transition hover:bg-emerald-50"
+            >
+              Copiar link
+            </button>
           </div>
 
           {/* Ação Planejar Visita Presencial */}
@@ -755,8 +890,8 @@ function LeadDetail() {
                 >
                   <option value="CONTACTED">Contato realizado (Mover para Contatado)</option>
                   <option value="INTERESTED">Demonstrou interesse (Mover para Interessado)</option>
+                  <option value="LINK_B2B_SENT">Link B2B enviado</option>
                   <option value="NEGOTIATION">Em negociação / Proposta enviada</option>
-                  <option value="CONVERTED">Convertido (Cliente Ativo)</option>
                   <option value="NO_ANSWER">Tentativa realizada (Sem resposta)</option>
                   <option value="NOT_INTERESTED">Sem interesse no momento</option>
                 </select>
@@ -883,15 +1018,15 @@ function LeadDetail() {
         </div>
       )}
 
-      {/* ── MODAL 3: Editar Cadastro do Mercado ── */}
+      {/* ── MODAL 3: Editar Contatos do Mercado ── */}
       {showEditModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs">
           <div className="w-full max-w-lg rounded-2xl border border-[#DDE5EF] bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-3">
               <div>
-                <h3 className="text-base font-bold text-[#0B1F33]">Editar Cadastro do Mercado</h3>
+                <h3 className="text-base font-bold text-[#0B1F33]">Editar Contatos do Mercado</h3>
                 <p className="text-xs text-[#64748B]">
-                  Atualize manualmente telefone, e-mail e dados de localização.
+                  Adicione telefone ou e-mail sem alterar dados importados, CNPJ ou localização.
                 </p>
               </div>
               <button
@@ -931,102 +1066,6 @@ function LeadDetail() {
                 </div>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wide text-[#64748B]">
-                    Nome Fantasia
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Supermercado Exemplo"
-                    value={editForm.nomeFantasia}
-                    onChange={(e) =>
-                      setEditForm((prev) => ({ ...prev, nomeFantasia: e.target.value }))
-                    }
-                    className="mt-1.5 h-9 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-xs text-[#0B1F33] outline-none focus:border-[#1061AF]"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wide text-[#64748B]">
-                    Razão Social
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Razão Social LTDA"
-                    value={editForm.razaoSocial}
-                    onChange={(e) =>
-                      setEditForm((prev) => ({ ...prev, razaoSocial: e.target.value }))
-                    }
-                    className="mt-1.5 h-9 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-xs text-[#0B1F33] outline-none focus:border-[#1061AF]"
-                  />
-                </div>
-              </div>
-
-              <div className="border-t border-[#E2E8F0] pt-3">
-                <span className="block text-xs font-bold uppercase tracking-wide text-[#0B1F33]">
-                  Endereço & Localização
-                </span>
-
-                <div className="mt-2 grid gap-3 sm:grid-cols-3">
-                  <div className="sm:col-span-2">
-                    <label className="block text-[11px] font-semibold text-[#64748B]">
-                      Logradouro / Rua
-                    </label>
-                    <input
-                      type="text"
-                      value={editForm.logradouro}
-                      onChange={(e) =>
-                        setEditForm((prev) => ({ ...prev, logradouro: e.target.value }))
-                      }
-                      className="mt-1 h-9 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-xs text-[#0B1F33] outline-none focus:border-[#1061AF]"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold text-[#64748B]">Número</label>
-                    <input
-                      type="text"
-                      value={editForm.numero}
-                      onChange={(e) => setEditForm((prev) => ({ ...prev, numero: e.target.value }))}
-                      className="mt-1 h-9 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-xs text-[#0B1F33] outline-none focus:border-[#1061AF]"
-                    />
-                  </div>
-                </div>
-
-                <div className="mt-2 grid gap-3 sm:grid-cols-3">
-                  <div>
-                    <label className="block text-[11px] font-semibold text-[#64748B]">Bairro</label>
-                    <input
-                      type="text"
-                      value={editForm.bairro}
-                      onChange={(e) => setEditForm((prev) => ({ ...prev, bairro: e.target.value }))}
-                      className="mt-1 h-9 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-xs text-[#0B1F33] outline-none focus:border-[#1061AF]"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold text-[#64748B]">Cidade</label>
-                    <input
-                      type="text"
-                      value={editForm.cidade}
-                      onChange={(e) => setEditForm((prev) => ({ ...prev, cidade: e.target.value }))}
-                      className="mt-1 h-9 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-xs text-[#0B1F33] outline-none focus:border-[#1061AF]"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold text-[#64748B]">UF</label>
-                    <input
-                      type="text"
-                      maxLength={2}
-                      value={editForm.uf}
-                      onChange={(e) =>
-                        setEditForm((prev) => ({ ...prev, uf: e.target.value.toUpperCase() }))
-                      }
-                      className="mt-1 h-9 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-xs text-[#0B1F33] outline-none focus:border-[#1061AF]"
-                    />
-                  </div>
-                </div>
-              </div>
-
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#E2E8F0]">
                 <button
                   type="button"
@@ -1039,7 +1078,7 @@ function LeadDetail() {
                   type="submit"
                   className="h-9 rounded-lg bg-[#0B1F33] px-4 text-xs font-bold text-white transition hover:bg-[#1061AF]"
                 >
-                  Salvar Cadastro
+                  Salvar contatos
                 </button>
               </div>
             </form>

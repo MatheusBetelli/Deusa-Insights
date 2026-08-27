@@ -10,6 +10,7 @@ const pipelineStatuses = [
   LeadStatus.NEW,
   LeadStatus.CONTACTED,
   LeadStatus.INTERESTED,
+  LeadStatus.LINK_B2B_SENT,
   LeadStatus.NEGOTIATION,
   LeadStatus.CONVERTED,
 ] as const;
@@ -75,7 +76,7 @@ export class PipelineService {
       this.prisma.lead.findMany({
         where,
         include: {
-          company: { include: { cnaes: true } },
+          company: { include: { cnaes: true, details: true, contacts: true } },
           assignedTo: { select: safeAssignedToSelect },
         },
         orderBy: [{ score: "desc" }, { createdAt: "desc" }],
@@ -106,7 +107,7 @@ export class PipelineService {
     const leads = await this.prisma.lead.findMany({
       where: this.buildWhere(query, status, actor),
       include: {
-        company: { include: { cnaes: true } },
+        company: { include: { cnaes: true, details: true, contacts: true } },
         assignedTo: { select: safeAssignedToSelect },
       },
       orderBy: [{ score: "desc" }, { createdAt: "desc" }],
@@ -156,7 +157,7 @@ export class PipelineService {
   private toCard(
     lead: Prisma.LeadGetPayload<{
       include: {
-        company: { include: { cnaes: true } };
+        company: { include: { cnaes: true; details: true; contacts: true } };
         assignedTo: { select: typeof safeAssignedToSelect };
       };
     }>,
@@ -174,10 +175,11 @@ export class PipelineService {
       longitude: lead.company.longitude,
       logradouro: lead.company.logradouro,
       numero: lead.company.numero,
-      bairro: lead.company.bairro,
-      cep: lead.company.cep,
-      statusLead: lead.status,
-    });
+        bairro: lead.company.bairro,
+        cep: lead.company.cep,
+        telefone: this.getCommercialPhone(lead.company),
+        statusLead: lead.status,
+      });
 
     return {
       id: lead.id,
@@ -187,7 +189,20 @@ export class PipelineService {
       score: fullScore.score,
       potentialLevel: fullScore.level,
       scoreBreakdown: fullScore.breakdown,
+      scoreReasons: fullScore.reasons,
       assignedTo: lead.assignedTo?.name ?? null,
     };
+  }
+
+  private getCommercialPhone(company: {
+    telefoneEncontrado?: string | null;
+    details?: { telefone?: string | null } | null;
+    contacts?: Array<{ type: string; value: string; active: boolean; isPrimary: boolean }>;
+  }) {
+    const contact =
+      company.contacts
+        ?.filter((item) => item.active && (item.type === "PHONE" || item.type === "WHATSAPP"))
+        .sort((a, b) => Number(b.isPrimary) - Number(a.isPrimary))[0] ?? null;
+    return contact?.value || company.details?.telefone || company.telefoneEncontrado || null;
   }
 }

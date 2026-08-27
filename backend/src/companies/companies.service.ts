@@ -1,5 +1,5 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
+import { ContactSource, ContactType, Prisma } from "@prisma/client";
 import { normalizeCnpj } from "../common/cnpj";
 import { isValidCnpj } from "../common/cnpj-validator";
 import { getCnaeVariants } from "../common/opportunity-filter";
@@ -13,6 +13,7 @@ import { CompanyQueryDto } from "./dto/company-query.dto";
 import { CreateCompanyDto } from "./dto/create-company.dto";
 import { UpdateCompanyDto } from "./dto/update-company.dto";
 import { CompanyDetailsDto } from "./dto/company-details.dto";
+import { CreateCompanyContactDto, UpdateCompanyContactDto } from "./dto/company-contact.dto";
 import { ValidateLocationDto } from "./dto/validate-location.dto";
 import { ClassificationService } from "../classification/classification.service";
 import { UpdateCommercialProfileDto } from "./dto/update-commercial-profile.dto";
@@ -117,6 +118,22 @@ type LocationCandidateCompany = {
   details: { telefone: string | null } | null;
 };
 
+type NormalizedContact = {
+  type: ContactType;
+  value: string;
+  source: ContactSource;
+  isPrimary: boolean;
+  active: boolean;
+};
+
+type ExistingContact = {
+  type: ContactType;
+  value: string;
+  source: ContactSource;
+  isPrimary: boolean;
+  active: boolean;
+};
+
 const CONFIRMED_LOCATION_SOURCES = new Set([
   "validacao_manual_com_evidencia",
   "google_places",
@@ -142,6 +159,85 @@ function assertCoordinatePair(dto: ValidateLocationDto): void {
   if (hasLatitude !== hasLongitude) {
     throw new BadRequestException("Latitude e longitude devem ser informadas em conjunto.");
   }
+}
+
+function normalizeContactValue(type: ContactType, rawValue: string): string {
+  const value = rawValue.trim();
+  if (!value) {
+    throw new BadRequestException("Contato deve possuir um valor.");
+  }
+
+  if (type === ContactType.EMAIL) {
+    const email = value.toLowerCase();
+    if (!/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(email)) {
+      throw new BadRequestException("E-mail comercial inválido.");
+    }
+    return email;
+  }
+
+  const digits = value.replace(/\D/g, "");
+  if (digits.length < 8 || digits.length > 13) {
+    throw new BadRequestException("Telefone comercial deve possuir entre 8 e 13 dígitos.");
+  }
+  if (type === ContactType.WHATSAPP && digits.length < 10) {
+    throw new BadRequestException("WhatsApp deve possuir DDD.");
+  }
+  return digits;
+}
+
+function normalizeContactDto(
+  dto: CreateCompanyContactDto | UpdateCompanyContactDto,
+  fallbackType?: ContactType,
+  fallbackValue?: string,
+): NormalizedContact {
+  const type = "type" in dto && dto.type ? dto.type : fallbackType;
+  if (!type) throw new BadRequestException("Tipo de contato é obrigatório.");
+
+  const rawValue = dto.value ?? fallbackValue;
+  if (!rawValue) throw new BadRequestException("Contato deve possuir um valor.");
+
+  return {
+    type,
+    value: normalizeContactValue(type, rawValue),
+    source: dto.source ?? ContactSource.MANUAL,
+    isPrimary: dto.isPrimary ?? false,
+    active: dto.active ?? true,
+  };
+}
+
+function normalizeManualContactDto(dto: CreateCompanyContactDto): NormalizedContact {
+  return {
+    ...normalizeContactDto(dto),
+    source: ContactSource.MANUAL,
+  };
+}
+
+function normalizeContactUpdateDto(
+  dto: UpdateCompanyContactDto,
+  existing: ExistingContact,
+): NormalizedContact {
+  const value =
+    dto.value !== undefined ? normalizeContactValue(existing.type, dto.value) : existing.value;
+  const active = dto.active ?? existing.active;
+  return {
+    type: existing.type,
+    value,
+    source: existing.source,
+    isPrimary: active ? (dto.isPrimary ?? existing.isPrimary) : false,
+    active,
+  };
+}
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    value.trim(),
+  );
+}
+
+function contactAuditFields(actor: LeadAccessActor) {
+  return isUuid(actor.sub)
+    ? { createdBy: actor.sub, createdByLegacy: undefined }
+    : { createdByLegacy: actor.sub };
 }
 
 function assertConfirmedLocation(situacaoCadastral: string, dto: ValidateLocationDto): void {
@@ -377,7 +473,7 @@ export class CompaniesService {
 
     const items = await this.prisma.company.findMany({
       where: this.buildWhere(query),
-      include: { cnaes: true, lead: true },
+      include: { cnaes: true, lead: true, details: true, contacts: true },
       orderBy: { createdAt: "desc" },
       take: 200,
     });
@@ -395,7 +491,7 @@ export class CompaniesService {
       this.prisma.company.count({ where }),
       this.prisma.company.findMany({
         where,
-        include: { cnaes: true, lead: true },
+        include: { cnaes: true, lead: true, details: true, contacts: true },
         orderBy: this.buildOrderBy(query),
         skip: (page - 1) * pageSize,
         take: pageSize,
@@ -466,7 +562,13 @@ export class CompaniesService {
   async findById(id: string) {
     const company = await this.prisma.company.findUnique({
       where: { id },
-      include: { cnaes: true, lead: { include: { assignedTo: { select: safeAssignedToSelect } } } },
+      include: {
+        cnaes: true,
+        details: true,
+        contacts: true,
+        clientAccounts: { where: { isCurrentClient: true }, select: { isCurrentClient: true } },
+        lead: { include: { assignedTo: { select: safeAssignedToSelect } } },
+      },
     });
     if (!company) throw new NotFoundException("Empresa não encontrada");
     return {
@@ -558,24 +660,38 @@ export class CompaniesService {
         },
       });
 
-      if (dto.telefone !== undefined || dto.email !== undefined) {
-        await tx.companyDetails.upsert({
-          where: { companyId: id },
-          create: {
-            companyId: id,
-            telefone: dto.telefone,
-            email: dto.email,
+      if (dto.telefone?.trim()) {
+        await this.upsertContactRecord(
+          tx,
+          id,
+          {
+            type: ContactType.PHONE,
+            value: dto.telefone,
+            source: ContactSource.MANUAL,
+            isPrimary: true,
+            active: true,
           },
-          update: {
-            telefone: dto.telefone,
-            email: dto.email,
+          actor,
+        );
+      }
+      if (dto.email?.trim()) {
+        await this.upsertContactRecord(
+          tx,
+          id,
+          {
+            type: ContactType.EMAIL,
+            value: dto.email,
+            source: ContactSource.MANUAL,
+            isPrimary: true,
+            active: true,
           },
-        });
+          actor,
+        );
       }
 
       return tx.company.findUnique({
         where: { id },
-        include: { cnaes: true, lead: true, details: true },
+        include: { cnaes: true, lead: true, details: true, contacts: true },
       });
     });
   }
@@ -717,13 +833,14 @@ export class CompaniesService {
   async getDetails(id: string) {
     const company = await this.prisma.company.findUnique({
       where: { id },
-      include: { details: true, cnaes: true },
+      include: { details: true, cnaes: true, contacts: true },
     });
     if (!company) throw new NotFoundException("Empresa não encontrada");
 
     const classification = this.classificationService.classifyCompany(company);
     return {
       details: company.details,
+      contacts: company.contacts,
       classification,
     };
   }
@@ -753,6 +870,106 @@ export class CompaniesService {
     });
 
     return this.getDetails(id);
+  }
+
+  async listContacts(id: string, actor: LeadAccessActor) {
+    const company = await this.prisma.company.findFirst({
+      where: scopeCompanyWhere({ id }, actor),
+      select: { id: true },
+    });
+    if (!company) throw new NotFoundException("Empresa não encontrada");
+
+    return this.prisma.companyContact.findMany({
+      where: { companyId: id, active: true },
+      orderBy: [{ isPrimary: "desc" }, { createdAt: "desc" }],
+    });
+  }
+
+  async createContact(id: string, dto: CreateCompanyContactDto, actor: LeadAccessActor) {
+    const company = await this.prisma.company.findFirst({
+      where: scopeCompanyWhere({ id }, actor),
+      select: { id: true },
+    });
+    if (!company) throw new NotFoundException("Empresa não encontrada");
+
+    return this.prisma.$transaction((tx) =>
+      this.upsertContactRecord(tx, id, normalizeManualContactDto(dto), actor),
+    );
+  }
+
+  async updateContact(
+    id: string,
+    contactId: string,
+    dto: UpdateCompanyContactDto,
+    actor: LeadAccessActor,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      const company = await tx.company.findFirst({
+        where: scopeCompanyWhere({ id }, actor),
+        select: { id: true },
+      });
+      if (!company) throw new NotFoundException("Empresa não encontrada");
+
+      const existing = await tx.companyContact.findFirst({
+        where: { id: contactId, companyId: id },
+      });
+      if (!existing) throw new NotFoundException("Contato não encontrado");
+
+      const normalized = normalizeContactUpdateDto(dto, existing);
+
+      if (normalized.isPrimary) {
+        await tx.companyContact.updateMany({
+          where: { companyId: id, type: normalized.type, id: { not: contactId } },
+          data: { isPrimary: false },
+        });
+      }
+
+      return tx.companyContact.update({
+        where: { id: contactId },
+        data: {
+          value: normalized.value,
+          isPrimary: normalized.isPrimary,
+          active: normalized.active,
+        },
+      });
+    });
+  }
+
+  private async upsertContactRecord(
+    tx: Prisma.TransactionClient,
+    companyId: string,
+    input: NormalizedContact,
+    actor: LeadAccessActor,
+  ) {
+    if (input.isPrimary) {
+      await tx.companyContact.updateMany({
+        where: { companyId, type: input.type },
+        data: { isPrimary: false },
+      });
+    }
+
+    return tx.companyContact.upsert({
+      where: {
+        companyId_type_value: {
+          companyId,
+          type: input.type,
+          value: input.value,
+        },
+      },
+      create: {
+        companyId,
+        type: input.type,
+        value: input.value,
+        source: input.source,
+        ...contactAuditFields(actor),
+        isPrimary: input.isPrimary,
+        active: input.active,
+      },
+      update: {
+        isPrimary: input.isPrimary,
+        active: input.active,
+      },
+    });
   }
 
   async validateLocation(id: string, dto: ValidateLocationDto) {

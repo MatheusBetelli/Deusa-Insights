@@ -26,7 +26,14 @@ export const Route = createFileRoute("/_app/funil-comercial")({
   component: CommercialFunnel,
 });
 
-const columns: LeadStatus[] = ["NEW", "CONTACTED", "INTERESTED", "NEGOTIATION", "CONVERTED"];
+const columns: LeadStatus[] = [
+  "NEW",
+  "CONTACTED",
+  "INTERESTED",
+  "LINK_B2B_SENT",
+  "NEGOTIATION",
+  "CONVERTED",
+];
 const COLUMN_PAGE_SIZE = 6;
 
 const columnStyles: Partial<
@@ -65,6 +72,14 @@ const columnStyles: Partial<
     iconColor: "text-indigo-600",
     badgeBg: "bg-indigo-100",
     badgeText: "text-indigo-800",
+  },
+  LINK_B2B_SENT: {
+    border: "border-teal-200/80",
+    bgHeader: "bg-teal-50/80 border-teal-200/60",
+    bgBody: "bg-teal-50/30",
+    iconColor: "text-teal-600",
+    badgeBg: "bg-teal-100",
+    badgeText: "text-teal-800",
   },
   NEGOTIATION: {
     border: "border-amber-200/80",
@@ -261,6 +276,12 @@ function CommercialFunnel() {
       return;
     }
 
+    if (sourceStatus === "CONVERTED" || targetStatus === "CONVERTED") {
+      toast.error("Cliente confirmado só pode mudar pela base oficial/B2B/ERP.");
+      setDraggedLead(null);
+      return;
+    }
+
     // Atualização otimista no estado do pipeline
     setPipeline((current) => {
       if (!current) return current;
@@ -401,7 +422,7 @@ function CommercialFunnel() {
             </div>
           </section>
 
-          <section className="grid gap-3 xl:grid-cols-5">
+          <section className="grid gap-3 xl:grid-cols-6">
             {columns.map((column) => {
               const stage = pipeline.stages[column];
               const items = stage?.items ?? [];

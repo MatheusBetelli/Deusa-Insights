@@ -1,5 +1,32 @@
 # Checkpoint da entrega de producao
 
+## Estado atual em 2026-08-26
+
+O baseline continua no branch `main`, com `HEAD == origin/main == 145a840c6aeb`; o `git fetch --prune origin` confirmou divergencia `0/0`. Existe uma nova entrega de hardening no worktree, ainda sem commit, push ou deploy. As alteracoes preexistentes do usuario no comando `start:dev` foram preservadas e os acessos a `import.meta.env` no frontend foram tornados compativeis com o executor de testes.
+
+### Hardening implementado
+
+- Autorizacao por carteira foi centralizada: `ADMIN` e `MANAGER` mantem acesso total; `SALES` somente consulta e altera leads, interacoes, empresas, mapa, dashboard, pipeline e notificacoes vinculados ao proprio portfolio.
+- Operacoes sensiveis passaram a validar ownership no backend e dentro das mutacoes relevantes, mitigando IDOR e atribuicao indevida. Novos leads criados por vendedor sao atribuidos ao proprio usuario.
+- Senhas novas exigem 12 caracteres com maiuscula, minuscula, numero e simbolo; o login continua compativel com hashes existentes. O limite de login foi reduzido para 10 tentativas por minuto.
+- Cada requisicao recebe `X-Request-ID`, refletido nos logs de auditoria. Respostas de autenticacao e exportacao CSV usam `Cache-Control: no-store`.
+- Foram separados `/health/live` (processo) e `/health/ready` (banco), mantendo `/health` por compatibilidade. A imagem Docker usa Node 22 fixado por digest, usuario nao-root e healthcheck de liveness.
+- O CI agora valida as cinco migrations em PostgreSQL 16 efemero com `migrate deploy`, `migrate status` e `migrate diff --exit-code`. O runbook documenta imagem imutavel, canario sem trafego, rollout gradual, rollback e controles externos.
+
+### Evidencias desta etapa
+
+- Higiene, lint, deadcode/Knip, typecheck, `git diff --check` e build de producao passaram.
+- Backend: 99 de 99 testes passaram. Frontend: 18 de 18 testes passaram.
+- Auditoria npm de producao: zero vulnerabilidades nos tres escopos.
+- PostgreSQL 16 efemero: cinco migrations aplicadas, status atualizado e nenhum diff em relacao ao schema. Nao houve seed.
+- Docker: build concluido; a aplicacao respondeu 200 em liveness, readiness e health legado. Logout sem Origin retornou 403, com Origin permitido retornou 201 e Swagger permaneceu 404 em producao.
+- Cloudflare Workers: build e `deploy:dry-run` passaram, com `No bindings found`.
+- Containers, rede, banco e imagem temporarios foram removidos ao final.
+
+Nenhum dado comercial, lead, coordenada, banco real ou API paga foi alterado. `ENABLE_LEAD_MUTATIONS=false` continua sendo o padrao seguro de producao. A entrega esta pronta para revisao e deploy controlado, mas producao empresarial ainda depende de configuracao e evidencia externas: credenciais e papel runtime sem privilegios de DDL/BYPASSRLS, backup/PITR com teste de restauracao, secrets e dominios, alertas/log retention, protecao de branch, rate limiting distribuido/WAF e smoke em staging/canario. Nao publicar nem migrar o banco real sem autorizacao explicita.
+
+## Registro historico de 2026-08-25
+
 Atualizado em 2026-08-25, no branch `main`, depois da validacao local final, da correcao do primeiro CI remoto e da execucao 20 concluida com sucesso. Os fatos de remoto abaixo correspondem ao estado observado durante a entrega; sempre verifique novamente antes de enviar.
 
 ## Objetivo e limites de autorizacao

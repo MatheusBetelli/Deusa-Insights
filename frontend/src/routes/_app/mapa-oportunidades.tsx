@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type * as L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "leaflet.markercluster/dist/MarkerCluster.css";
@@ -9,7 +9,7 @@ import { EmptyState, ErrorState, LoadingState } from "@/components/common/Interf
 import { formatCnae, potentialLabels, statusLabels } from "@/lib/commercial-formatters";
 import { ESTADOS_UF } from "@/lib/constants";
 import { escapeHtml, escapeHtmlAttribute, safePathSegment } from "@/lib/html-safety";
-import { mapService } from "@/services/mapService";
+import { mapService, type MapOpportunityQuery } from "@/services/mapService";
 import type { MapOpportunity } from "@/types/mapOpportunity";
 import {
   AlertTriangle,
@@ -76,8 +76,14 @@ type CommercialCategory = "CLIENTE" | "CRITICO" | "PROSPECT";
 
 function getCommercialCategory(item: MapOpportunity): CommercialCategory {
   if (item.isClient) return "CLIENTE";
-  if (item.score >= 80 || item.potentialLevel === "CRITICAL") return "CRITICO";
+  if (item.potentialLevel === "CRITICAL") return "CRITICO";
   return "PROSPECT";
+}
+
+function getPotentialLevelColor(level: MapOpportunity["potentialLevel"]): string {
+  if (level === "CRITICAL") return "#ED1C24";
+  if (level === "HIGH") return "#C2410C";
+  return "#1061AF";
 }
 
 function getEstablishmentType(cnae?: string | null): string {
@@ -123,7 +129,7 @@ function makePinHtml(category: CommercialCategory, cnae: string | null | undefin
   if (category === "CLIENTE") {
     bg = "#16A34A"; // Verde para Cliente Ativo
   } else if (category === "CRITICO") {
-    bg = "#ED1C24"; // Vermelho para Oportunidade Crítica (Score >= 80)
+    bg = "#ED1C24"; // Vermelho para prioridade crítica calculada no backend
   }
 
   const iconSvg = getEstablishmentIconSvg(cnae);
@@ -184,6 +190,7 @@ function OpportunityMap() {
   const [clustersOn, setClustersOn] = useState(
     routeSearch.clusters ?? storedFilters.clusters ?? true,
   );
+  const hasFittedRef = useRef(false);
 
   useEffect(() => {
     const params: MapSearch = {
@@ -207,22 +214,58 @@ function OpportunityMap() {
     clustersOn,
     navigate,
   ]);
-  const hasFittedRef = useRef(false);
-  async function loadData() {
+  const serverQuery = useMemo<MapOpportunityQuery>(() => {
+    if (routeSearch.companyId) {
+      return { companyId: routeSearch.companyId };
+    }
+
+    const query: MapOpportunityQuery = {};
+    if (selectedUf && selectedUf !== "Todos") query.uf = selectedUf;
+    if (selectedCity && selectedCity !== "Todas") query.city = selectedCity;
+    if (searchQuery.trim()) query.search = searchQuery.trim();
+
+    if (selectedCategory === "CLIENTE") {
+      query.client = "true";
+    } else if (selectedCategory === "CRITICO") {
+      query.client = "false";
+      query.potentialLevel = "CRITICAL";
+    } else if (selectedCategory === "PROSPECT") {
+      query.client = "false";
+    }
+
+    if (selectedEstablishmentType === "Minimercado / Mercearia") query.cnae = "4712100";
+    if (selectedEstablishmentType === "Açougue") query.cnae = "4722901";
+    if (selectedEstablishmentType === "Padaria") query.cnae = "4721102";
+
+    return query;
+  }, [
+    routeSearch.companyId,
+    searchQuery,
+    selectedCategory,
+    selectedCity,
+    selectedEstablishmentType,
+    selectedUf,
+  ]);
+
+  const loadData = useCallback(async () => {
+    hasFittedRef.current = false;
     setDataLoading(true);
     setDataError(null);
     try {
-      setOpportunities(await mapService.getOpportunities());
+      setOpportunities(await mapService.getOpportunities(serverQuery));
     } catch (err) {
       setDataError(err instanceof Error ? err.message : "Erro ao carregar oportunidades.");
     } finally {
       setDataLoading(false);
     }
-  }
+  }, [serverQuery]);
 
   useEffect(() => {
-    loadData();
-  }, []);
+    const timer = window.setTimeout(() => {
+      void loadData();
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [loadData]);
 
   useEffect(() => {
     setSelectedUf(routeSearch.uf ?? storedFilters.uf ?? "SP");
@@ -533,8 +576,7 @@ function OpportunityMap() {
               point.potentialLevel;
             const statusText =
               statusLabels[point.status as keyof typeof statusLabels] || point.status;
-            const levelColor =
-              point.score >= 80 ? "#ED1C24" : point.score >= 65 ? "#C2410C" : "#1061AF";
+            const levelColor = getPotentialLevelColor(point.potentialLevel);
             const phoneDisplay = point.telefone || "Não identificado";
             const emailDisplay = point.email || "Não identificado";
             const leadHref = `/leads-b2b/${safePathSegment(point.id)}`;
@@ -765,7 +807,7 @@ function OpportunityMap() {
             >
               <option value="Todas">Todas</option>
               <option value="CLIENTE">Cliente Ativo</option>
-              <option value="CRITICO">Oportunidade Crítica (Score ≥ 80)</option>
+              <option value="CRITICO">Oportunidade Crítica</option>
               <option value="PROSPECT">Prospect Normal</option>
             </select>
           </label>
@@ -855,7 +897,7 @@ function OpportunityMap() {
             </div>
             <div className="flex items-center gap-1.5">
               <span className="h-3 w-3 rounded-full bg-[#ED1C24] shadow-xs" />
-              <span className="font-medium text-slate-700">Crítica (Score ≥ 80)</span>
+              <span className="font-medium text-slate-700">Crítica</span>
             </div>
             <div className="flex items-center gap-1.5">
               <span className="h-3 w-3 rounded-full bg-[#1061AF] shadow-xs" />
@@ -954,7 +996,7 @@ function OpportunityMap() {
                 </span>
                 <span className="flex items-center gap-1.5 rounded-full border border-red-300/60 bg-red-50 px-2.5 py-0.5 text-xs font-semibold text-red-800">
                   <span className="h-2 w-2 rounded-full bg-[#ED1C24]" />
-                  Oportunidade Crítica (Score ≥ 80)
+                  Oportunidade Crítica
                 </span>
                 <span className="flex items-center gap-1.5 rounded-full border border-slate-300/60 bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700">
                   <span className="h-2 w-2 rounded-full bg-[#1061AF]" />

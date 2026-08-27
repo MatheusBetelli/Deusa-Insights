@@ -9,6 +9,20 @@ export type ClientAccountStatus = {
   isCurrentClient: boolean;
 };
 
+export type CompanyContact = {
+  id: string;
+  companyId: string;
+  type: "PHONE" | "WHATSAPP" | "EMAIL";
+  value: string;
+  source: "IMPORT" | "PUBLIC" | "MANUAL";
+  createdBy?: string | null;
+  createdByLegacy?: string | null;
+  isPrimary: boolean;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type Company = {
   id: string;
   cnpj: string;
@@ -37,6 +51,7 @@ export type Company = {
   updatedAt: string;
   cnaes?: CompanyCnae[];
   clientAccounts?: ClientAccountStatus[];
+  contacts?: CompanyContact[];
   // ─── Rastreabilidade de Coordenadas ───────────────────────────────
   // "municipio_centroide_jitter" = ponto visual apenas, NÃO é endereço real
   origemCoordenada?: string | null;

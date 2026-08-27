@@ -3,7 +3,11 @@ import { Throttle } from "@nestjs/throttler";
 import { AuthGuard } from "../auth/auth.guard";
 import { Roles } from "../auth/roles.decorator";
 import { RolesGuard } from "../auth/roles.guard";
-import { DatasetFreezeGuard, FrozenDatasetReadOnly } from "../common/dataset-freeze.guard";
+import {
+  CommercialActionMutation,
+  DatasetFreezeGuard,
+  FrozenDatasetReadOnly,
+} from "../common/dataset-freeze.guard";
 import { UserRole } from "@prisma/client";
 import { AuthenticatedHttpRequest } from "../common/auditable-http.types";
 import { CompaniesService } from "./companies.service";
@@ -14,6 +18,7 @@ import { CompanyDetailsDto } from "./dto/company-details.dto";
 import { ValidateLocationDto } from "./dto/validate-location.dto";
 import { LocationCandidatesRequestDto } from "./dto/location-candidates-request.dto";
 import { UpdateCommercialProfileDto } from "./dto/update-commercial-profile.dto";
+import { CreateCompanyContactDto, UpdateCompanyContactDto } from "./dto/company-contact.dto";
 
 @UseGuards(AuthGuard, RolesGuard, DatasetFreezeGuard)
 @Controller("companies")
@@ -78,6 +83,32 @@ export class CompaniesController {
     @Req() request: AuthenticatedHttpRequest,
   ) {
     return this.companiesService.updateCommercialProfile(id, dto, request.user);
+  }
+
+  @Get(":id/contacts")
+  listContacts(@Param("id") id: string, @Req() request: AuthenticatedHttpRequest) {
+    return this.companiesService.listContacts(id, request.user);
+  }
+
+  @Post(":id/contacts")
+  @CommercialActionMutation()
+  createContact(
+    @Param("id") id: string,
+    @Body() dto: CreateCompanyContactDto,
+    @Req() request: AuthenticatedHttpRequest,
+  ) {
+    return this.companiesService.createContact(id, dto, request.user);
+  }
+
+  @Patch(":id/contacts/:contactId")
+  @CommercialActionMutation()
+  updateContact(
+    @Param("id") id: string,
+    @Param("contactId") contactId: string,
+    @Body() dto: UpdateCompanyContactDto,
+    @Req() request: AuthenticatedHttpRequest,
+  ) {
+    return this.companiesService.updateContact(id, contactId, dto, request.user);
   }
 
   @Post(":id/validate-location")

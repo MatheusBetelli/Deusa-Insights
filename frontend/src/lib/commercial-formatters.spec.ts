@@ -55,7 +55,8 @@ test("companyName prioriza nomeFantasia e faz fallback para razaoSocial", () => 
 
 test("statusLabels e potentialLabels contem mapeamentos legiveis em portugues", () => {
   assert.strictEqual(statusLabels.NEW, "Novo");
-  assert.strictEqual(statusLabels.CONVERTED, "Convertido");
+  assert.strictEqual(statusLabels.LINK_B2B_SENT, "Link B2B enviado");
+  assert.strictEqual(statusLabels.CONVERTED, "Cliente confirmado");
   assert.strictEqual(potentialLabels.HIGH, "Alto");
   assert.strictEqual(potentialLabels.CRITICAL, "Crítico");
 });

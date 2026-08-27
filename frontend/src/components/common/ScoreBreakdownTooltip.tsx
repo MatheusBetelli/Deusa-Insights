@@ -1,21 +1,31 @@
-import type { ScoreBreakdown } from "@/types/lead";
+import type { PotentialLevel, ScoreBreakdown } from "@/types/lead";
 import { Info, MapPin } from "lucide-react";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
+import { potentialLabels } from "@/lib/commercial-formatters";
 
 interface ScoreBreakdownTooltipProps {
   score: number;
+  potentialLevel?: PotentialLevel;
   breakdown?: ScoreBreakdown;
   className?: string;
   variant?: "default" | "subtle";
 }
 
+function getLevelColor(level?: PotentialLevel): string {
+  if (level === "CRITICAL") return "text-[#ED1C24] bg-red-50 border-red-200";
+  if (level === "HIGH") return "text-[#D97706] bg-amber-50 border-amber-200";
+  if (level === "MEDIUM") return "text-[#1061AF] bg-blue-50 border-blue-200";
+  return "text-[#64748B] bg-slate-100 border-slate-200";
+}
+
 export function ScoreBreakdownTooltip({
   score,
+  potentialLevel,
   breakdown,
   className = "",
   variant = "default",
 }: ScoreBreakdownTooltipProps) {
-  // Se não houver breakdown retornado pela API, gera a estimativa proporcional baseada nas faixas oficiais do algoritmo
+  // Se não houver breakdown retornado pela API, exibe apenas a distribuição proporcional do score recebido.
   const b = breakdown ?? {
     perfilPts: Math.round((score / 100) * 30),
     potencialPts: Math.round((score / 100) * 25),
@@ -26,18 +36,8 @@ export function ScoreBreakdownTooltip({
     distanceKm: 85,
   };
 
-  let levelLabel = "Baixa";
-  let levelColor = "text-[#64748B] bg-slate-100 border-slate-200";
-  if (score >= 80) {
-    levelLabel = "Crítica";
-    levelColor = "text-[#ED1C24] bg-red-50 border-red-200";
-  } else if (score >= 65) {
-    levelLabel = "Alta";
-    levelColor = "text-[#D97706] bg-amber-50 border-amber-200";
-  } else if (score >= 45) {
-    levelLabel = "Média";
-    levelColor = "text-[#1061AF] bg-blue-50 border-blue-200";
-  }
+  const levelLabel = potentialLevel ? potentialLabels[potentialLevel] : "Classificado";
+  const levelColor = getLevelColor(potentialLevel);
 
   const badgeStyle =
     variant === "subtle"

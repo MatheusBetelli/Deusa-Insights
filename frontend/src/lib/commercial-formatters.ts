@@ -5,8 +5,9 @@ export const statusLabels: Record<LeadStatus, string> = {
   NO_CONTACT: "Sem contato",
   CONTACTED: "Contatado",
   INTERESTED: "Interessado",
+  LINK_B2B_SENT: "Link B2B enviado",
   NEGOTIATION: "Em negociação",
-  CONVERTED: "Convertido",
+  CONVERTED: "Cliente confirmado",
   NOT_INTERESTED: "Descartado",
   INACTIVE: "Inativo",
 };
