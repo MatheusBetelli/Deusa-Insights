@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { BadRequestException } from "@nestjs/common";
+import { ContactSource, ContactType } from "@prisma/client";
 import { CompaniesService } from "./companies.service";
 
 function makeService(existing: Record<string, unknown> | null) {
@@ -183,6 +184,141 @@ test("vendedor não altera perfil comercial de empresa fora da própria carteira
   assert.equal(updateCalls, 0);
   assert.match(JSON.stringify(accessWhere), /assignedToId_legacy/);
   assert.match(JSON.stringify(accessWhere), /sales@example\.com/);
+});
+
+test("createContact normaliza contato manual e força origem MANUAL", async () => {
+  let upsertArgs: Record<string, unknown> | undefined;
+  const tx = {
+    companyContact: {
+      updateMany: async () => ({ count: 0 }),
+      upsert: async (args: Record<string, unknown>) => {
+        upsertArgs = args;
+        return { id: "contact-1" };
+      },
+    },
+  };
+  const prisma = {
+    company: {
+      findFirst: async () => ({ id: "company-1" }),
+    },
+    $transaction: async (callback: (transaction: typeof tx) => Promise<unknown>) => callback(tx),
+  };
+  const service = new CompaniesService(prisma as never, {} as never, {} as never, {} as never);
+
+  await service.createContact(
+    "company-1",
+    {
+      type: ContactType.EMAIL,
+      value: "COMERCIAL@EXAMPLE.COM",
+      source: ContactSource.PUBLIC,
+      isPrimary: true,
+    },
+    { sub: "manager-1", email: "manager@example.com", role: "MANAGER" },
+  );
+
+  const create = (upsertArgs?.create ?? {}) as Record<string, unknown>;
+  assert.equal(create.value, "comercial@example.com");
+  assert.equal(create.source, ContactSource.MANUAL);
+  assert.equal(create.createdByLegacy, "manager-1");
+  assert.equal(create.isPrimary, true);
+});
+
+test("updateContact preserva tipo e origem, normaliza valor e mantém primário único", async () => {
+  let updateManyArgs: Record<string, unknown> | undefined;
+  let updateArgs: Record<string, unknown> | undefined;
+  const tx = {
+    company: {
+      findFirst: async () => ({ id: "company-1" }),
+    },
+    companyContact: {
+      findFirst: async () => ({
+        id: "contact-1",
+        companyId: "company-1",
+        type: ContactType.EMAIL,
+        value: "antigo@example.com",
+        source: ContactSource.PUBLIC,
+        isPrimary: false,
+        active: true,
+      }),
+      updateMany: async (args: Record<string, unknown>) => {
+        updateManyArgs = args;
+        return { count: 1 };
+      },
+      update: async (args: Record<string, unknown>) => {
+        updateArgs = args;
+        return { id: "contact-1" };
+      },
+    },
+  };
+  const prisma = {
+    $transaction: async (callback: (transaction: typeof tx) => Promise<unknown>) => callback(tx),
+  };
+  const service = new CompaniesService(prisma as never, {} as never, {} as never, {} as never);
+
+  await service.updateContact(
+    "company-1",
+    "contact-1",
+    {
+      value: "NOVO@EXAMPLE.COM",
+      source: ContactSource.IMPORT,
+      isPrimary: true,
+    },
+    { sub: "manager-1", email: "manager@example.com", role: "MANAGER" },
+  );
+
+  const data = (updateArgs?.data ?? {}) as Record<string, unknown>;
+  assert.equal(data.value, "novo@example.com");
+  assert.equal(data.isPrimary, true);
+  assert.equal(data.active, true);
+  assert.equal("source" in data, false);
+  assert.equal("type" in data, false);
+  assert.match(JSON.stringify(updateManyArgs), /company-1/);
+  assert.match(JSON.stringify(updateManyArgs), /EMAIL/);
+});
+
+test("updateContact desativa contato sem reativar nem manter primário", async () => {
+  let updateManyCalls = 0;
+  let updateArgs: Record<string, unknown> | undefined;
+  const tx = {
+    company: {
+      findFirst: async () => ({ id: "company-1" }),
+    },
+    companyContact: {
+      findFirst: async () => ({
+        id: "contact-1",
+        companyId: "company-1",
+        type: ContactType.WHATSAPP,
+        value: "14999999999",
+        source: ContactSource.MANUAL,
+        isPrimary: true,
+        active: true,
+      }),
+      updateMany: async () => {
+        updateManyCalls += 1;
+        return { count: 0 };
+      },
+      update: async (args: Record<string, unknown>) => {
+        updateArgs = args;
+        return { id: "contact-1" };
+      },
+    },
+  };
+  const prisma = {
+    $transaction: async (callback: (transaction: typeof tx) => Promise<unknown>) => callback(tx),
+  };
+  const service = new CompaniesService(prisma as never, {} as never, {} as never, {} as never);
+
+  await service.updateContact(
+    "company-1",
+    "contact-1",
+    { active: false },
+    { sub: "manager-1", email: "manager@example.com", role: "MANAGER" },
+  );
+
+  const data = (updateArgs?.data ?? {}) as Record<string, unknown>;
+  assert.equal(data.active, false);
+  assert.equal(data.isPrimary, false);
+  assert.equal(updateManyCalls, 0);
 });
 
 test("candidatos de localização exigem confirmação explícita", async () => {
