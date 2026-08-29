@@ -8,9 +8,8 @@ import helmet from "helmet";
 import cookieParser from "cookie-parser";
 import { AppModule } from "./app.module";
 import { createOriginProtectionMiddleware } from "./common/origin-protection.middleware";
+import { validateProductionConfig } from "./common/production-config";
 import { createRequestIdMiddleware } from "./common/request-id.middleware";
-
-const DEV_JWT_SECRET = "dev-secret-change-me";
 
 function getConfiguredAllowedOrigins(configService: ConfigService): string[] {
   const configured = configService.get<string>("ALLOWED_ORIGINS");
@@ -25,84 +24,26 @@ function getConfiguredAllowedOrigins(configService: ConfigService): string[] {
   return Array.from(new Set(origins));
 }
 
-function isLocalhostOrigin(origin: string): boolean {
-  try {
-    const { hostname } = new URL(origin);
-    return hostname === "localhost" || hostname === "127.0.0.1";
-  } catch {
-    return false;
-  }
-}
-
-function isValidProductionOrigin(origin: string): boolean {
-  try {
-    const parsed = new URL(origin);
-    return parsed.protocol === "https:" && parsed.origin === origin && !isLocalhostOrigin(origin);
-  } catch {
-    return false;
-  }
-}
-
 function validateProductionEnv(
   configService: ConfigService,
   logger: Logger,
   jwtSecret: string,
 ): void {
-  const normalizedJwtSecret = jwtSecret.toLowerCase();
-  const weakSecretMarkers = [
-    DEV_JWT_SECRET,
-    "change-me",
-    "dev-secret",
-    "placeholder",
-    "gere_um_segredo",
-  ];
-  if (
-    weakSecretMarkers.some((marker) => normalizedJwtSecret.includes(marker))
-  ) {
-    logger.error(
-      "❌ SEGURANÇA: JWT_SECRET parece usar valor padrão, placeholder ou segredo de desenvolvimento em NODE_ENV=production. " +
-        "Defina um segredo forte antes de continuar.",
-    );
-    process.exit(1);
-  }
+  const errors = validateProductionConfig({
+    databaseUrl: configService.get<string>("DATABASE_URL"),
+    directUrl: configService.get<string>("DIRECT_URL"),
+    jwtSecret,
+    frontendUrl: configService.get<string>("FRONTEND_URL"),
+    allowedOrigins: configService.get<string>("ALLOWED_ORIGINS"),
+    authCookieSameSite: configService.get<string>("AUTH_COOKIE_SAME_SITE"),
+    resendApiKey: configService.get<string>("RESEND_API_KEY"),
+    resendFromEmail: configService.get<string>("RESEND_FROM_EMAIL"),
+    enableLeadMutations: configService.get<string>("ENABLE_LEAD_MUTATIONS"),
+    enableCommercialActions: configService.get<string>("ENABLE_COMMERCIAL_ACTIONS"),
+  });
 
-  if (jwtSecret.length < 32) {
-    logger.error(
-      `❌ SEGURANÇA: JWT_SECRET possui apenas ${jwtSecret.length} caracteres. ` +
-        "Em produção, use pelo menos 32 caracteres aleatórios.",
-    );
-    process.exit(1);
-  }
-
-  const allowedOrigins = getConfiguredAllowedOrigins(configService);
-  const cookieSameSite = configService.get<string>("AUTH_COOKIE_SAME_SITE")?.trim().toLowerCase();
-  if (cookieSameSite && !["lax", "strict", "none"].includes(cookieSameSite)) {
-    logger.error("❌ SEGURANÇA: AUTH_COOKIE_SAME_SITE deve ser lax, strict ou none.");
-    process.exit(1);
-  }
-  if (
-    allowedOrigins.length === 0 ||
-    allowedOrigins.some((origin) => !isValidProductionOrigin(origin))
-  ) {
-    logger.error(
-      "❌ SEGURANÇA: ALLOWED_ORIGINS contém origem inválida. Use somente origens HTTPS completas, sem caminho ou barra final.",
-    );
-    process.exit(1);
-  }
-  const frontendUrl = configService.get<string>("FRONTEND_URL")?.trim();
-  if (!frontendUrl || !isValidProductionOrigin(frontendUrl)) {
-    logger.error(
-      "❌ SEGURANÇA: FRONTEND_URL deve ser uma origem HTTPS válida para gerar links de recuperação de senha.",
-    );
-    process.exit(1);
-  }
-  if (
-    !configService.get<string>("RESEND_API_KEY") ||
-    !configService.get<string>("RESEND_FROM_EMAIL")
-  ) {
-    logger.error(
-      "❌ CONFIGURAÇÃO: RESEND_API_KEY e RESEND_FROM_EMAIL são obrigatórias em produção para recuperação de senha.",
-    );
+  if (errors.length > 0) {
+    errors.forEach((error) => logger.error(`❌ CONFIGURAÇÃO DE PRODUÇÃO: ${error}`));
     process.exit(1);
   }
 }

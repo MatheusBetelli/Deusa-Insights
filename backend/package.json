@@ -16,6 +16,7 @@
     "prisma:studio": "prisma studio",
     "seed": "ts-node prisma/seed.ts",
     "quality:report": "ts-node scripts/generate-quality-report.ts",
+    "production:check": "ts-node src/common/production-config.cli.ts",
     "lint": "eslint . --max-warnings 0",
     "deadcode": "knip --no-config-hints",
     "typecheck": "tsc --noEmit",

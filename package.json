@@ -21,6 +21,7 @@
     "db:migrate": "cd backend && npx prisma migrate dev",
     "db:generate": "cd backend && npx prisma generate",
     "db:seed": "cd backend && npm run seed",
+    "production:check": "npm --prefix backend run production:check",
     "build": "concurrently \"cd backend && npm run build\" \"cd frontend && npm run build\" && npm --prefix frontend run check:artifact",
     "typecheck": "concurrently \"cd backend && npm run typecheck\" \"cd frontend && npm run typecheck\"",
     "lint": "concurrently \"cd backend && npm run lint\" \"cd frontend && npm run lint\"",
