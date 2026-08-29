@@ -423,6 +423,16 @@ function OpportunityMap() {
     };
   }, []);
 
+  // ResizeObserver para garantir que o Leaflet redesenhe os tiles ao alterar layout/filtros
+  useEffect(() => {
+    if (!mapElRef.current || !mapRef.current) return;
+    const observer = new ResizeObserver(() => {
+      mapRef.current?.invalidateSize();
+    });
+    observer.observe(mapElRef.current);
+    return () => observer.disconnect();
+  }, [mapStatus]);
+
   // Rebuild markers whenever data or cluster mode changes
   useEffect(() => {
     if (mapStatus !== "ready" || !mapRef.current) return;
@@ -625,6 +635,14 @@ function OpportunityMap() {
       group.addTo(mapRef.current);
       clusterRef.current = group;
 
+      // Força o Leaflet a recalcular as dimensões do container e renderizar os tiles OpenStreetMap
+      mapRef.current.invalidateSize();
+      setTimeout(() => {
+        if (mapRef.current) {
+          mapRef.current.invalidateSize();
+        }
+      }, 100);
+
       if (routeSearch.companyId) {
         const cleanCompanyId = routeSearch.companyId.trim();
         const target = withCoords.find(
@@ -660,13 +678,12 @@ function OpportunityMap() {
             mapRef.current.setView([target.latitude, target.longitude], 17, { animate: true });
           }
         }
-      }
-
-      const bounds = Leaflet.latLngBounds(boundPoints);
-      if (!hasFittedRef.current && bounds.isValid()) {
-        hasFittedRef.current = true;
-        if (withCoords.length === 1) mapRef.current.setView(bounds.getCenter(), 14);
-        else mapRef.current.fitBounds(bounds.pad(0.12), { maxZoom: 14 });
+      } else {
+        const bounds = Leaflet.latLngBounds(boundPoints);
+        if (bounds.isValid()) {
+          if (withCoords.length === 1) mapRef.current.setView(bounds.getCenter(), 14);
+          else mapRef.current.fitBounds(bounds.pad(0.12), { maxZoom: 14 });
+        }
       }
     })();
 
