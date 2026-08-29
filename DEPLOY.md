@@ -148,6 +148,10 @@ Crie o environment protegido `production`, com revisor obrigatório, e configure
 
 O serviço precisa existir previamente, com runtime service account, Secret Manager, limites, ingress e acesso público revisados. Dispare o workflow informando um SHA da `main` cujo CI esteja verde. O workflow nunca promove tráfego automaticamente; faça smoke no canário e use os comandos graduais acima.
 
+O workflow agora confirma automaticamente que existe um run de push verde para o SHA informado antes de autenticar no Google Cloud. Opcionalmente, informe a URL HTTPS da revisão canary no input `canary_url` para executar smoke de `GET /health/live` e `GET /health/ready` antes do encerramento do workflow.
+
+Antes de iniciar o container com os segredos reais, também é possível executar `npm run production:check`. O comando valida a presença e o formato da configuração sem imprimir valores secretos; ele exige `DIRECT_URL` ausente no runtime, `ENABLE_LEAD_MUTATIONS=false` e `ENABLE_COMMERCIAL_ACTIONS=true`.
+
 ### F. Deploy do Frontend no Cloudflare Worker
 O frontend não é uma SPA estática. O entrypoint `frontend/src/server.ts` executa SSR, fallback de rotas e headers de segurança.
 

@@ -7,9 +7,14 @@ on:
         description: "SHA validado da main que será publicado"
         required: true
         type: string
+      canary_url:
+        description: "URL HTTPS da revisão canary para smoke de health (opcional)"
+        required: false
+        type: string
 
 permissions:
   contents: read
+  actions: read
   id-token: write
 
 concurrency:
@@ -54,6 +59,37 @@ jobs:
           echo "sha=${RELEASE_SHA}" >> "${GITHUB_OUTPUT}"
           echo "image=${REGION}-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REPOSITORY}/backend:${RELEASE_SHA}" >> "${GITHUB_OUTPUT}"
 
+      - name: Confirmar CI verde para o SHA selecionado
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ steps.release.outputs.sha }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer ${GITHUB_TOKEN}" \
+            "https://api.github.com/repos/${REPOSITORY}/actions/runs?head_sha=${RELEASE_SHA}&per_page=100" |
+            node -e '
+              let input = "";
+              process.stdin.on("data", (chunk) => { input += chunk; });
+              process.stdin.on("end", () => {
+                const data = JSON.parse(input);
+                const passed = (data.workflow_runs || []).some((run) =>
+                  run.name === "CI - Integracao Continua (Deusa Analytics)" &&
+                  run.event === "push" &&
+                  run.head_sha === process.env.RELEASE_SHA &&
+                  run.status === "completed" &&
+                  run.conclusion === "success"
+                );
+                if (!passed) {
+                  console.error(`Nenhum CI push verde encontrado para ${process.env.RELEASE_SHA}.`);
+                  process.exit(1);
+                }
+                console.log(`CI push verde confirmado para ${process.env.RELEASE_SHA}.`);
+              });
+            '
+
       - name: Autenticar no Google Cloud sem chave persistente
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
         with:
@@ -90,6 +126,18 @@ jobs:
             --no-traffic \
             --tag=canary \
             --quiet
+
+      - name: Smoke de saúde do canário
+        if: ${{ inputs.canary_url != '' }}
+        env:
+          CANARY_URL: ${{ inputs.canary_url }}
+        run: |
+          set -euo pipefail
+          for path in /health/live /health/ready; do
+            curl --fail --silent --show-error --retry 3 --retry-delay 5 \
+              "${CANARY_URL%/}${path}" >/dev/null
+            echo "Smoke passou: ${path}"
+          done
 
       - name: Registrar entrega
         env:
