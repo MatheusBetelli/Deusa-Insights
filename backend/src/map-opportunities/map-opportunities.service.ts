@@ -303,32 +303,35 @@ export class MapOpportunitiesService {
       }
 
       const isClient = comp.clientAccounts.some((account) => account.isCurrentClient);
-      const nameNorm = (comp.razaoSocial || comp.nomeFantasia || "")
+      const nameNorm = (comp.razaoSocial || comp.nomeFantasia || comp.nomeEncontrado || "")
         .normalize("NFD")
         .replace(/[\u0300-\u036f]/g, "")
         .toLowerCase()
         .replace(
-          /\b(ltda|me|eireli|s\/a|sa|supermercados|supermercado|minimercado|mini-mercado|mercado|acougue|mercearia)\b/g,
+          /\b(ltda|me|eireli|s\/a|sa|supermercados|supermercado|minimercado|mini-mercado|mercado|acougue|mercearia|bastos|tupa|marilia|lins|franca|loja|unidade)\b/g,
           "",
         )
         .replace(/[^a-z0-9]/g, "")
         .trim();
 
       const city = (comp.cidade || "").toLowerCase().trim();
-      const locKey = `${city}|${comp.latitude.toFixed(4)},${comp.longitude.toFixed(4)}|${nameNorm}`;
+      const locKeyCoords = `${city}|${comp.latitude.toFixed(3)},${comp.longitude.toFixed(3)}`;
+      const locKeyName = `${city}|${comp.latitude.toFixed(4)},${comp.longitude.toFixed(4)}|${nameNorm}`;
 
-      const existing = seenLocations.get(locKey);
+      const existing = seenLocations.get(locKeyCoords) || seenLocations.get(locKeyName);
       if (existing) {
         if (isClient && !existing.isClient) {
           const prevIdx = validLeads.findIndex((item) => item.company.id === existing.id);
           if (prevIdx !== -1) validLeads.splice(prevIdx, 1);
           validLeads.push(lead);
-          seenLocations.set(locKey, { id: comp.id, isClient: true });
+          seenLocations.set(locKeyCoords, { id: comp.id, isClient: true });
+          seenLocations.set(locKeyName, { id: comp.id, isClient: true });
         }
         continue;
       }
 
-      seenLocations.set(locKey, { id: comp.id, isClient: !!isClient });
+      seenLocations.set(locKeyCoords, { id: comp.id, isClient: !!isClient });
+      seenLocations.set(locKeyName, { id: comp.id, isClient: !!isClient });
       validLeads.push(lead);
     }
 
