@@ -59,3 +59,177 @@ test("mapa detalhado aplica filtros server-side de região, status comercial e C
   assert.match(serialized, /clientAccounts/);
   assert.match(serialized, /none/);
 });
+
+test("deduplicação do mapa: unifica cliente e prospect com mesma marca no mesmo local e mantém o cliente", async () => {
+  const mockLeads = [
+    {
+      id: "lead-prospect-1",
+      status: "NEW",
+      score: 65,
+      potentialLevel: "HIGH",
+      company: {
+        id: "comp-prospect",
+        razaoSocial: "Supermercados Kawakami - Bastos",
+        nomeFantasia: "Supermercados Kawakami - Bastos",
+        situacaoCadastral: "ATIVA",
+        cidade: "Bastos",
+        uf: "SP",
+        cnaePrincipal: "4711302",
+        latitude: -21.92025,
+        longitude: -50.73837,
+        origemCoordenada: "geocodificado",
+        confiancaVerificacao: 80,
+        clientAccounts: [],
+      },
+    },
+    {
+      id: "lead-client-1",
+      status: "CONVERTED",
+      score: 100,
+      potentialLevel: "HIGH",
+      company: {
+        id: "comp-client",
+        razaoSocial: "SUPERMERCADOS KAWAKAMI LTDA",
+        nomeFantasia: "SUPERMERCADOS KAWAKAMI LTDA",
+        situacaoCadastral: "ATIVA",
+        cidade: "Bastos",
+        uf: "SP",
+        cnaePrincipal: "4711302",
+        latitude: -21.92025,
+        longitude: -50.73837,
+        origemCoordenada: "geocodificado",
+        confiancaVerificacao: 100,
+        clientAccounts: [{ isCurrentClient: true }],
+      },
+    },
+  ];
+
+  const prisma = {
+    lead: {
+      findMany: async () => mockLeads,
+    },
+  };
+
+  const service = new MapOpportunitiesService(prisma as never);
+  const result = await service.findAll({ sub: "admin-1", role: "ADMIN" });
+
+  assert.equal(result.length, 1);
+  assert.equal(result[0].id, "lead-client-1");
+  assert.equal(result[0].companyName, "SUPERMERCADOS KAWAKAMI LTDA");
+  assert.equal(result[0].isClient, true);
+});
+
+test("deduplicação do mapa: preserva dois supermercados vizinhos de marcas diferentes", async () => {
+  const mockLeads = [
+    {
+      id: "lead-japao",
+      status: "NEW",
+      score: 75,
+      potentialLevel: "HIGH",
+      company: {
+        id: "comp-japao",
+        razaoSocial: "Supermercado Japão",
+        nomeFantasia: "Supermercado Japão",
+        situacaoCadastral: "ATIVA",
+        cidade: "Bastos",
+        uf: "SP",
+        cnaePrincipal: "4711302",
+        latitude: -21.9201,
+        longitude: -50.7382,
+        origemCoordenada: "geocodificado",
+        confiancaVerificacao: 90,
+        clientAccounts: [],
+      },
+    },
+    {
+      id: "lead-kawakami",
+      status: "NEW",
+      score: 80,
+      potentialLevel: "HIGH",
+      company: {
+        id: "comp-kawakami",
+        razaoSocial: "Supermercado Kawakami",
+        nomeFantasia: "Supermercado Kawakami",
+        situacaoCadastral: "ATIVA",
+        cidade: "Bastos",
+        uf: "SP",
+        cnaePrincipal: "4711302",
+        latitude: -21.9202,
+        longitude: -50.7383,
+        origemCoordenada: "geocodificado",
+        confiancaVerificacao: 90,
+        clientAccounts: [],
+      },
+    },
+  ];
+
+  const prisma = {
+    lead: {
+      findMany: async () => mockLeads,
+    },
+  };
+
+  const service = new MapOpportunitiesService(prisma as never);
+  const result = await service.findAll({ sub: "admin-1", role: "ADMIN" });
+
+  assert.equal(result.length, 2);
+  const names = result.map((r) => r.companyName);
+  assert.ok(names.includes("Supermercado Japão"));
+  assert.ok(names.includes("Supermercado Kawakami"));
+});
+
+test("deduplicação do mapa: unifica dois prospects não-clientes da mesma marca e mantém o de maior score", async () => {
+  const mockLeads = [
+    {
+      id: "lead-low-score",
+      status: "NEW",
+      score: 50,
+      company: {
+        id: "comp-low",
+        razaoSocial: "Mercearia Santo Antônio",
+        nomeFantasia: "Mercearia Santo Antônio",
+        situacaoCadastral: "ATIVA",
+        cidade: "Garça",
+        uf: "SP",
+        cnaePrincipal: "4712100",
+        latitude: -22.2105,
+        longitude: -49.6505,
+        origemCoordenada: "geocodificado",
+        confiancaVerificacao: 70,
+        clientAccounts: [],
+      },
+    },
+    {
+      id: "lead-high-score",
+      status: "NEW",
+      score: 85,
+      company: {
+        id: "comp-high",
+        razaoSocial: "Supermercado Santo Antônio LTDA",
+        nomeFantasia: "Supermercado Santo Antônio LTDA",
+        situacaoCadastral: "ATIVA",
+        cidade: "Garça",
+        uf: "SP",
+        cnaePrincipal: "4711302",
+        latitude: -22.2105,
+        longitude: -49.6505,
+        origemCoordenada: "geocodificado",
+        confiancaVerificacao: 95,
+        clientAccounts: [],
+      },
+    },
+  ];
+
+  const prisma = {
+    lead: {
+      findMany: async () => mockLeads,
+    },
+  };
+
+  const service = new MapOpportunitiesService(prisma as never);
+  const result = await service.findAll({ sub: "admin-1", role: "ADMIN" });
+
+  assert.equal(result.length, 1);
+  assert.equal(result[0].id, "lead-high-score");
+  assert.equal(result[0].score, 85);
+});

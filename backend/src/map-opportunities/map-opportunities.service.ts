@@ -258,6 +258,163 @@ function toHeatmapPoint(row: HeatmapRow, maxQuantity: number): HeatmapPoint | nu
   };
 }
 
+const BRAND_STOP_WORDS = new Set([
+  "ltda",
+  "me",
+  "eireli",
+  "s/a",
+  "sa",
+  "supermercados",
+  "supermercado",
+  "minimercado",
+  "mini-mercado",
+  "mercado",
+  "acougue",
+  "mercearia",
+  "comercio",
+  "alimentos",
+  "produtos",
+  "loja",
+  "unidade",
+  "bastos",
+  "tupa",
+  "marilia",
+  "lins",
+  "franca",
+  "garca",
+  "ourinhos",
+  "assis",
+  "pp",
+  "presidente",
+  "prudente",
+  "botucatu",
+  "araraquara",
+  "sao",
+  "paulo",
+  "sp",
+]);
+
+function extractBrandTokens(text?: string | null): string[] {
+  if (!text) return [];
+  const normalized = text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ");
+
+  const words = normalized.split(/\s+/);
+  const filtered = words.filter((w) => w.length >= 3 && !BRAND_STOP_WORDS.has(w));
+  return Array.from(new Set(filtered));
+}
+
+function sharesBrandOrPhone(
+  compA: { razaoSocial?: string | null; nomeFantasia?: string | null; nomeEncontrado?: string | null; telefoneEncontrado?: string | null },
+  compB: { razaoSocial?: string | null; nomeFantasia?: string | null; nomeEncontrado?: string | null; telefoneEncontrado?: string | null },
+): boolean {
+  const phoneA = compA.telefoneEncontrado?.replace(/\D/g, "");
+  const phoneB = compB.telefoneEncontrado?.replace(/\D/g, "");
+  if (phoneA && phoneB && phoneA.length >= 8 && phoneA === phoneB) {
+    return true;
+  }
+
+  const tokensA = new Set([
+    ...extractBrandTokens(compA.razaoSocial),
+    ...extractBrandTokens(compA.nomeFantasia),
+    ...extractBrandTokens(compA.nomeEncontrado),
+  ]);
+  const tokensB = new Set([
+    ...extractBrandTokens(compB.razaoSocial),
+    ...extractBrandTokens(compB.nomeFantasia),
+    ...extractBrandTokens(compB.nomeEncontrado),
+  ]);
+
+  for (const token of tokensA) {
+    if (tokensB.has(token)) return true;
+  }
+  return false;
+}
+
+function findDuplicateLeadIndex<
+  T extends {
+    company: {
+      cidade?: string | null;
+      latitude?: number | null;
+      longitude?: number | null;
+      razaoSocial?: string | null;
+      nomeFantasia?: string | null;
+      nomeEncontrado?: string | null;
+      telefoneEncontrado?: string | null;
+    };
+  },
+>(lead: T, validLeads: T[]): number {
+  const comp = lead.company;
+  const city = (comp.cidade || "").toLowerCase().trim();
+  if (!comp.latitude || !comp.longitude) return -1;
+
+  return validLeads.findIndex((existingItem) => {
+    const existingComp = existingItem.company;
+    const existingCity = (existingComp.cidade || "").toLowerCase().trim();
+    if (city !== existingCity || !existingComp.latitude || !existingComp.longitude) {
+      return false;
+    }
+
+    const latDiff = Math.abs(comp.latitude! - existingComp.latitude);
+    const lonDiff = Math.abs(comp.longitude! - existingComp.longitude);
+    if (latDiff > 0.0015 || lonDiff > 0.0015) return false;
+
+    return sharesBrandOrPhone(comp, existingComp);
+  });
+}
+
+function deduplicateValidLeads<
+  T extends {
+    score?: number | null;
+    company: {
+      cidade?: string | null;
+      latitude?: number | null;
+      longitude?: number | null;
+      razaoSocial?: string | null;
+      nomeFantasia?: string | null;
+      nomeEncontrado?: string | null;
+      telefoneEncontrado?: string | null;
+      clientAccounts: Array<{ isCurrentClient: boolean }>;
+    };
+  },
+>(rawValidLeads: T[]): T[] {
+  const validLeads: T[] = [];
+
+  for (const lead of rawValidLeads) {
+    const comp = lead.company;
+    if (!comp.latitude || !comp.longitude) {
+      validLeads.push(lead);
+      continue;
+    }
+
+    const isClient = comp.clientAccounts.some((account) => account.isCurrentClient);
+    const duplicateIdx = findDuplicateLeadIndex(lead, validLeads);
+
+    if (duplicateIdx !== -1) {
+      const existingItem = validLeads[duplicateIdx];
+      const existingIsClient = existingItem.company.clientAccounts.some(
+        (account) => account.isCurrentClient,
+      );
+
+      const shouldReplace =
+        (isClient && !existingIsClient) ||
+        (!isClient && !existingIsClient && (lead.score ?? 0) > (existingItem.score ?? 0));
+
+      if (shouldReplace) {
+        validLeads[duplicateIdx] = lead;
+      }
+      continue;
+    }
+
+    validLeads.push(lead);
+  }
+
+  return validLeads;
+}
+
 @Injectable()
 export class MapOpportunitiesService {
   private mapCache = new Map<string, { data: MapOpportunityPoint[]; expiresAt: number }>();
@@ -292,48 +449,7 @@ export class MapOpportunitiesService {
     );
 
     // Deduplicação inteligente automática em tempo de execução (impede pinos duplicados no mesmo local)
-    const validLeads: typeof leads = [];
-    const seenLocations = new Map<string, { id: string; isClient: boolean }>();
-
-    for (const lead of rawValidLeads) {
-      const comp = lead.company;
-      if (!comp.latitude || !comp.longitude) {
-        validLeads.push(lead);
-        continue;
-      }
-
-      const isClient = comp.clientAccounts.some((account) => account.isCurrentClient);
-      const nameNorm = (comp.razaoSocial || comp.nomeFantasia || comp.nomeEncontrado || "")
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .toLowerCase()
-        .replace(
-          /\b(ltda|me|eireli|s\/a|sa|supermercados|supermercado|minimercado|mini-mercado|mercado|acougue|mercearia|bastos|tupa|marilia|lins|franca|loja|unidade)\b/g,
-          "",
-        )
-        .replace(/[^a-z0-9]/g, "")
-        .trim();
-
-      const city = (comp.cidade || "").toLowerCase().trim();
-      const locKeyCoords = `${city}|${comp.latitude.toFixed(3)},${comp.longitude.toFixed(3)}`;
-      const locKeyName = `${city}|${comp.latitude.toFixed(4)},${comp.longitude.toFixed(4)}|${nameNorm}`;
-
-      const existing = seenLocations.get(locKeyCoords) || seenLocations.get(locKeyName);
-      if (existing) {
-        if (isClient && !existing.isClient) {
-          const prevIdx = validLeads.findIndex((item) => item.company.id === existing.id);
-          if (prevIdx !== -1) validLeads.splice(prevIdx, 1);
-          validLeads.push(lead);
-          seenLocations.set(locKeyCoords, { id: comp.id, isClient: true });
-          seenLocations.set(locKeyName, { id: comp.id, isClient: true });
-        }
-        continue;
-      }
-
-      seenLocations.set(locKeyCoords, { id: comp.id, isClient: !!isClient });
-      seenLocations.set(locKeyName, { id: comp.id, isClient: !!isClient });
-      validLeads.push(lead);
-    }
+    const validLeads = deduplicateValidLeads(rawValidLeads);
 
     // Mapear para exibição no mapa, aplicando fallback de centroide se lat/lon forem nulas ou divergentes
     const result = validLeads.map((lead) => {
