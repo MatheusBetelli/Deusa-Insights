@@ -13,14 +13,21 @@ function buildAuthUrl(path: string): string {
   }
   let baseUrl: URL;
   try {
-    baseUrl = new URL(API_URL);
+    if (API_URL === "/api") {
+      if (typeof window === "undefined") {
+        throw new Error("A API relativa somente pode ser resolvida no navegador.");
+      }
+      baseUrl = new URL("/api/", window.location.origin);
+    } else {
+      baseUrl = new URL(`${API_URL.replace(/\/+$/, "")}/`);
+    }
   } catch {
     throw new Error("VITE_API_URL possui formato inválido.");
   }
   if (!["http:", "https:"].includes(baseUrl.protocol)) {
     throw new Error("VITE_API_URL deve usar HTTP ou HTTPS.");
   }
-  return new URL(path, `${API_URL.replace(/\/+$/, "")}/`).toString();
+  return new URL(path, baseUrl).toString();
 }
 
 function hasBrowserStorage() {

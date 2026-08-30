@@ -23,17 +23,23 @@ function buildUrl(path: string, query?: Record<string, string | number | undefin
   if (!API_URL) {
     throw new ApiError("VITE_API_URL não configurada para o ambiente de produção.");
   }
-  const baseUrl = API_URL.replace(/\/+$/, "");
   let parsedBaseUrl: URL;
   try {
-    parsedBaseUrl = new URL(baseUrl);
+    if (API_URL === "/api") {
+      if (typeof window === "undefined") {
+        throw new Error("A API relativa somente pode ser resolvida no navegador.");
+      }
+      parsedBaseUrl = new URL("/api/", window.location.origin);
+    } else {
+      parsedBaseUrl = new URL(`${API_URL.replace(/\/+$/, "")}/`);
+    }
   } catch {
     throw new ApiError("VITE_API_URL possui formato inválido.");
   }
   if (!["http:", "https:"].includes(parsedBaseUrl.protocol)) {
     throw new ApiError("VITE_API_URL deve usar HTTP ou HTTPS.");
   }
-  const url = new URL(`${baseUrl}${path}`);
+  const url = new URL(path.slice(1), parsedBaseUrl);
   if (url.origin !== parsedBaseUrl.origin) {
     throw new ApiError("Caminho de API fora da origem configurada.");
   }

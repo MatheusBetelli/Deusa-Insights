@@ -7,6 +7,84 @@ type ServerEntry = {
 };
 
 let serverEntryPromise: Promise<ServerEntry> | undefined;
+const API_PROXY_PREFIX = "/api";
+
+function readRuntimeBinding(env: unknown, name: string): string | undefined {
+  if (!env || typeof env !== "object") return undefined;
+  const value = (env as Record<string, unknown>)[name];
+  return typeof value === "string" ? value.trim() : undefined;
+}
+
+export function resolveBackendOrigin(env: unknown): string {
+  const configured =
+    readRuntimeBinding(env, "BACKEND_ORIGIN") ||
+    process.env.BACKEND_ORIGIN?.trim() ||
+    (process.env.NODE_ENV === "production" ? "" : "http://127.0.0.1:3001");
+
+  if (!configured) {
+    throw new Error("BACKEND_ORIGIN nao configurada para o proxy de producao.");
+  }
+
+  const parsed = new URL(configured);
+  const isProduction = process.env.NODE_ENV === "production";
+  if (
+    (isProduction && parsed.protocol !== "https:") ||
+    (!isProduction && !["http:", "https:"].includes(parsed.protocol)) ||
+    parsed.username ||
+    parsed.password ||
+    parsed.pathname !== "/" ||
+    parsed.search ||
+    parsed.hash
+  ) {
+    throw new Error("BACKEND_ORIGIN deve ser uma origem HTTPS sem caminho ou credenciais.");
+  }
+
+  return parsed.origin;
+}
+
+function isApiProxyPath(pathname: string): boolean {
+  return pathname === API_PROXY_PREFIX || pathname.startsWith(`${API_PROXY_PREFIX}/`);
+}
+
+export function buildBackendUrl(requestUrl: URL, env: unknown): URL {
+  const upstreamPath = requestUrl.pathname.slice(API_PROXY_PREFIX.length) || "/";
+  const upstreamUrl = new URL(resolveBackendOrigin(env));
+
+  // Atribuir pathname e search separadamente impede que //host seja reinterpretado
+  // como uma nova origem. O destino do proxy permanece sempre BACKEND_ORIGIN.
+  upstreamUrl.pathname = upstreamPath.startsWith("/") ? upstreamPath : `/${upstreamPath}`;
+  upstreamUrl.search = requestUrl.search;
+  return upstreamUrl;
+}
+
+async function proxyApiRequest(request: Request, env: unknown): Promise<Response> {
+  const requestUrl = new URL(request.url);
+  const upstreamUrl = buildBackendUrl(requestUrl, env);
+  const headers = new Headers(request.headers);
+
+  // O host e o comprimento devem ser calculados novamente pelo fetch para o upstream fixo.
+  headers.delete("host");
+  headers.delete("content-length");
+  headers.delete("connection");
+
+  const init: RequestInit & { duplex?: "half" } = {
+    method: request.method,
+    headers,
+    redirect: "manual",
+    signal: request.signal,
+  };
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    init.body = request.body;
+    init.duplex = "half";
+  }
+
+  const response = await fetch(new Request(upstreamUrl, init));
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers,
+  });
+}
 
 function getContentSecurityPolicy(): string {
   const connectOrigins = new Set<string>(["'self'"]);
@@ -126,6 +204,23 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
+      const requestUrl = new URL(request.url);
+      if (requestUrl.pathname === "/healthz") {
+        return withSecurityHeaders(
+          new Response(request.method === "HEAD" ? null : "ok", {
+            status: 200,
+            headers: {
+              "cache-control": "no-store",
+              "content-type": "text/plain; charset=utf-8",
+            },
+          }),
+          request,
+        );
+      }
+      if (isApiProxyPath(requestUrl.pathname)) {
+        return withSecurityHeaders(await proxyApiRequest(request, env), request);
+      }
+
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
       return withSecurityHeaders(await normalizeCatastrophicSsrResponse(response), request);

@@ -1,0 +1,11 @@
+node_modules
+dist
+.output
+.env
+.env.*
+!.env.example
+*.log
+test-results
+coverage
+.wrangler
+.DS_Store
