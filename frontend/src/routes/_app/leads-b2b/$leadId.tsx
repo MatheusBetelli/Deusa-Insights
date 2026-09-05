@@ -37,7 +37,6 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
-import { AuthService } from "@/lib/auth";
 
 export const Route = createFileRoute("/_app/leads-b2b/$leadId")({
   component: LeadDetail,
@@ -180,9 +179,6 @@ function LeadDetail() {
   async function handleSaveInteraction(e: React.FormEvent) {
     e.preventDefault();
     if (!lead) return;
-    const currentUser = AuthService.getUser();
-    const userId = currentUser?.id || lead.assignedToId || "admin";
-
     let newStatus: LeadStatus | undefined = undefined;
     let descriptionText = interactionForm.description.trim();
 
@@ -214,7 +210,6 @@ function LeadDetail() {
 
     try {
       await leadsService.createInteraction(lead.id, {
-        userId,
         type: newStatus === "LINK_B2B_SENT" ? "B2B_LINK_SENT" : interactionForm.type,
         description: descriptionText,
         newStatus,
@@ -240,9 +235,6 @@ function LeadDetail() {
   async function handleSaveVisit(e: React.FormEvent) {
     e.preventDefault();
     if (!lead) return;
-    const currentUser = AuthService.getUser();
-    const userId = currentUser?.id || lead.assignedToId || "admin";
-
     if (!visitForm.date) {
       toast.error("Selecione a data da visita presencial.");
       return;
@@ -250,7 +242,6 @@ function LeadDetail() {
 
     try {
       await leadsService.createInteraction(lead.id, {
-        userId,
         type: "Visita presencial agendada",
         description: `Visita comercial planejada para ${new Date(visitForm.date).toLocaleDateString("pt-BR")}. ${visitForm.notes ? `Obs: ${visitForm.notes}` : ""}`,
         newStatus: "NEGOTIATION",
@@ -282,11 +273,8 @@ function LeadDetail() {
       window.open(`https://wa.me/?text=${message}`, "_blank");
     }
 
-    const currentUser = AuthService.getUser();
-    const userId = currentUser?.id || lead.assignedToId || "admin";
     try {
       await leadsService.createInteraction(lead.id, {
-        userId,
         type: "B2B_LINK_SENT",
         description: `Link B2B enviado: ${STORE_URL}`,
         newStatus: "LINK_B2B_SENT",

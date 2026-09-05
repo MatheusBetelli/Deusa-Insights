@@ -1,12 +1,12 @@
 import { Body, Controller, Delete, Get, Param, Post, Req, UseGuards } from "@nestjs/common";
+import { Throttle } from "@nestjs/throttler";
 import { AuthGuard } from "../auth/auth.guard";
 import { Roles } from "../auth/roles.decorator";
 import { RolesGuard } from "../auth/roles.guard";
-import { CreateUserDto } from "./dto/create-user.dto";
 import { UserRole } from "@prisma/client";
 import { UsersService } from "./users.service";
 import { AuthenticatedHttpRequest } from "../common/auditable-http.types";
-import { DatasetFreezeGuard } from "../common/dataset-freeze.guard";
+import { CreateInvitationDto } from "./dto/create-invitation.dto";
 
 @Controller("users")
 @UseGuards(AuthGuard, RolesGuard)
@@ -27,13 +27,43 @@ export class UsersController {
 
   @Post()
   @Roles(UserRole.ADMIN)
-  createUser(@Body() dto: CreateUserDto) {
-    return this.usersService.createUser(dto);
+  @Throttle({ default: { ttl: 60000, limit: 10 } })
+  createUser(@Body() dto: CreateInvitationDto, @Req() request: AuthenticatedHttpRequest) {
+    return this.createInvitationForRequest(dto, request);
+  }
+
+  @Post("invitations")
+  @Roles(UserRole.ADMIN)
+  @Throttle({ default: { ttl: 60000, limit: 10 } })
+  createInvitationExplicit(
+    @Body() dto: CreateInvitationDto,
+    @Req() request: AuthenticatedHttpRequest,
+  ) {
+    return this.createInvitationForRequest(dto, request);
+  }
+
+  private createInvitationForRequest(
+    dto: CreateInvitationDto,
+    request: AuthenticatedHttpRequest,
+  ) {
+    return this.usersService.createInvitation(dto, {
+      id: request.user.sub,
+      email: request.user.email,
+    });
+  }
+
+  @Post(":id/invitation/resend")
+  @Roles(UserRole.ADMIN)
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
+  resendInvitation(@Param("id") id: string, @Req() request: AuthenticatedHttpRequest) {
+    return this.usersService.resendInvitation(id, {
+      id: request.user.sub,
+      email: request.user.email,
+    });
   }
 
   @Delete(":id")
   @Roles(UserRole.ADMIN)
-  @UseGuards(DatasetFreezeGuard)
   deleteUser(@Param("id") id: string, @Req() request: AuthenticatedHttpRequest) {
     return this.usersService.deleteUser(id, request.user.sub);
   }

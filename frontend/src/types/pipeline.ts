@@ -1,18 +1,18 @@
-import type { LeadStatus, PotentialLevel } from "./lead";
+import type { DashboardSummary } from "./dashboard";
 
-export type PipelineCard = {
+export type PipelineStatus = "NEW" | "CONVERTED";
+
+type PipelineCard = {
   id: string;
+  leadId: string | null;
   companyName: string;
-  city: string;
-  status: LeadStatus;
-  score: number;
-  potentialLevel: PotentialLevel;
-  scoreReasons?: string[];
+  city: string | null;
+  status: PipelineStatus;
   assignedTo: string | null;
 };
 
 export type PipelineStage = {
-  status: LeadStatus;
+  status: PipelineStatus;
   total: number;
   page: number;
   pageSize: number;
@@ -23,5 +23,6 @@ export type PipelineStage = {
 
 export type Pipeline = {
   total: number;
-  stages: Partial<Record<LeadStatus, PipelineStage>>;
+  stages: Record<PipelineStatus, PipelineStage>;
+  period: DashboardSummary["period"];
 };

@@ -158,10 +158,7 @@ function buildMapWhere(
   const recordId = params.companyId?.trim();
   if (recordId) {
     const cnpj = recordId.replace(/\D/g, "");
-    const recordOr: Prisma.LeadWhereInput[] = [
-      { id: recordId },
-      { companyId: recordId },
-    ];
+    const recordOr: Prisma.LeadWhereInput[] = [{ id: recordId }, { companyId: recordId }];
     if (cnpj.length >= 3) recordOr.push({ company: { cnpj: cnpj } });
     return {
       AND: [buildLeadAccessWhere(actor), { OR: recordOr }],
@@ -308,8 +305,18 @@ function extractBrandTokens(text?: string | null): string[] {
 }
 
 function sharesBrandOrPhone(
-  compA: { razaoSocial?: string | null; nomeFantasia?: string | null; nomeEncontrado?: string | null; telefoneEncontrado?: string | null },
-  compB: { razaoSocial?: string | null; nomeFantasia?: string | null; nomeEncontrado?: string | null; telefoneEncontrado?: string | null },
+  compA: {
+    razaoSocial?: string | null;
+    nomeFantasia?: string | null;
+    nomeEncontrado?: string | null;
+    telefoneEncontrado?: string | null;
+  },
+  compB: {
+    razaoSocial?: string | null;
+    nomeFantasia?: string | null;
+    nomeEncontrado?: string | null;
+    telefoneEncontrado?: string | null;
+  },
 ): boolean {
   const phoneA = compA.telefoneEncontrado?.replace(/\D/g, "");
   const phoneB = compB.telefoneEncontrado?.replace(/\D/g, "");
@@ -421,6 +428,10 @@ export class MapOpportunitiesService {
 
   constructor(private readonly prisma: PrismaService) {}
 
+  invalidateCache(): void {
+    this.mapCache.clear();
+  }
+
   async findAll(
     actor: LeadAccessActor,
     params: MapOpportunityQueryParams = {},
@@ -464,12 +475,14 @@ export class MapOpportunitiesService {
         typeof lng === "number" &&
         (lat > -20.1 || lat < -23.1 || lng > -47.1 || lng < -51.9);
 
+      const isManualCoordinate = lead.company.origemCoordenada === "coordenada_manual";
       const isDivergent =
-        lead.company.statusVerificacaoEndereco === "divergente" ||
-        isOutOfSpBounds ||
-        (typeof lead.company.confiancaVerificacao === "number" &&
-          lead.company.confiancaVerificacao < 60 &&
-          lead.company.origemCoordenada === "geocodificado");
+        !isManualCoordinate &&
+        (lead.company.statusVerificacaoEndereco === "divergente" ||
+          isOutOfSpBounds ||
+          (typeof lead.company.confiancaVerificacao === "number" &&
+            lead.company.confiancaVerificacao < 60 &&
+            lead.company.origemCoordenada === "geocodificado"));
 
       if (isDivergent) {
         lat = null;

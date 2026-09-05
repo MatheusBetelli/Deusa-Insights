@@ -1,19 +1,16 @@
 import { apiRequest } from "./api";
-import type { LeadStatus } from "@/types/lead";
-import type { Pipeline, PipelineStage } from "@/types/pipeline";
+import type { DashboardQuery } from "@/types/dashboard";
+import type { Pipeline, PipelineStage, PipelineStatus } from "@/types/pipeline";
 
-export type PipelineQuery = {
+export type PipelineQuery = DashboardQuery & {
   page?: number;
   pageSize?: number;
   columnPageSize?: number;
   search?: string;
-  uf?: string;
-  city?: string;
-  cnae?: string;
 };
 
 export const pipelineService = {
   getPipeline: (query?: PipelineQuery) => apiRequest<Pipeline>("/pipeline", {}, query),
-  getStage: (status: LeadStatus, query?: PipelineQuery) =>
+  getStage: (status: PipelineStatus, query?: PipelineQuery) =>
     apiRequest<PipelineStage>(`/pipeline/stage/${status}`, {}, query),
 };

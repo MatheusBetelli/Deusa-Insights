@@ -7,6 +7,7 @@ import { ChangePasswordDto } from "./dto/change-password.dto";
 import { ForgotPasswordDto } from "./dto/forgot-password.dto";
 import { LoginDto } from "./dto/login.dto";
 import { ResetPasswordDto } from "./dto/reset-password.dto";
+import { SetPasswordDto } from "./dto/set-password.dto";
 import { AuthenticatedHttpRequest } from "../common/auditable-http.types";
 
 export const AUTH_COOKIE_NAME = "auth_token";
@@ -55,6 +56,12 @@ export class AuthController {
   @Throttle({ default: { ttl: 60000, limit: 5 } })
   resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto);
+  }
+
+  @Post("set-password")
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
+  setPassword(@Body() dto: SetPasswordDto) {
+    return this.authService.setPassword(dto);
   }
 
   @Get("me")

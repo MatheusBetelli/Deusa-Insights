@@ -10,4 +10,5 @@ test("companiesService - declara todos os métodos de empresas B2B", () => {
   assert.equal(typeof companiesService.getCompanyDetails, "function");
   assert.equal(typeof companiesService.upsertCompanyDetails, "function");
   assert.equal(typeof companiesService.updateCompany, "function");
+  assert.equal(typeof companiesService.updateLocation, "function");
 });

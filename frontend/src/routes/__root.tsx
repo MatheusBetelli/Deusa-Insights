@@ -10,7 +10,7 @@ import {
 import { Toaster } from "sonner";
 
 import appCss from "../styles.css?url";
-import deusaLogo from "@/assets/Deusa logo guia.png";
+import deusaLogo from "@/assets/marca-deusa.png";
 
 function NotFoundComponent() {
   return (

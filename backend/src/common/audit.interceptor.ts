@@ -22,12 +22,29 @@ function readString(value: unknown, key: string): string | undefined {
 }
 
 function classifyAction(method: string, route: string): AuditAction | undefined {
-  if (method === "POST" && route === "/auth/login") return "LOGIN";
-  if (method === "POST" && route === "/auth/logout") return "LOGOUT";
-  if (method === "POST" && route === "/auth/forgot-password") return "PASSWORD_RESET_REQUEST";
-  if (method === "POST" && route === "/auth/reset-password") return "PASSWORD_RESET_SUCCESS";
-  if (method === "PATCH" && route === "/auth/password") return "PASSWORD_CHANGE";
-  if (method === "GET" && route === "/leads/export.csv") return "EXPORT_DATA";
+  switch (`${method} ${route}`) {
+    case "POST /auth/login":
+      return "LOGIN";
+    case "POST /auth/logout":
+      return "LOGOUT";
+    case "POST /auth/forgot-password":
+      return "PASSWORD_RESET_REQUEST";
+    case "POST /auth/reset-password":
+      return "PASSWORD_RESET_SUCCESS";
+    case "POST /auth/set-password":
+      return "USER_INVITATION_ACTIVATED";
+    case "PATCH /auth/password":
+      return "PASSWORD_CHANGE";
+    case "POST /users/invitations":
+      return "USER_INVITATION_CREATED";
+    case "GET /leads/export.csv":
+      return "EXPORT_DATA";
+    default:
+      break;
+  }
+  if (method === "POST" && /^\/users\/[^/]+\/invitation\/resend$/.test(route)) {
+    return "USER_INVITATION_RESENT";
+  }
   if (MUTATING_METHODS.has(method) && route.startsWith("/imports")) return "IMPORT_DATA";
   if (MUTATING_METHODS.has(method)) return "DATA_MUTATION";
   return undefined;

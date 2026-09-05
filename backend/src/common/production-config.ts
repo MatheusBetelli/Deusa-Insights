@@ -7,6 +7,7 @@ export type ProductionConfig = {
   authCookieSameSite?: string;
   resendApiKey?: string;
   resendFromEmail?: string;
+  resendTestRecipient?: string;
   enableLeadMutations?: string;
   enableCommercialActions?: string;
 };
@@ -38,10 +39,18 @@ function isLocalDatabaseUrl(databaseUrl: string): boolean {
   }
 }
 
-export function validateProductionConfig(config: ProductionConfig): string[] {
+function isPlaceholderDatabaseUrl(databaseUrl: string): boolean {
+  try {
+    const hostname = new URL(databaseUrl).hostname.toLowerCase();
+    return new Set(["host", "hostname", "database", "db", "your-host"]).has(hostname);
+  } catch {
+    return false;
+  }
+}
+
+function validateDatabaseConfig(config: ProductionConfig): string[] {
   const errors: string[] = [];
   const databaseUrl = config.databaseUrl?.trim() ?? "";
-  const jwtSecret = config.jwtSecret ?? "";
 
   if (!databaseUrl) {
     errors.push("DATABASE_URL não está definida.");
@@ -49,6 +58,8 @@ export function validateProductionConfig(config: ProductionConfig): string[] {
     errors.push("DATABASE_URL deve usar PostgreSQL.");
   } else if (isLocalDatabaseUrl(databaseUrl)) {
     errors.push("DATABASE_URL não pode apontar para localhost em produção.");
+  } else if (isPlaceholderDatabaseUrl(databaseUrl)) {
+    errors.push("DATABASE_URL não pode apontar para um host de placeholder em produção.");
   }
 
   if (config.directUrl?.trim()) {
@@ -56,6 +67,26 @@ export function validateProductionConfig(config: ProductionConfig): string[] {
       "DIRECT_URL não deve ser injetada no runtime do Cloud Run; use-a somente no job de migrations.",
     );
   }
+
+  return errors;
+}
+
+function isValidEmailAddress(email: string): boolean {
+  const atIndex = email.indexOf("@");
+  const dotIndex = email.lastIndexOf(".");
+  return (
+    atIndex > 0 &&
+    dotIndex > atIndex + 1 &&
+    dotIndex < email.length - 1 &&
+    !/[\s<>()[\],;:]/.test(email)
+  );
+}
+
+export function validateProductionConfig(config: ProductionConfig): string[] {
+  const errors: string[] = [];
+  const jwtSecret = config.jwtSecret ?? "";
+
+  errors.push(...validateDatabaseConfig(config));
 
   const normalizedJwtSecret = jwtSecret.toLowerCase();
   const weakSecretMarkers = [
@@ -107,6 +138,13 @@ export function validateProductionConfig(config: ProductionConfig): string[] {
 
   if (!config.resendApiKey?.trim() || !config.resendFromEmail?.trim()) {
     errors.push("RESEND_API_KEY e RESEND_FROM_EMAIL são obrigatórias para recuperação de senha.");
+  }
+
+  if (
+    config.resendTestRecipient?.trim() &&
+    !isValidEmailAddress(config.resendTestRecipient.trim())
+  ) {
+    errors.push("RESEND_TEST_RECIPIENT deve ser um e-mail válido quando configurado.");
   }
 
   return errors;

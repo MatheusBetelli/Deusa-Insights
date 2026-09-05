@@ -1,6 +1,7 @@
 import type { Company } from "./company";
 
 type UserRole = "ADMIN" | "MANAGER" | "SALES";
+type UserStatus = "INVITED" | "ACTIVE" | "BLOCKED";
 export type LeadStatus =
   | "NEW"
   | "NO_CONTACT"
@@ -18,6 +19,7 @@ export type UserSummary = {
   name: string;
   email: string;
   role: UserRole;
+  status?: UserStatus;
 };
 
 export type LeadInteraction = {
@@ -92,7 +94,6 @@ export type UpdateLeadPayload = Partial<
 >;
 
 export type CreateLeadInteractionPayload = {
-  userId: string;
   type: string;
   description: string;
   newStatus?: LeadStatus;

@@ -4,14 +4,12 @@ import { ReceitaFederalProvider } from "../imports/providers/receita-federal.pro
 import { CompaniesController } from "./companies.controller";
 import { CompaniesService } from "./companies.service";
 import { ClassificationModule } from "../classification/classification.module";
+import { MapOpportunitiesModule } from "../map-opportunities/map-opportunities.module";
 
 @Module({
-  imports: [ClassificationModule],
+  imports: [ClassificationModule, MapOpportunitiesModule],
   controllers: [CompaniesController],
-  providers: [
-    CompaniesService,
-    { provide: CNPJ_PROVIDER, useClass: ReceitaFederalProvider },
-  ],
+  providers: [CompaniesService, { provide: CNPJ_PROVIDER, useClass: ReceitaFederalProvider }],
   exports: [CompaniesService, CNPJ_PROVIDER],
 })
 export class CompaniesModule {}

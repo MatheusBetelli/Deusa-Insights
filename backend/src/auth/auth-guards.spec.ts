@@ -20,6 +20,7 @@ import { UsersController } from "../users/users.controller";
 import {
   DatasetFreezeGuard,
   FROZEN_DATASET_READ_ONLY_KEY,
+  MANUAL_LOCATION_ADJUSTMENT_MUTATION_KEY,
 } from "../common/dataset-freeze.guard";
 
 const guardedControllers = [
@@ -68,13 +69,12 @@ test("controllers de negocio exigem AuthGuard no backend", () => {
     );
   }
 
-  const deleteUserGuards = Reflect.getMetadata(
-    GUARDS_METADATA,
-    UsersController.prototype.deleteUser,
-  ) ?? [];
-  assert.ok(
+  const deleteUserGuards =
+    Reflect.getMetadata(GUARDS_METADATA, UsersController.prototype.deleteUser) ?? [];
+  assert.equal(
     deleteUserGuards.includes(DatasetFreezeGuard),
-    "DELETE /users/:id deve proteger as desvinculacoes de leads e interacoes congelados",
+    false,
+    "DELETE /users/:id nao deve ser bloqueado pelo congelamento da carteira comercial",
   );
 });
 
@@ -98,9 +98,33 @@ test("API nao expoe rotas de descoberta ou geocodificacao em lote", () => {
       FROZEN_DATASET_READ_ONLY_KEY,
       CompaniesController.prototype.getLocationCandidates,
     ),
-    true,
-    "somente a consulta individual confirmada deve ignorar o congelamento de escrita",
+    undefined,
+    "geocodificacao nao deve ignorar o congelamento de escrita em producao",
   );
+});
+
+test("somente o endpoint de ajuste manual recebe a exceção específica do congelamento", () => {
+  const locationAdjustment = Reflect.getMetadata(
+    MANUAL_LOCATION_ADJUSTMENT_MUTATION_KEY,
+    CompaniesController.prototype.updateLocation,
+  );
+  const genericCompanyUpdate = Reflect.getMetadata(
+    MANUAL_LOCATION_ADJUSTMENT_MUTATION_KEY,
+    CompaniesController.prototype.update,
+  );
+  const syncByCnpj = Reflect.getMetadata(
+    MANUAL_LOCATION_ADJUSTMENT_MUTATION_KEY,
+    CompaniesController.prototype.syncByCnpj,
+  );
+  const locationCandidates = Reflect.getMetadata(
+    MANUAL_LOCATION_ADJUSTMENT_MUTATION_KEY,
+    CompaniesController.prototype.getLocationCandidates,
+  );
+
+  assert.equal(locationAdjustment, true);
+  assert.equal(genericCompanyUpdate, undefined);
+  assert.equal(syncByCnpj, undefined);
+  assert.equal(locationCandidates, undefined);
 });
 
 test("token de redefinicao de senha nao pode autenticar chamadas da API", async () => {
@@ -249,13 +273,14 @@ test("operacoes administrativas declaram papeis no backend", () => {
   const listUserRoles = Reflect.getMetadata(ROLES_KEY, UsersController.prototype.findAll);
   const getUserRoles = Reflect.getMetadata(ROLES_KEY, UsersController.prototype.findById);
   const importRoles = Reflect.getMetadata(ROLES_KEY, ImportsController);
-  const updateCompanyRoles = Reflect.getMetadata(
-    ROLES_KEY,
-    CompaniesController.prototype.update,
-  );
+  const updateCompanyRoles = Reflect.getMetadata(ROLES_KEY, CompaniesController.prototype.update);
   const validateLocationRoles = Reflect.getMetadata(
     ROLES_KEY,
     CompaniesController.prototype.validateLocation,
+  );
+  const updateLocationRoles = Reflect.getMetadata(
+    ROLES_KEY,
+    CompaniesController.prototype.updateLocation,
   );
 
   assert.deepStrictEqual(createUserRoles, [UserRole.ADMIN]);
@@ -265,4 +290,5 @@ test("operacoes administrativas declaram papeis no backend", () => {
   assert.deepStrictEqual(importRoles, [UserRole.ADMIN]);
   assert.deepStrictEqual(updateCompanyRoles, [UserRole.ADMIN, UserRole.MANAGER]);
   assert.deepStrictEqual(validateLocationRoles, [UserRole.ADMIN, UserRole.MANAGER]);
+  assert.deepStrictEqual(updateLocationRoles, [UserRole.ADMIN]);
 });

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { BadRequestException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException } from "@nestjs/common";
 import { ContactSource, ContactType } from "@prisma/client";
 import { CompaniesService } from "./companies.service";
 
@@ -82,10 +82,178 @@ test("busca numérica mantém filtro parcial por CNPJ", () => {
   assert.equal(serialized.includes('"cnpj":{"contains":"11222"}'), true);
 });
 
-test("update rejeita par de coordenadas incompleto", async () => {
+test("consultas de empresas aplicam a carteira do vendedor no banco", async () => {
+  let capturedWhere: unknown;
+  const prisma = {
+    company: {
+      findMany: async (args: { where: unknown }) => {
+        capturedWhere = args.where;
+        return [];
+      },
+    },
+  };
+  const service = new CompaniesService(prisma as never, {} as never, {} as never, {} as never);
+
+  await service.findAll({}, { sub: "sales-1", email: "sales@example.com", role: "SALES" });
+
+  assert.match(JSON.stringify(capturedWhere), /assignedToId_legacy/);
+  assert.match(JSON.stringify(capturedWhere), /sales@example\.com/);
+});
+
+test("update genérico rejeita coordenadas e direciona para o fluxo manual", async () => {
   const { service } = makeService(null);
 
   await assert.rejects(() => service.update("company-1", { latitude: -22.2 }), BadRequestException);
+  await assert.rejects(
+    () => service.update("company-1", { latitude: -22.2, longitude: -49.6 }),
+    BadRequestException,
+  );
+});
+
+test("administrador ajusta coordenadas e grava auditoria persistente", async () => {
+  let companyUpdate: Record<string, unknown> | undefined;
+  let auditCreate: Record<string, unknown> | undefined;
+  const tx = {
+    company: {
+      findFirst: async () => ({ id: "company-1", latitude: -22.2, longitude: -49.6 }),
+      update: async (args: { data: Record<string, unknown> }) => {
+        companyUpdate = args.data;
+        return { id: "company-1", ...args.data };
+      },
+    },
+    companyLocationAudit: {
+      create: async (args: { data: Record<string, unknown> }) => {
+        auditCreate = args.data;
+        return { id: "audit-1", ...args.data };
+      },
+    },
+  };
+  const prisma = {
+    $transaction: async (callback: (transaction: typeof tx) => Promise<unknown>) => callback(tx),
+  };
+  const service = new CompaniesService(prisma as never, {} as never, {} as never, {} as never);
+
+  const result = await service.updateLocation(
+    "company-1",
+    { latitude: -22.201234, longitude: -49.601234 },
+    { sub: "admin-1", role: "ADMIN" },
+  );
+
+  assert.equal(result.latitude, -22.201234);
+  assert.equal(companyUpdate?.latitude, -22.201234);
+  assert.equal(companyUpdate?.origemCoordenada, "coordenada_manual");
+  assert.deepEqual(auditCreate, {
+    companyId: "company-1",
+    responsibleUserId: "admin-1",
+    previousLatitude: -22.2,
+    previousLongitude: -49.6,
+    newLatitude: -22.201234,
+    newLongitude: -49.601234,
+    origin: "MANUAL_MAP_ADJUSTMENT",
+  });
+});
+
+test("ajuste de localização rejeita vendedor mesmo que o método seja chamado diretamente", async () => {
+  let transactionCalls = 0;
+  const service = new CompaniesService(
+    {
+      $transaction: async () => {
+        transactionCalls += 1;
+      },
+    } as never,
+    {} as never,
+    {} as never,
+    {} as never,
+  );
+
+  await assert.rejects(
+    () =>
+      service.updateLocation(
+        "company-other",
+        { latitude: -22.2, longitude: -49.6 },
+        { sub: "sales-1", email: "sales@example.com", role: "SALES" },
+      ),
+    ForbiddenException,
+  );
+  assert.equal(transactionCalls, 0);
+});
+
+test("ajuste de localização rejeita coordenadas fora dos limites do planeta", async () => {
+  let transactionCalls = 0;
+  const service = new CompaniesService(
+    {
+      $transaction: async () => {
+        transactionCalls += 1;
+      },
+    } as never,
+    {} as never,
+    {} as never,
+    {} as never,
+  );
+
+  await assert.rejects(
+    () =>
+      service.updateLocation(
+        "company-1",
+        { latitude: 91, longitude: -49.6 },
+        { sub: "admin-1", role: "ADMIN" },
+      ),
+    BadRequestException,
+  );
+  assert.equal(transactionCalls, 0);
+});
+
+test("validação de localização também audita uma coordenada alterada", async () => {
+  let auditCreate: Record<string, unknown> | undefined;
+  const tx = {
+    company: {
+      update: async (args: { data: Record<string, unknown> }) => ({
+        id: "company-1",
+        ...args.data,
+      }),
+    },
+    companyLocationAudit: {
+      create: async (args: { data: Record<string, unknown> }) => {
+        auditCreate = args.data;
+        return { id: "audit-1", ...args.data };
+      },
+    },
+    lead: { updateMany: async () => ({ count: 0 }) },
+  };
+  const prisma = {
+    company: {
+      findFirst: async () => ({
+        id: "company-1",
+        latitude: -22.2,
+        longitude: -49.6,
+        situacaoCadastral: "ATIVA",
+        lead: null,
+      }),
+    },
+    $transaction: async (callback: (transaction: typeof tx) => Promise<unknown>) => callback(tx),
+  };
+  const service = new CompaniesService(prisma as never, {} as never, {} as never, {} as never);
+
+  await service.validateLocation(
+    "company-1",
+    {
+      statusValidacao: "revisao_manual",
+      origemCoordenada: "coordenada_manual",
+      latitude: -22.201234,
+      longitude: -49.601234,
+    },
+    { sub: "manager-1", role: "MANAGER" },
+  );
+
+  assert.deepEqual(auditCreate, {
+    companyId: "company-1",
+    responsibleUserId: "manager-1",
+    previousLatitude: -22.2,
+    previousLongitude: -49.6,
+    newLatitude: -22.201234,
+    newLongitude: -49.601234,
+    origin: "MANUAL_LOCATION_VALIDATION",
+  });
 });
 
 test("updateCommercialProfile grava cadastro e contatos na mesma transação", async () => {

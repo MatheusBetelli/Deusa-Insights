@@ -11,6 +11,7 @@ test("leadsService - declara todos os métodos de integração de leads", () => 
   assert.equal(typeof leadsService.discardLead, "function");
   assert.equal(typeof leadsService.getInteractions, "function");
   assert.equal(typeof leadsService.createInteraction, "function");
+  assert.equal(typeof leadsService.createCommercialAction, "function");
   assert.equal(typeof leadsService.autoAssignTerritory, "function");
   assert.equal(typeof leadsService.exportCsv, "function");
 });

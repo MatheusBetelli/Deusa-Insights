@@ -1,7 +1,8 @@
 import { Type } from "class-transformer";
 import { IsInt, IsOptional, IsString, Max, MaxLength, Min } from "class-validator";
+import { DashboardQueryDto } from "../../dashboard/dto/dashboard-query.dto";
 
-export class PipelineQueryDto {
+export class PipelineQueryDto extends DashboardQueryDto {
   @IsOptional()
   @Type(() => Number)
   @IsInt()
@@ -26,19 +27,4 @@ export class PipelineQueryDto {
   @IsString()
   @MaxLength(120)
   search?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(2)
-  uf?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(120)
-  city?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(20)
-  cnae?: string;
 }

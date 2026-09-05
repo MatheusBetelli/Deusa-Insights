@@ -17,6 +17,7 @@ import { AuthService } from "@/lib/auth";
 
 type SearchParams = {
   token?: string;
+  mode?: "reset" | "invite";
 };
 
 export const Route = createFileRoute("/reset-password")({
@@ -24,6 +25,7 @@ export const Route = createFileRoute("/reset-password")({
   validateSearch: (search: Record<string, unknown>): SearchParams => {
     return {
       token: (search.token as string) || "",
+      mode: search.mode === "invite" ? "invite" : "reset",
     };
   },
   component: ResetPasswordPage,
@@ -31,7 +33,7 @@ export const Route = createFileRoute("/reset-password")({
 
 function ResetPasswordPage() {
   const navigate = useNavigate();
-  const { token: legacyQueryToken } = Route.useSearch();
+  const { token: legacyQueryToken, mode } = Route.useSearch();
   const [token] = useState(() => {
     const fragmentToken = new URLSearchParams(window.location.hash.slice(1)).get("token");
     const resolvedToken = fragmentToken?.trim() || legacyQueryToken?.trim() || "";
@@ -61,7 +63,9 @@ function ResetPasswordPage() {
     setCapsLockOn(e.getModifierState("CapsLock"));
   };
 
-  const isMinLength = newPassword.length >= 8;
+  const isStrongPassword = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12,128}$/.test(
+    newPassword,
+  );
   const isMatch = newPassword.length > 0 && newPassword === confirmPassword;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -71,8 +75,8 @@ function ResetPasswordPage() {
       return;
     }
 
-    if (!isMinLength) {
-      setError("A nova senha deve ter no mínimo 8 caracteres.");
+    if (!isStrongPassword) {
+      setError("A nova senha deve ter 12 caracteres, maiúscula, minúscula, número e símbolo.");
       return;
     }
 
@@ -86,11 +90,15 @@ function ResetPasswordPage() {
     setSuccess(null);
 
     try {
-      const res = await AuthService.resetPassword({
+      const payload = {
         token,
         newPassword,
         confirmPassword,
-      });
+      };
+      const res =
+        mode === "invite"
+          ? await AuthService.setPassword(payload)
+          : await AuthService.resetPassword(payload);
       setSuccess(res.message);
       setTimeout(() => {
         navigate({ to: "/login" });
@@ -114,9 +122,13 @@ function ResetPasswordPage() {
             <div className="h-12 w-12 rounded-full bg-blue-50 flex items-center justify-center text-[#1061AF] mb-4">
               <KeyRound className="h-6 w-6" />
             </div>
-            <h2 className="text-xl font-bold tracking-tight text-slate-900">Redefinir Senha</h2>
+            <h2 className="text-xl font-bold tracking-tight text-slate-900">
+              {mode === "invite" ? "Definir senha" : "Redefinir senha"}
+            </h2>
             <p className="mt-2 text-center text-sm text-slate-500 font-medium leading-relaxed">
-              Crie uma nova senha segura para acessar sua conta no Deusa Analytics.
+              {mode === "invite"
+                ? "Crie sua senha para ativar o acesso ao Deusa Analytics."
+                : "Crie uma nova senha segura para acessar sua conta no Deusa Analytics."}
             </p>
           </div>
 
@@ -232,13 +244,13 @@ function ResetPasswordPage() {
               {/* Indicadores de Requisitos */}
               <div className="rounded-lg bg-slate-50 border border-slate-100 p-3 text-xs space-y-1.5 text-slate-600">
                 <div className="flex items-center gap-2">
-                  {isMinLength ? (
+                  {isStrongPassword ? (
                     <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
                   ) : (
                     <div className="h-1.5 w-1.5 rounded-full bg-slate-300 ml-1 mr-1 shrink-0" />
                   )}
-                  <span className={isMinLength ? "text-emerald-700 font-medium" : ""}>
-                    No mínimo 8 caracteres
+                  <span className={isStrongPassword ? "text-emerald-700 font-medium" : ""}>
+                    12 caracteres, maiúscula, minúscula, número e símbolo
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -262,14 +274,14 @@ function ResetPasswordPage() {
 
               <button
                 type="submit"
-                disabled={loading || !isMinLength || !isMatch}
+                disabled={loading || !isStrongPassword || !isMatch}
                 className="relative group mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-[#1061AF] text-[15px] font-bold text-white shadow-lg shadow-blue-900/10 transition-all hover:bg-[#0E5496] hover:shadow-blue-900/20 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none"
               >
                 {loading ? (
                   <Loader2 className="h-5 w-5 animate-spin" />
                 ) : (
                   <>
-                    Redefinir senha
+                    {mode === "invite" ? "Ativar minha conta" : "Redefinir senha"}
                     <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
                   </>
                 )}

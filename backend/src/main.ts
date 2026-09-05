@@ -38,6 +38,7 @@ function validateProductionEnv(
     authCookieSameSite: configService.get<string>("AUTH_COOKIE_SAME_SITE"),
     resendApiKey: configService.get<string>("RESEND_API_KEY"),
     resendFromEmail: configService.get<string>("RESEND_FROM_EMAIL"),
+    resendTestRecipient: configService.get<string>("RESEND_TEST_RECIPIENT"),
     enableLeadMutations: configService.get<string>("ENABLE_LEAD_MUTATIONS"),
     enableCommercialActions: configService.get<string>("ENABLE_COMMERCIAL_ACTIONS"),
   });

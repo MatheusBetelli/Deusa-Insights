@@ -1,6 +1,7 @@
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { ConfigService } from "@nestjs/config";
+import { UserStatus } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 
 type AuthenticationRequest = {
@@ -70,9 +71,12 @@ export class AuthGuard implements CanActivate {
 
       const user = await this.prisma.user.findUnique({
         where: { id: payload.sub },
-        select: { id: true, name: true, email: true, role: true, updatedAt: true },
+        select: { id: true, name: true, email: true, role: true, status: true, updatedAt: true },
       });
       if (!user) throw new UnauthorizedException("Usuário não encontrado");
+      if (user.status && user.status !== UserStatus.ACTIVE) {
+        throw new UnauthorizedException("Conta não está ativa");
+      }
       if (payload.ver !== user.updatedAt.getTime()) {
         throw new UnauthorizedException("Sessão invalidada por alteração da conta");
       }

@@ -16,6 +16,11 @@ export type UpdateCommercialProfilePayload = {
   uf?: string;
 };
 
+export type UpdateCompanyLocationPayload = {
+  latitude: number;
+  longitude: number;
+};
+
 export type CreateCompanyContactPayload = {
   type: CompanyContact["type"];
   value: string;
@@ -42,6 +47,11 @@ export const companiesService = {
     }),
   updateCompany: (id: string, payload: Partial<Company>) =>
     apiRequest<Company>(`/companies/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  updateLocation: (id: string, payload: UpdateCompanyLocationPayload) =>
+    apiRequest<Company>(`/companies/${id}/location`, {
       method: "PATCH",
       body: JSON.stringify(payload),
     }),

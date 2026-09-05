@@ -46,6 +46,9 @@ async function readError(response: Response, fallback: string) {
   if (response.status === 429) {
     return "Muitas tentativas de login em sequência. Aguarde 10 segundos e tente novamente.";
   }
+  if (response.status >= 500) {
+    return "Serviço de autenticação temporariamente indisponível. Tente novamente em instantes.";
+  }
   let message = fallback;
   try {
     const payload = await response.json();
@@ -81,6 +84,7 @@ export interface User {
   name: string;
   email: string;
   role: string;
+  status?: "INVITED" | "ACTIVE" | "BLOCKED";
   createdAt?: string;
   updatedAt?: string;
 }
@@ -221,6 +225,24 @@ export const AuthService = {
 
     if (!response.ok) {
       throw new Error(await readError(response, "Não foi possível redefinir a senha."));
+    }
+
+    return (await response.json()) as { message: string };
+  },
+
+  setPassword: async (payload: {
+    token: string;
+    newPassword: string;
+    confirmPassword: string;
+  }): Promise<{ message: string }> => {
+    const response = await fetchWithTimeout(buildAuthUrl("auth/set-password"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      throw new Error(await readError(response, "Não foi possível ativar sua conta."));
     }
 
     return (await response.json()) as { message: string };

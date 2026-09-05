@@ -3,11 +3,6 @@ import { IsDate, IsEnum, IsOptional, IsString, MaxLength } from "class-validator
 import { LeadStatus } from "@prisma/client";
 
 export class CreateLeadInteractionDto {
-  @IsOptional()
-  @IsString()
-  @MaxLength(64)
-  userId?: string;
-
   @IsString()
   @MaxLength(80)
   type!: string;

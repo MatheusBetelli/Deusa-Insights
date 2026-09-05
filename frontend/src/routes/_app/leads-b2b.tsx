@@ -15,7 +15,6 @@ import {
 } from "@/lib/commercial-formatters";
 import { ESTADOS_UF } from "@/lib/constants";
 import { publicRuntimeEnv } from "@/lib/runtime-env";
-import { AuthService } from "@/lib/auth";
 import { citiesService } from "@/services/citiesService";
 import { cnaesService } from "@/services/cnaesService";
 import { leadsService } from "@/services/leadsService";
@@ -138,8 +137,6 @@ function LeadsB2B() {
   const routeSearch = Route.useSearch();
   const navigate = Route.useNavigate();
   const storedFilters = useMemo(() => getStoredB2BFilters(), []);
-
-  const currentUser = AuthService.getUser();
 
   const [leads, setLeads] = useState<Lead[]>([]);
   const [cities, setCities] = useState<City[]>([]);
@@ -385,9 +382,7 @@ function LeadsB2B() {
 
   async function quickContact(lead: Lead) {
     try {
-      const activeUserId = currentUser?.id || lead.assignedToId || "admin";
       await leadsService.createInteraction(lead.id, {
-        userId: activeUserId,
         type: "Contato comercial",
         description: "Contato registrado via painel Leads B2B.",
       });
@@ -400,9 +395,7 @@ function LeadsB2B() {
 
   async function quickRecordB2BSent(lead: Lead) {
     try {
-      const activeUserId = currentUser?.id || lead.assignedToId || "admin";
       await leadsService.createInteraction(lead.id, {
-        userId: activeUserId,
         type: "B2B_LINK_SENT",
         description: `Link B2B enviado: ${STORE_URL}`,
         newStatus: "LINK_B2B_SENT",

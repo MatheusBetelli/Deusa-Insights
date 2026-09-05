@@ -62,6 +62,18 @@ test("configuração de produção rejeita banco local e origens inseguras", () 
   );
 });
 
+test("configuração de produção rejeita host de banco placeholder", () => {
+  const errors = validateProductionConfig({
+    ...validConfig,
+    databaseUrl: "postgresql://runtime:secret@host:5432/postgres",
+  });
+
+  assert.equal(
+    errors.some((error) => error.includes("placeholder")),
+    true,
+  );
+});
+
 test("configuração de produção rejeita segredo fraco e credenciais ausentes", () => {
   const errors = validateProductionConfig({
     ...validConfig,

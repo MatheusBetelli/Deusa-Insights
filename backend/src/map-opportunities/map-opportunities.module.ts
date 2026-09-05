@@ -5,5 +5,6 @@ import { MapOpportunitiesService } from "./map-opportunities.service";
 @Module({
   controllers: [MapOpportunitiesController],
   providers: [MapOpportunitiesService],
+  exports: [MapOpportunitiesService],
 })
 export class MapOpportunitiesModule {}

@@ -1,16 +1,21 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type * as L from "leaflet";
-import "leaflet/dist/leaflet.css";
-import "leaflet.markercluster/dist/MarkerCluster.css";
-import "leaflet.markercluster/dist/MarkerCluster.Default.css";
+import leafletCss from "leaflet/dist/leaflet.css?url";
+import markerClusterCss from "leaflet.markercluster/dist/MarkerCluster.css?url";
+import markerClusterDefaultCss from "leaflet.markercluster/dist/MarkerCluster.Default.css?url";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "@/components/common/InterfaceStates";
+import { MapCommercialActionDialog } from "@/features/map/components/MapCommercialActionDialog";
+import { MapLocationAdjustmentDialog } from "@/features/map/components/MapLocationAdjustmentDialog";
 import { formatCnae, potentialLabels, statusLabels } from "@/lib/commercial-formatters";
 import { ESTADOS_UF } from "@/lib/constants";
 import { escapeHtml, escapeHtmlAttribute, safePathSegment } from "@/lib/html-safety";
+import { AuthService } from "@/lib/auth";
+import { companiesService } from "@/services/companiesService";
 import { mapService, type MapOpportunityQuery } from "@/services/mapService";
 import type { MapOpportunity } from "@/types/mapOpportunity";
+import { toast } from "sonner";
 import {
   AlertTriangle,
   Building2,
@@ -56,6 +61,13 @@ function setStoredMapFilters(filters: MapSearch) {
 }
 
 export const Route = createFileRoute("/_app/mapa-oportunidades")({
+  head: () => ({
+    links: [
+      { rel: "stylesheet", href: leafletCss },
+      { rel: "stylesheet", href: markerClusterCss },
+      { rel: "stylesheet", href: markerClusterDefaultCss },
+    ],
+  }),
   validateSearch: (search: Record<string, unknown>): MapSearch => ({
     uf: typeof search.uf === "string" ? search.uf : "SP",
     city: typeof search.city === "string" ? search.city : "Todas",
@@ -73,6 +85,18 @@ const DEFAULT_CENTER: [number, number] = [-21.92, -50.73];
 const DEFAULT_ZOOM = 12;
 
 type CommercialCategory = "CLIENTE" | "CRITICO" | "PROSPECT";
+
+type CoordinatePair = {
+  latitude: number;
+  longitude: number;
+};
+
+type LocationEditState = {
+  pointId: string;
+  companyId: string;
+  previous: CoordinatePair;
+  pending: CoordinatePair | null;
+};
 
 function getCommercialCategory(item: MapOpportunity): CommercialCategory {
   if (item.isClient) return "CLIENTE";
@@ -168,6 +192,13 @@ function OpportunityMap() {
   const mapElRef = useRef<HTMLDivElement | null>(null);
   const clusterRef = useRef<L.LayerGroup | L.MarkerClusterGroup | null>(null);
   const markerById = useRef<Map<string, L.Marker>>(new Map());
+  const pointsByIdRef = useRef<Map<string, MapOpportunity>>(new Map());
+  const editingMarkerRef = useRef<L.Marker | null>(null);
+  const editingDragEndRef = useRef<(() => void) | null>(null);
+  const editingDisplayPositionRef = useRef<CoordinatePair | null>(null);
+
+  const currentUser = AuthService.getUser();
+  const canAdjustLocation = currentUser?.role?.toUpperCase() === "ADMIN";
 
   const [mapStatus, setMapStatus] = useState<"loading" | "ready" | "error">("loading");
   const [dataLoading, setDataLoading] = useState(true);
@@ -190,7 +221,146 @@ function OpportunityMap() {
   const [clustersOn, setClustersOn] = useState(
     routeSearch.clusters ?? storedFilters.clusters ?? true,
   );
+  const [commercialActionPoint, setCommercialActionPoint] = useState<MapOpportunity | null>(null);
+  const [locationEdit, setLocationEdit] = useState<LocationEditState | null>(null);
+  const [savingLocation, setSavingLocation] = useState(false);
   const hasFittedRef = useRef(false);
+
+  useEffect(() => {
+    const pointsById = new Map<string, MapOpportunity>();
+    opportunities.forEach((point) => {
+      pointsById.set(point.id, point);
+      if (point.companyId) pointsById.set(point.companyId, point);
+    });
+    pointsByIdRef.current = pointsById;
+  }, [opportunities]);
+
+  const releaseLocationMarker = useCallback((restorePosition: boolean) => {
+    const marker = editingMarkerRef.current;
+    if (marker && editingDragEndRef.current) {
+      marker.off("dragend", editingDragEndRef.current);
+    }
+    marker?.dragging?.disable();
+    marker?.setZIndexOffset(0);
+
+    const displayPosition = editingDisplayPositionRef.current;
+    if (restorePosition && marker && displayPosition) {
+      marker.setLatLng([displayPosition.latitude, displayPosition.longitude]);
+    }
+
+    editingMarkerRef.current = null;
+    editingDragEndRef.current = null;
+    editingDisplayPositionRef.current = null;
+    setLocationEdit(null);
+  }, []);
+
+  const cancelLocationEdit = useCallback(() => {
+    if (savingLocation) return;
+    releaseLocationMarker(true);
+  }, [releaseLocationMarker, savingLocation]);
+
+  const beginLocationEdit = useCallback(
+    (point: MapOpportunity) => {
+      if (!canAdjustLocation || !point.companyId) return;
+      if (typeof point.latitude !== "number" || typeof point.longitude !== "number") {
+        toast.error("Este estabelecimento não possui coordenadas para ajustar.");
+        return;
+      }
+
+      const marker = markerById.current.get(point.id);
+      if (!marker) {
+        toast.error("Não foi possível localizar o pino selecionado no mapa.");
+        return;
+      }
+
+      releaseLocationMarker(true);
+      const displayPosition = marker.getLatLng();
+      editingMarkerRef.current = marker;
+      editingDisplayPositionRef.current = {
+        latitude: displayPosition.lat,
+        longitude: displayPosition.lng,
+      };
+
+      const dragEnd = () => {
+        const nextPosition = marker.getLatLng();
+        if (!Number.isFinite(nextPosition.lat) || !Number.isFinite(nextPosition.lng)) return;
+        setLocationEdit((current) =>
+          current
+            ? {
+                ...current,
+                pending: { latitude: nextPosition.lat, longitude: nextPosition.lng },
+              }
+            : current,
+        );
+      };
+
+      editingDragEndRef.current = dragEnd;
+      marker.setLatLng([point.latitude, point.longitude]);
+      marker.setZIndexOffset(1000);
+      marker.dragging?.enable();
+      marker.on("dragend", dragEnd);
+      mapRef.current?.closePopup();
+      setLocationEdit({
+        pointId: point.id,
+        companyId: point.companyId,
+        previous: { latitude: point.latitude, longitude: point.longitude },
+        pending: null,
+      });
+    },
+    [canAdjustLocation, releaseLocationMarker],
+  );
+
+  const confirmLocationEdit = useCallback(async () => {
+    if (!locationEdit?.pending || savingLocation) return;
+    setSavingLocation(true);
+    try {
+      await companiesService.updateLocation(locationEdit.companyId, locationEdit.pending);
+      setOpportunities((current) =>
+        current.map((point) =>
+          point.companyId === locationEdit.companyId
+            ? {
+                ...point,
+                latitude: locationEdit.pending!.latitude,
+                longitude: locationEdit.pending!.longitude,
+                origemCoordenada: "coordenada_manual",
+              }
+            : point,
+        ),
+      );
+      releaseLocationMarker(false);
+      toast.success("Localização atualizada e registrada na auditoria.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Não foi possível salvar a localização.");
+    } finally {
+      setSavingLocation(false);
+    }
+  }, [locationEdit, releaseLocationMarker, savingLocation]);
+
+  const openCommercialAction = useCallback((point: MapOpportunity) => {
+    mapRef.current?.closePopup();
+    setCommercialActionPoint(point);
+  }, []);
+
+  const handlePopupOpen = useCallback(
+    (event: L.PopupEvent) => {
+      const popupElement = event.popup.getElement();
+      if (!popupElement) return;
+
+      popupElement.querySelectorAll<HTMLButtonElement>("[data-map-action]").forEach((button) => {
+        button.onclick = (clickEvent) => {
+          clickEvent.preventDefault();
+          clickEvent.stopPropagation();
+          const pointId = button.dataset.pointId;
+          const point = pointId ? pointsByIdRef.current.get(pointId) : undefined;
+          if (!point) return;
+
+          if (button.dataset.mapAction === "commercial") openCommercialAction(point);
+          if (button.dataset.mapAction === "location") beginLocationEdit(point);
+        };
+      });
+    },
+    [beginLocationEdit, openCommercialAction],
+  );
 
   useEffect(() => {
     const params: MapSearch = {
@@ -415,13 +585,23 @@ function OpportunityMap() {
     };
   }, [dataLoading]);
 
+  useEffect(() => {
+    const map = mapRef.current;
+    if (mapStatus !== "ready" || !map) return;
+    map.on("popupopen", handlePopupOpen);
+    return () => {
+      map.off("popupopen", handlePopupOpen);
+    };
+  }, [handlePopupOpen, mapStatus]);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
+      releaseLocationMarker(true);
       mapRef.current?.remove();
       mapRef.current = null;
     };
-  }, []);
+  }, [releaseLocationMarker]);
 
   // ResizeObserver para garantir que o Leaflet redesenhe os tiles ao alterar layout/filtros
   useEffect(() => {
@@ -605,11 +785,17 @@ function OpportunityMap() {
                 <div style="grid-column:span 2;"><span style="color:#64748B;">Responsável:</span> <strong style="color:#0B1F33;">${escapeHtml(point.responsibleName || "Não atribuído")}</strong></div>
               </div>
 
-              <div style="margin-top:8px;padding-top:6px;border-top:1px solid #E2E8F0;display:flex;align-items:center;justify-content:space-between;gap:6px;">
-                <a href="${escapeHtmlAttribute(leadHref)}" style="display:inline-flex;align-items:center;gap:4px;padding:6px 10px;border-radius:6px;background:#0B1F33;color:#FFFFFF;text-decoration:none;font-size:11px;font-weight:700;">
-                  Abrir oportunidade →
+              <div style="margin-top:8px;padding-top:6px;border-top:1px solid #E2E8F0;display:flex;flex-direction:column;gap:6px;">
+                <a href="${escapeHtmlAttribute(leadHref)}" style="display:inline-flex;align-items:center;justify-content:center;gap:4px;padding:7px 10px;border-radius:6px;background:#0B1F33;color:#FFFFFF;text-decoration:none;font-size:11px;font-weight:700;">
+                  Ver detalhes →
                 </a>
-                <a href="${escapeHtmlAttribute(gmapsUrl)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:4px;padding:6px 10px;border-radius:6px;background:#F1F5F9;color:#0B1F33;text-decoration:none;font-size:11px;font-weight:600;">
+                <div style="display:flex;gap:6px;">
+                  <button type="button" data-map-action="commercial" data-point-id="${escapeHtmlAttribute(point.id)}" style="flex:1;display:inline-flex;align-items:center;justify-content:center;padding:7px 6px;border:0;border-radius:6px;background:#1061AF;color:#FFFFFF;font-size:11px;font-weight:700;cursor:pointer;">
+                    Registrar ação
+                  </button>
+                  ${canAdjustLocation ? `<button type="button" data-map-action="location" data-point-id="${escapeHtmlAttribute(point.id)}" style="flex:1;display:inline-flex;align-items:center;justify-content:center;padding:7px 6px;border:1px solid #DDE5EF;border-radius:6px;background:#FFFFFF;color:#0B1F33;font-size:11px;font-weight:700;cursor:pointer;">Ajustar localização</button>` : ""}
+                </div>
+                <a href="${escapeHtmlAttribute(gmapsUrl)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;justify-content:center;gap:4px;padding:6px 10px;border-radius:6px;background:#F1F5F9;color:#0B1F33;text-decoration:none;font-size:11px;font-weight:600;">
                   Ver no Google Maps
                 </a>
               </div>
@@ -690,7 +876,7 @@ function OpportunityMap() {
     return () => {
       cancelled = true;
     };
-  }, [withCoords, mapStatus, clustersOn, routeSearch.companyId]);
+  }, [withCoords, mapStatus, clustersOn, routeSearch.companyId, canAdjustLocation]);
 
   // --- counts ---
   const clienteCount = filtered.filter((p) => getCommercialCategory(p) === "CLIENTE").length;
@@ -699,6 +885,9 @@ function OpportunityMap() {
   const aproxCount = withCoords.filter(
     (p) => p.origemCoordenada?.includes("centroide") || p.origemCoordenada?.includes("jitter"),
   ).length;
+  const locationEditPoint = locationEdit
+    ? (opportunities.find((point) => point.id === locationEdit.pointId) ?? null)
+    : null;
 
   return (
     <div>
@@ -1084,6 +1273,27 @@ function OpportunityMap() {
           </span>
         </div>
       )}
+
+      <MapCommercialActionDialog
+        point={commercialActionPoint}
+        open={commercialActionPoint !== null}
+        onOpenChange={(open) => {
+          if (!open) setCommercialActionPoint(null);
+        }}
+      />
+
+      <MapLocationAdjustmentDialog
+        point={locationEditPoint}
+        previous={locationEdit?.previous ?? null}
+        pending={locationEdit?.pending ?? null}
+        open={locationEdit !== null}
+        saving={savingLocation}
+        onOpenChange={(open) => {
+          if (!open) cancelLocationEdit();
+        }}
+        onConfirm={() => void confirmLocationEdit()}
+        onCancel={cancelLocationEdit}
+      />
     </div>
   );
 }

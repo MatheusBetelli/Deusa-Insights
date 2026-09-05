@@ -1,5 +1,12 @@
-import { BadRequestException, Inject, Injectable, NotFoundException } from "@nestjs/common";
-import { ContactSource, ContactType, Prisma } from "@prisma/client";
+import {
+  BadRequestException,
+  ForbiddenException,
+  Inject,
+  Injectable,
+  NotFoundException,
+  Optional,
+} from "@nestjs/common";
+import { ContactSource, ContactType, Prisma, UserRole } from "@prisma/client";
 import { normalizeCnpj } from "../common/cnpj";
 import { isValidCnpj } from "../common/cnpj-validator";
 import { getCnaeVariants } from "../common/opportunity-filter";
@@ -17,13 +24,28 @@ import { CreateCompanyContactDto, UpdateCompanyContactDto } from "./dto/company-
 import { ValidateLocationDto } from "./dto/validate-location.dto";
 import { ClassificationService } from "../classification/classification.service";
 import { UpdateCommercialProfileDto } from "./dto/update-commercial-profile.dto";
+import { UpdateCompanyLocationDto } from "./dto/update-company-location.dto";
 
 import { ConfigService } from "@nestjs/config";
 import { maskCpfInRazaoSocial } from "../common/lgpd.utils";
 import { LeadAccessActor, scopeCompanyWhere } from "../common/lead-access.policy";
+import { MapOpportunitiesService } from "../map-opportunities/map-opportunities.service";
 
 function normalizeCnae(code?: string | null) {
   return code?.replace(/\D/g, "") || undefined;
+}
+
+function assertManualLocationCoordinates(dto: UpdateCompanyLocationDto): void {
+  if (
+    !Number.isFinite(dto.latitude) ||
+    !Number.isFinite(dto.longitude) ||
+    dto.latitude < -90 ||
+    dto.latitude > 90 ||
+    dto.longitude < -180 ||
+    dto.longitude > 180
+  ) {
+    throw new BadRequestException("Latitude ou longitude inválida.");
+  }
 }
 
 function calculateHaversineDistance(
@@ -229,9 +251,7 @@ function normalizeContactUpdateDto(
 }
 
 function isUuid(value: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-    value.trim(),
-  );
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value.trim());
 }
 
 function contactAuditFields(actor: LeadAccessActor) {
@@ -464,15 +484,17 @@ export class CompaniesService {
     @Inject(CNPJ_PROVIDER) private readonly cnpjProvider: CnpjProvider,
     private readonly classificationService: ClassificationService,
     private readonly configService: ConfigService,
+    @Optional() private readonly mapOpportunitiesService?: MapOpportunitiesService,
   ) {}
 
-  async findAll(query: CompanyQueryDto) {
+  async findAll(query: CompanyQueryDto, actor: LeadAccessActor) {
     if (query.page !== undefined || query.pageSize !== undefined) {
-      return this.findPage(query);
+      return this.findPage(query, actor);
     }
 
+    const where = scopeCompanyWhere(this.buildWhere(query), actor);
     const items = await this.prisma.company.findMany({
-      where: this.buildWhere(query),
+      where,
       include: { cnaes: true, lead: true, details: true, contacts: true },
       orderBy: { createdAt: "desc" },
       take: 200,
@@ -483,10 +505,10 @@ export class CompaniesService {
     }));
   }
 
-  async findPage(query: CompanyQueryDto) {
+  async findPage(query: CompanyQueryDto, actor: LeadAccessActor) {
     const page = Math.max(1, query.page ?? 1);
     const pageSize = Math.min(Math.max(1, query.pageSize ?? 25), 100);
-    const where = this.buildWhere(query);
+    const where = scopeCompanyWhere(this.buildWhere(query), actor);
     const [total, items] = await this.prisma.$transaction([
       this.prisma.company.count({ where }),
       this.prisma.company.findMany({
@@ -559,9 +581,9 @@ export class CompaniesService {
     return [{ razaoSocial: direction }, { createdAt: "desc" }];
   }
 
-  async findById(id: string) {
-    const company = await this.prisma.company.findUnique({
-      where: { id },
+  async findById(id: string, actor: LeadAccessActor) {
+    const company = await this.prisma.company.findFirst({
+      where: scopeCompanyWhere({ id }, actor),
       include: {
         cnaes: true,
         details: true,
@@ -608,11 +630,14 @@ export class CompaniesService {
   }
 
   async update(id: string, dto: UpdateCompanyDto) {
-    if ((dto.latitude !== undefined) !== (dto.longitude !== undefined)) {
-      throw new BadRequestException("Latitude e longitude devem ser informadas em conjunto.");
+    if (dto.latitude !== undefined || dto.longitude !== undefined) {
+      throw new BadRequestException(
+        "A localização deve ser ajustada exclusivamente pelo endpoint de localização manual.",
+      );
     }
     const cnaes = dto.cnaes?.map((cnae) => normalizeCnae(cnae)).filter(Boolean) as
-      string[] | undefined;
+      | string[]
+      | undefined;
     const company = await this.prisma.company.update({
       where: { id },
       data: {
@@ -725,12 +750,14 @@ export class CompaniesService {
         statusVerificacaoEndereco: true,
         latitudeVerificada: true,
         longitudeVerificada: true,
+        origemCoordenada: true,
       },
     });
     const preserveVerifiedLocation = Boolean(
       existing?.validadoManualmente ||
       existing?.latitudeVerificada != null ||
       existing?.longitudeVerificada != null ||
+      existing?.origemCoordenada === "coordenada_manual" ||
       ["verificado", "verificado_google", "confirmado"].includes(
         existing?.statusVerificacaoEndereco ?? "",
       ),
@@ -830,9 +857,9 @@ export class CompaniesService {
     return company;
   }
 
-  async getDetails(id: string) {
-    const company = await this.prisma.company.findUnique({
-      where: { id },
+  async getDetails(id: string, actor: LeadAccessActor) {
+    const company = await this.prisma.company.findFirst({
+      where: scopeCompanyWhere({ id }, actor),
       include: { details: true, cnaes: true, contacts: true },
     });
     if (!company) throw new NotFoundException("Empresa não encontrada");
@@ -869,7 +896,7 @@ export class CompaniesService {
       },
     });
 
-    return this.getDetails(id);
+    return this.getDetails(id, actor);
   }
 
   async listContacts(id: string, actor: LeadAccessActor) {
@@ -935,6 +962,51 @@ export class CompaniesService {
     });
   }
 
+  async updateLocation(id: string, dto: UpdateCompanyLocationDto, actor: LeadAccessActor) {
+    if (actor.role !== UserRole.ADMIN) {
+      throw new ForbiddenException("Somente administradores podem ajustar a localização.");
+    }
+    assertManualLocationCoordinates(dto);
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const company = await tx.company.findFirst({
+        where: scopeCompanyWhere({ id }, actor),
+        select: { id: true, latitude: true, longitude: true },
+      });
+      if (!company) throw new NotFoundException("Empresa não encontrada");
+
+      if (company.latitude === dto.latitude && company.longitude === dto.longitude) {
+        throw new BadRequestException("A nova localização deve ser diferente da atual.");
+      }
+
+      const result = await tx.company.update({
+        where: { id },
+        data: {
+          latitude: dto.latitude,
+          longitude: dto.longitude,
+          origemCoordenada: "coordenada_manual",
+        },
+      });
+
+      await tx.companyLocationAudit.create({
+        data: {
+          companyId: id,
+          responsibleUserId: actor.sub,
+          previousLatitude: company.latitude,
+          previousLongitude: company.longitude,
+          newLatitude: dto.latitude,
+          newLongitude: dto.longitude,
+          origin: "MANUAL_MAP_ADJUSTMENT",
+        },
+      });
+
+      return result;
+    });
+
+    this.mapOpportunitiesService?.invalidateCache();
+    return updated;
+  }
+
   private async upsertContactRecord(
     tx: Prisma.TransactionClient,
     companyId: string,
@@ -972,9 +1044,9 @@ export class CompaniesService {
     });
   }
 
-  async validateLocation(id: string, dto: ValidateLocationDto) {
-    const company = await this.prisma.company.findUnique({
-      where: { id },
+  async validateLocation(id: string, dto: ValidateLocationDto, actor: LeadAccessActor) {
+    const company = await this.prisma.company.findFirst({
+      where: scopeCompanyWhere({ id }, actor),
       include: { lead: true },
     });
     if (!company) throw new NotFoundException("Empresa não encontrada");
@@ -988,8 +1060,15 @@ export class CompaniesService {
     }
 
     const { updateData, pendenteValidacao } = buildLocationValidationUpdate(dto);
+    const hasCoordinates = dto.latitude !== undefined && dto.longitude !== undefined;
+    const locationChanged =
+      hasCoordinates && (company.latitude !== dto.latitude || company.longitude !== dto.longitude);
+    const auditOrigin =
+      dto.origemCoordenada === "coordenada_manual"
+        ? "MANUAL_LOCATION_VALIDATION"
+        : "LOCATION_VALIDATION";
 
-    return this.prisma.$transaction(async (tx) => {
+    const updated = await this.prisma.$transaction(async (tx) => {
       const updated = await tx.company.update({
         where: { id },
         data: updateData,
@@ -1003,8 +1082,25 @@ export class CompaniesService {
         });
       }
 
+      if (locationChanged && dto.latitude !== undefined && dto.longitude !== undefined) {
+        await tx.companyLocationAudit.create({
+          data: {
+            companyId: id,
+            responsibleUserId: actor.sub,
+            previousLatitude: company.latitude,
+            previousLongitude: company.longitude,
+            newLatitude: dto.latitude,
+            newLongitude: dto.longitude,
+            origin: auditOrigin,
+          },
+        });
+      }
+
       return updated;
     });
+
+    if (locationChanged) this.mapOpportunitiesService?.invalidateCache();
+    return updated;
   }
 
   async getLocationCandidates(id: string, confirmPaidRequest: boolean) {

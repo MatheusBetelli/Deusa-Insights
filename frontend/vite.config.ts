@@ -43,6 +43,26 @@ function productionApiUrlGuard(configuredUrl: string): Plugin {
   };
 }
 
+/**
+ * Splits heavy vendor libraries into separate, long-term-cacheable chunks.
+ * Reduces initial bundle size and improves Lighthouse performance scores.
+ */
+function manualChunks(id: string): string | undefined {
+  // Leaflet and markercluster are only loaded on the map page – keep together.
+  if (id.includes("leaflet")) return "vendor-map";
+  // Recharts is only loaded on the dashboard page.
+  if (id.includes("recharts") || id.includes("d3-") || id.includes("victory-")) {
+    return "vendor-charts";
+  }
+  // Radix primitives are shared across many components; cache separately.
+  if (id.includes("@radix-ui")) return "vendor-radix";
+  // TanStack ecosystem (router, query, start) – stable across deploys.
+  if (id.includes("@tanstack")) return "vendor-tanstack";
+  // Lucide icon tree-shakes well but is still sizable in aggregate.
+  if (id.includes("lucide-react")) return "vendor-icons";
+  return undefined;
+}
+
 export default defineConfig(({ mode }) => {
   const fileEnv = loadEnv(mode, process.cwd(), "VITE_");
   const apiUrl = (process.env.VITE_API_URL ?? fileEnv.VITE_API_URL ?? "").trim();
@@ -65,7 +85,14 @@ export default defineConfig(({ mode }) => {
 
   const sharedPlugins = [tsConfigPaths({ projects: ["./tsconfig.json"] }), startPlugin];
 
+  const rollupOptions = {
+    output: {
+      manualChunks,
+    },
+  };
+
   return {
+    build: { rollupOptions },
     plugins:
       deployTarget === "cloudflare"
         ? [
@@ -75,6 +102,12 @@ export default defineConfig(({ mode }) => {
             viteReact(),
             tailwindcss(),
           ]
-        : [productionApiUrlGuard(apiUrl), ...sharedPlugins, nitro(), viteReact(), tailwindcss()],
+        : [
+            productionApiUrlGuard(apiUrl),
+            ...sharedPlugins,
+            nitro({ compressPublicAssets: { gzip: true, brotli: true } }),
+            viteReact(),
+            tailwindcss(),
+          ],
   };
 });

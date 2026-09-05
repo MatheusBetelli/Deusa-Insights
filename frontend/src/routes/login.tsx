@@ -102,10 +102,10 @@ function LoginPage() {
             <>
               <div className="mb-8 flex flex-col items-center">
                 <DeusaLogo className="h-10 w-auto mb-6" />
-                <span className="mb-3 inline-flex items-center rounded-full bg-blue-50/90 px-3 py-1 text-[10px] font-bold tracking-widest text-[#1061AF] uppercase border border-blue-200/70">
+                <span className="mb-3 inline-flex items-center rounded-full bg-blue-50/90 px-3 py-1 text-xs font-bold tracking-widest text-[#1061AF] uppercase border border-blue-200/70">
                   Deusa Analytics
                 </span>
-                <h2 className="text-xl font-bold tracking-tight text-slate-900">Acesso interno</h2>
+                <h1 className="text-xl font-bold tracking-tight text-slate-900">Acesso interno</h1>
                 <p className="mt-1.5 text-center text-sm text-slate-500 font-medium">
                   Entre com seu e-mail corporativo para acessar a plataforma.
                 </p>
@@ -113,12 +113,18 @@ function LoginPage() {
 
               <form onSubmit={submitLogin} className="space-y-6">
                 <div className="space-y-2.5">
-                  <label className="text-[11px] font-bold uppercase tracking-wider text-slate-600 ml-0.5">
+                  <label
+                    htmlFor="login-email"
+                    className="text-xs font-bold uppercase tracking-wider text-slate-600 ml-0.5"
+                  >
                     E-mail corporativo
                   </label>
                   <div className="relative">
                     <Mail className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                     <input
+                      id="login-email"
+                      name="email"
+                      autoComplete="username"
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
@@ -131,7 +137,10 @@ function LoginPage() {
 
                 <div className="space-y-2.5">
                   <div className="flex items-center justify-between">
-                    <label className="text-[11px] font-bold uppercase tracking-wider text-slate-600 ml-0.5">
+                    <label
+                      htmlFor="login-password"
+                      className="text-xs font-bold uppercase tracking-wider text-slate-600 ml-0.5"
+                    >
                       Senha
                     </label>
                     {capsLockOn && (
@@ -144,6 +153,9 @@ function LoginPage() {
                   <div className="relative">
                     <Lock className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                     <input
+                      id="login-password"
+                      name="password"
+                      autoComplete="current-password"
                       type={showPassword ? "text" : "password"}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
@@ -158,6 +170,8 @@ function LoginPage() {
                       onClick={() => setShowPassword(!showPassword)}
                       className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none transition-colors p-1 rounded"
                       title={showPassword ? "Ocultar senha" : "Exibir senha"}
+                      aria-label={showPassword ? "Ocultar senha" : "Exibir senha"}
+                      aria-pressed={showPassword}
                     >
                       {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </button>
@@ -207,7 +221,7 @@ function LoginPage() {
                   )}
                 </button>
 
-                <div className="flex items-center justify-center gap-2 pt-6 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                <div className="flex items-center justify-center gap-2 pt-6 text-xs font-bold text-slate-600 uppercase tracking-widest">
                   <ShieldCheck className="h-3.5 w-3.5 text-blue-600/50" />
                   Ambiente restrito para usuários autorizados
                 </div>
@@ -217,7 +231,7 @@ function LoginPage() {
             <>
               <div className="mb-8 flex flex-col items-center">
                 <DeusaLogo className="h-9 w-auto mb-8" />
-                <h2 className="text-xl font-bold tracking-tight text-slate-900">Recuperar senha</h2>
+                <h1 className="text-xl font-bold tracking-tight text-slate-900">Recuperar senha</h1>
                 <p className="mt-2 text-center text-sm text-slate-500 font-medium leading-relaxed">
                   Informe seu e-mail corporativo abaixo para receber o link de redefinição de senha.
                 </p>
@@ -245,12 +259,18 @@ function LoginPage() {
               ) : (
                 <form onSubmit={submitForgot} className="space-y-6">
                   <div className="space-y-2.5">
-                    <label className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 ml-0.5">
+                    <label
+                      htmlFor="forgot-email"
+                      className="text-xs font-semibold uppercase tracking-wider text-slate-600 ml-0.5"
+                    >
                       E-mail corporativo
                     </label>
                     <div className="relative">
                       <Mail className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                       <input
+                        id="forgot-email"
+                        name="email"
+                        autoComplete="email"
                         type="email"
                         value={forgotEmail}
                         onChange={(e) => setForgotEmail(e.target.value)}
@@ -300,10 +320,10 @@ function LoginPage() {
         </div>
 
         <div className="mt-8 text-center space-y-1">
-          <p className="text-[12px] font-semibold text-slate-500">
+          <p className="text-xs font-semibold text-slate-600">
             © 2026 Deusa Alimentos - Inteligência Comercial
           </p>
-          <p className="text-[11px] text-slate-400 font-medium flex items-center justify-center gap-1">
+          <p className="text-xs text-slate-600 font-medium flex items-center justify-center gap-1">
             <ShieldCheck className="h-3 w-3 text-emerald-600" />
             Conformidade LGPD garantida (Lei nº 13.709/2018)
           </p>

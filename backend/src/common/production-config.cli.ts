@@ -9,6 +9,7 @@ const errors = validateProductionConfig({
   authCookieSameSite: process.env.AUTH_COOKIE_SAME_SITE,
   resendApiKey: process.env.RESEND_API_KEY,
   resendFromEmail: process.env.RESEND_FROM_EMAIL,
+  resendTestRecipient: process.env.RESEND_TEST_RECIPIENT,
   enableLeadMutations: process.env.ENABLE_LEAD_MUTATIONS,
   enableCommercialActions: process.env.ENABLE_COMMERCIAL_ACTIONS,
 });

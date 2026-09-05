@@ -1,14 +1,13 @@
 import { Injectable } from "@nestjs/common";
 import { LeadStatus, Prisma } from "@prisma/client";
-import { buildCnaeWhereInput, getCnaeVariants } from "../common/opportunity-filter";
 import { PrismaService } from "../prisma/prisma.service";
 import {
   hasFullPortfolioAccess,
   leadAccessCacheKey,
   LeadAccessActor,
-  scopeLeadWhere,
 } from "../common/lead-access.policy";
 import { DashboardPeriod, DashboardQueryDto } from "./dto/dashboard-query.dto";
+import { buildDashboardFilters, buildUnattendedOpportunityWhere } from "./dashboard-filters";
 
 type CountByCity = {
   city: string;
@@ -199,54 +198,6 @@ function periodWhere(start: Date, end: Date): Prisma.DateTimeFilter {
   return { gte: start, lt: end };
 }
 
-function buildDashboardFilters(query: DashboardQueryDto, periodEnd: Date, actor: LeadAccessActor) {
-  const cnaeVariants = getCnaeVariants(query.cnae);
-  const uf = query.uf?.toUpperCase();
-  const city = query.city?.trim();
-  const assignedToId = query.assignedToId?.trim();
-  const portfolioLeadWhere = scopeLeadWhere(assignedToId ? { assignedToId } : {}, actor);
-  const hasPortfolioFilter = Boolean(assignedToId) || !hasFullPortfolioAccess(actor);
-  const companyFilters: Prisma.CompanyWhereInput[] = [
-    { situacaoCadastral: "ATIVA" },
-    buildCnaeWhereInput(query.cnae),
-  ];
-  if (uf) companyFilters.push({ uf });
-  if (city) companyFilters.push({ cidade: { equals: city, mode: "insensitive" } });
-
-  const companyBaseWhere: Prisma.CompanyWhereInput = { AND: companyFilters };
-  const clientCompanyFilters: Prisma.CompanyWhereInput[] = [];
-  if (hasPortfolioFilter) clientCompanyFilters.push({ lead: { is: portfolioLeadWhere } });
-  if (cnaeVariants.length > 0) {
-    clientCompanyFilters.push({
-      OR: [
-        { cnaePrincipal: { in: cnaeVariants } },
-        { cnaes: { some: { cnaeCode: { in: cnaeVariants } } } },
-      ],
-    });
-  }
-
-  const clientBaseWhere: Prisma.ClientAccountWhereInput = {
-    ...(uf ? { uf } : {}),
-    ...(city ? { cidade: { equals: city, mode: "insensitive" } } : {}),
-    ...(clientCompanyFilters.length > 0 ? { company: { AND: clientCompanyFilters } } : {}),
-    createdAt: { lt: periodEnd },
-  };
-  const leadBaseWhere: Prisma.LeadWhereInput = {
-    ...(hasPortfolioFilter ? { AND: [portfolioLeadWhere] } : {}),
-    company: companyBaseWhere,
-  };
-
-  return {
-    city,
-    clientBaseWhere,
-    companyBaseWhere,
-    hasPortfolioFilter,
-    leadBaseWhere,
-    portfolioLeadWhere,
-    uf,
-  };
-}
-
 @Injectable()
 export class DashboardService {
   private summaryCache = new Map<string, { data: DashboardSummaryResponse; expiresAt: number }>();
@@ -271,6 +222,8 @@ export class DashboardService {
     const {
       city,
       clientBaseWhere,
+      confirmedClientWhere,
+      opportunityWhere,
       companyBaseWhere,
       hasPortfolioFilter,
       leadBaseWhere,
@@ -296,10 +249,7 @@ export class DashboardService {
       responsibles,
     ] = await Promise.all([
       this.prisma.clientAccount.count({
-        where: {
-          ...clientBaseWhere,
-          isCurrentClient: true,
-        },
+        where: confirmedClientWhere,
       }),
       this.prisma.lead.count({
         where: {
@@ -319,15 +269,7 @@ export class DashboardService {
         },
       }),
       this.prisma.company.count({
-        where: {
-          AND: [
-            companyBaseWhere,
-            { createdAt: { lt: period.end } },
-            { OR: [{ lead: { is: null } }, { lead: { status: { not: LeadStatus.CONVERTED } } }] },
-            { clientAccounts: { none: { isCurrentClient: true } } },
-            ...(hasPortfolioFilter ? [{ lead: { is: portfolioLeadWhere } }] : []),
-          ],
-        },
+        where: opportunityWhere,
       }),
       this.prisma.lead.count({
         where: {
@@ -587,15 +529,7 @@ export class DashboardService {
       }),
       this.prisma.company.groupBy({
         by: ["cidade"],
-        where: {
-          AND: [
-            companyBaseWhere,
-            { createdAt: { lt: periodEnd } },
-            { OR: [{ lead: { is: null } }, { lead: { status: { not: LeadStatus.CONVERTED } } }] },
-            { clientAccounts: { none: { isCurrentClient: true } } },
-            ...(hasPortfolioFilter ? [{ lead: { is: portfolioLeadWhere } }] : []),
-          ],
-        },
+        where: buildUnattendedOpportunityWhere(args),
         _count: { id: true },
       }),
     ]);

@@ -40,7 +40,6 @@ import {
   ShoppingBag,
   X,
 } from "lucide-react";
-import { AuthService } from "@/lib/auth";
 
 type LeadDetailsSheetProps = {
   leadId: string | null;
@@ -88,8 +87,6 @@ export function LeadDetailsSheet({ leadId, open, onOpenChange, onUpdated }: Lead
   const [email, setEmail] = useState("");
   const [naturezaJuridica, setNaturezaJuridica] = useState("");
   const [savingDetails, setSavingDetails] = useState(false);
-
-  const currentUser = AuthService.getUser();
 
   const loadLead = useCallback(async () => {
     if (!leadId) return;
@@ -215,13 +212,11 @@ export function LeadDetailsSheet({ leadId, open, onOpenChange, onUpdated }: Lead
 
   async function handleRegisterContact() {
     if (!lead) return;
-    const activeUserId = currentUser?.id || lead.assignedToId || "admin";
 
     setSaving(true);
     try {
       const fullDesc = `[${contactChannel}] ${contactDescription.trim() || "Contato registrado pelo painel comercial."}`;
       await leadsService.createInteraction(lead.id, {
-        userId: activeUserId,
         type: `Contato (${contactChannel})`,
         description: fullDesc,
       });
@@ -251,10 +246,8 @@ export function LeadDetailsSheet({ leadId, open, onOpenChange, onUpdated }: Lead
       window.open(`https://wa.me/?text=${message}`, "_blank");
     }
 
-    const activeUserId = currentUser?.id || lead.assignedToId || "admin";
     try {
       await leadsService.createInteraction(lead.id, {
-        userId: activeUserId,
         type: "B2B_LINK_SENT",
         description: `Link B2B enviado: ${STORE_URL}`,
         newStatus: "LINK_B2B_SENT",

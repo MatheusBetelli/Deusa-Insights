@@ -81,15 +81,14 @@ function SettingsPage() {
   const [newUserForm, setNewUserForm] = useState<{
     name: string;
     email: string;
-    password: string;
     role: "ADMIN" | "MANAGER" | "SALES";
   }>({
     name: "",
     email: "",
-    password: "",
     role: "SALES",
   });
   const [creatingUser, setCreatingUser] = useState(false);
+  const [resendingUserId, setResendingUserId] = useState<string | null>(null);
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -121,20 +120,19 @@ function SettingsPage() {
 
   async function handleCreateUser(e: React.FormEvent) {
     e.preventDefault();
-    if (!newUserForm.name.trim() || !newUserForm.email.trim() || newUserForm.password.length < 8) {
-      toast.error("Preencha nome, e-mail e uma senha com no mínimo 8 caracteres.");
+    if (!newUserForm.name.trim() || !newUserForm.email.trim()) {
+      toast.error("Preencha nome e e-mail para enviar o convite.");
       return;
     }
     setCreatingUser(true);
     try {
-      await usersService.createUser({
+      await usersService.createInvitation({
         name: newUserForm.name,
         email: newUserForm.email,
-        password: newUserForm.password,
         role: newUserForm.role,
       });
-      toast.success(`Usuário ${newUserForm.name} cadastrado com sucesso!`);
-      setNewUserForm({ name: "", email: "", password: "", role: "SALES" });
+      toast.success(`Convite enviado para ${newUserForm.email.trim().toLowerCase()}.`);
+      setNewUserForm({ name: "", email: "", role: "SALES" });
       setAddUserOpen(false);
       await loadUsers();
     } catch (err) {
@@ -144,8 +142,25 @@ function SettingsPage() {
     }
   }
 
+  async function handleResendInvitation(id: string) {
+    if (resendingUserId) return;
+    setResendingUserId(id);
+    try {
+      await usersService.resendInvitation(id);
+      toast.success("Convite reenviado com sucesso.");
+      await loadUsers();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erro ao reenviar convite.");
+    } finally {
+      setResendingUserId(null);
+    }
+  }
+
   async function handleDeleteUser(id: string) {
     if (deletingUserId) return;
+    const targetUser = users.find((candidate) => candidate.id === id);
+    if (!targetUser) return;
+    if (!window.confirm(`Remover o usuário ${targetUser.name} (${targetUser.email})?`)) return;
     setDeletingUserId(id);
     try {
       await usersService.deleteUser(id);
@@ -361,11 +376,36 @@ function SettingsPage() {
                             ? "Gestor Comercial"
                             : "Consultor Comercial"}
                       </span>
-                      {isAdmin && !isCurrentUser && u.role !== "ADMIN" && (
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-[11px] font-bold border ${
+                          u.status === "INVITED"
+                            ? "border-amber-200 bg-amber-50 text-amber-700"
+                            : u.status === "BLOCKED"
+                              ? "border-red-200 bg-red-50 text-red-700"
+                              : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                        }`}
+                      >
+                        {u.status === "INVITED"
+                          ? "Convite pendente"
+                          : u.status === "BLOCKED"
+                            ? "Bloqueado"
+                            : "Ativo"}
+                      </span>
+                      {isAdmin && u.status === "INVITED" && (
+                        <button
+                          onClick={() => handleResendInvitation(u.id)}
+                          disabled={resendingUserId === u.id}
+                          title="Reenviar convite"
+                          className="rounded-lg p-1.5 text-slate-400 hover:bg-blue-50 hover:text-[#1061AF] transition cursor-pointer disabled:opacity-40"
+                        >
+                          <Mail className="h-4 w-4" />
+                        </button>
+                      )}
+                      {isAdmin && !isCurrentUser && (
                         <button
                           onClick={() => handleDeleteUser(u.id)}
                           disabled={deletingUserId === u.id}
-                          title="Remover consultor comercial"
+                          title="Remover usuário"
                           className="rounded-lg p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600 transition cursor-pointer disabled:opacity-40"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -492,13 +532,13 @@ function SettingsPage() {
         </section>
       )}
 
-      {/* ── MODAL: CADASTRAR NOVO USUÁRIO ── */}
+      {/* ── MODAL: CONVIDAR NOVO USUÁRIO ── */}
       <Dialog open={isAdmin && addUserOpen} onOpenChange={setAddUserOpen}>
         <DialogContent className="max-w-md border-[#DDE5EF] bg-white">
           <DialogHeader>
-            <DialogTitle className="text-[#0B1F33]">Cadastrar Novo Usuário</DialogTitle>
+            <DialogTitle className="text-[#0B1F33]">Convidar novo usuário</DialogTitle>
             <DialogDescription>
-              Adicione um novo membro para acessar a plataforma Deusa Insights.
+              Informe nome, e-mail e perfil. A pessoa escolherá a própria senha por um link seguro.
             </DialogDescription>
           </DialogHeader>
 
@@ -533,21 +573,6 @@ function SettingsPage() {
 
             <div>
               <label className="block text-[11px] font-bold uppercase text-[#64748B] mb-1">
-                Senha Inicial
-              </label>
-              <input
-                type="password"
-                required
-                minLength={8}
-                value={newUserForm.password}
-                onChange={(e) => setNewUserForm({ ...newUserForm, password: e.target.value })}
-                placeholder="Mínimo de 8 caracteres"
-                className="h-10 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-xs text-[#0B1F33] outline-none focus:border-[#1061AF]"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-bold uppercase text-[#64748B] mb-1">
                 Perfil de Acesso
               </label>
               <select
@@ -561,6 +586,7 @@ function SettingsPage() {
                 className="h-10 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-xs text-[#0B1F33] outline-none focus:border-[#1061AF]"
               >
                 <option value="SALES">Consultor Comercial</option>
+                <option value="MANAGER">Supervisor Comercial</option>
                 <option value="ADMIN">Administrador de Sistema</option>
               </select>
             </div>
@@ -578,7 +604,7 @@ function SettingsPage() {
                 disabled={creatingUser}
                 className="h-9 rounded-lg bg-[#0B1F33] px-4 text-xs font-bold text-white hover:bg-[#1061AF] transition cursor-pointer disabled:opacity-60"
               >
-                {creatingUser ? "Salvando..." : "Cadastrar Usuário"}
+                {creatingUser ? "Enviando..." : "Enviar convite"}
               </button>
             </div>
           </form>

@@ -13,8 +13,11 @@ import { AuditableHttpRequest, getRequestPath } from "./auditable-http.types";
 const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 export const FROZEN_DATASET_READ_ONLY_KEY = "frozenDatasetReadOnly";
 export const COMMERCIAL_ACTION_MUTATION_KEY = "commercialActionMutation";
-export const FrozenDatasetReadOnly = () => SetMetadata(FROZEN_DATASET_READ_ONLY_KEY, true);
+export const MANUAL_LOCATION_ADJUSTMENT_MUTATION_KEY = "manualLocationAdjustmentMutation";
+
 export const CommercialActionMutation = () => SetMetadata(COMMERCIAL_ACTION_MUTATION_KEY, true);
+export const ManualLocationAdjustmentMutation = () =>
+  SetMetadata(MANUAL_LOCATION_ADJUSTMENT_MUTATION_KEY, true);
 
 function parseBooleanFlag(value: string | boolean | undefined | null): boolean | undefined {
   if (value === undefined || value === null || value === "") return undefined;
@@ -24,7 +27,9 @@ function parseBooleanFlag(value: string | boolean | undefined | null): boolean |
 
 export function areDatasetMutationsEnabled(configService: ConfigService): boolean {
   const nodeEnv = configService.get<string>("NODE_ENV")?.trim().toLowerCase() ?? "development";
-  const configuredValue = parseBooleanFlag(configService.get<string | boolean>("ENABLE_LEAD_MUTATIONS"));
+  const configuredValue = parseBooleanFlag(
+    configService.get<string | boolean>("ENABLE_LEAD_MUTATIONS"),
+  );
 
   if (configuredValue === undefined) {
     return nodeEnv !== "production";
@@ -58,18 +63,28 @@ export class DatasetFreezeGuard implements CanActivate {
       COMMERCIAL_ACTION_MUTATION_KEY,
       [context.getHandler(), context.getClass()],
     );
+    const isManualLocationAdjustment = this.reflector.getAllAndOverride<boolean>(
+      MANUAL_LOCATION_ADJUSTMENT_MUTATION_KEY,
+      [context.getHandler(), context.getClass()],
+    );
     if (!MUTATING_METHODS.has(request.method.toUpperCase()) || isReadOnlyHandler) {
       return true;
     }
     if (areDatasetMutationsEnabled(this.configService)) {
       return true;
     }
-    if (isCommercialAction && areCommercialActionsEnabled(this.configService)) {
+    if (
+      (isCommercialAction || isManualLocationAdjustment) &&
+      areCommercialActionsEnabled(this.configService)
+    ) {
       return true;
     }
 
     this.auditLogger.logEvent({
-      action: isCommercialAction ? "COMMERCIAL_ACTION_MUTATION_BLOCKED" : "DATA_MUTATION_BLOCKED",
+      action:
+        isCommercialAction || isManualLocationAdjustment
+          ? "COMMERCIAL_ACTION_MUTATION_BLOCKED"
+          : "DATA_MUTATION_BLOCKED",
       outcome: "BLOCKED",
       userId: request.user?.sub,
       userEmail: request.user?.email,
@@ -81,7 +96,7 @@ export class DatasetFreezeGuard implements CanActivate {
     });
 
     throw new ForbiddenException(
-      isCommercialAction
+      isCommercialAction || isManualLocationAdjustment
         ? "Acoes comerciais estao desabilitadas neste ambiente"
         : "Alteracoes de leads, empresas e importacoes estao desabilitadas neste ambiente",
     );

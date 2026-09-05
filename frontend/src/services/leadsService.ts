@@ -6,6 +6,7 @@ import type {
   LeadQuery,
   UpdateLeadPayload,
 } from "@/types/lead";
+import type { CreateCommercialActionPayload } from "@/types/commercialAction";
 import type { PaginatedResponse } from "@/types/pagination";
 
 export const leadsService = {
@@ -19,6 +20,11 @@ export const leadsService = {
   getInteractions: (id: string) => apiRequest<LeadInteraction[]>(`/leads/${id}/interactions`),
   createInteraction: (id: string, payload: CreateLeadInteractionPayload) =>
     apiRequest<LeadInteraction>(`/leads/${id}/interactions`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  createCommercialAction: (id: string, payload: CreateCommercialActionPayload) =>
+    apiRequest<LeadInteraction>(`/leads/${id}/interactions/commercial-actions`, {
       method: "POST",
       body: JSON.stringify(payload),
     }),

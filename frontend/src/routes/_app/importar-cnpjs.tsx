@@ -327,7 +327,16 @@ function ImportCnpjs() {
               <div className="flex items-center gap-2">
                 <Link
                   to="/funil-comercial"
-                  search={{ search: "", uf: "Todos", city: "Todas", cnae: "Todos" }}
+                  search={{
+                    search: "",
+                    uf: "Todos",
+                    city: "Todas",
+                    cnae: "Todos",
+                    period: "current_month",
+                    month: new Date().getMonth() + 1,
+                    year: new Date().getFullYear(),
+                    assignedToId: "Todos",
+                  }}
                   className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-[#DDE5EF] bg-white px-3 text-xs font-bold text-[#0B1F33] transition hover:border-[#1061AF]"
                 >
                   Ver no Funil (Convertidos)

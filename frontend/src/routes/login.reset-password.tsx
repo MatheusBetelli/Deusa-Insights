@@ -4,7 +4,7 @@ export const Route = createFileRoute("/login/reset-password")({
   beforeLoad: ({ search }) => {
     throw redirect({
       to: "/reset-password",
-      search: { token: search.token },
+      search: { token: search.token, mode: "reset" },
     });
   },
   validateSearch: (search: Record<string, unknown>) => {

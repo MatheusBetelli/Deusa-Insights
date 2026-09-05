@@ -24,6 +24,49 @@ test("mapa detalhado aplica escopo de carteira para vendedor", async () => {
   assert.match(JSON.stringify(capturedWhere), /sales@example\.com/);
 });
 
+test("mapa preserva coordenada ajustada manualmente mesmo com qualidade cadastral divergente", async () => {
+  const prisma = {
+    lead: {
+      findMany: async () => [
+        {
+          id: "lead-client-1",
+          companyId: "company-1",
+          status: "CONVERTED",
+          score: 100,
+          potentialLevel: "HIGH",
+          company: {
+            id: "company-1",
+            razaoSocial: "Mercado Manual",
+            nomeFantasia: "Mercado Manual",
+            situacaoCadastral: "ATIVA",
+            cidade: "Garça",
+            uf: "SP",
+            cnaePrincipal: "4711302",
+            latitude: -22.205,
+            longitude: -49.605,
+            origemCoordenada: "coordenada_manual",
+            statusVerificacaoEndereco: "divergente",
+            confiancaVerificacao: 20,
+            clientAccounts: [{ isCurrentClient: true }],
+            contacts: [],
+            details: null,
+            cnaes: [],
+          },
+          assignedTo: null,
+        },
+      ],
+    },
+  };
+
+  const result = await new MapOpportunitiesService(prisma as never).findAll({
+    sub: "admin-1",
+    role: "ADMIN",
+  });
+
+  assert.equal(result[0]?.latitude, -22.205);
+  assert.equal(result[0]?.longitude, -49.605);
+});
+
 test("mapa detalhado aplica filtros server-side de região, status comercial e CNAE", async () => {
   let capturedWhere: unknown;
   const prisma = {

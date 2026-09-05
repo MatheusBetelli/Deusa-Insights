@@ -6,7 +6,7 @@ import { RolesGuard } from "../auth/roles.guard";
 import {
   CommercialActionMutation,
   DatasetFreezeGuard,
-  FrozenDatasetReadOnly,
+  ManualLocationAdjustmentMutation,
 } from "../common/dataset-freeze.guard";
 import { UserRole } from "@prisma/client";
 import { AuthenticatedHttpRequest } from "../common/auditable-http.types";
@@ -16,6 +16,7 @@ import { CreateCompanyDto } from "./dto/create-company.dto";
 import { UpdateCompanyDto } from "./dto/update-company.dto";
 import { CompanyDetailsDto } from "./dto/company-details.dto";
 import { ValidateLocationDto } from "./dto/validate-location.dto";
+import { UpdateCompanyLocationDto } from "./dto/update-company-location.dto";
 import { LocationCandidatesRequestDto } from "./dto/location-candidates-request.dto";
 import { UpdateCommercialProfileDto } from "./dto/update-commercial-profile.dto";
 import { CreateCompanyContactDto, UpdateCompanyContactDto } from "./dto/company-contact.dto";
@@ -26,13 +27,13 @@ export class CompaniesController {
   constructor(private readonly companiesService: CompaniesService) {}
 
   @Get()
-  findAll(@Query() query: CompanyQueryDto) {
-    return this.companiesService.findAll(query);
+  findAll(@Query() query: CompanyQueryDto, @Req() request: AuthenticatedHttpRequest) {
+    return this.companiesService.findAll(query, request.user);
   }
 
   @Get(":id")
-  findById(@Param("id") id: string) {
-    return this.companiesService.findById(id);
+  findById(@Param("id") id: string, @Req() request: AuthenticatedHttpRequest) {
+    return this.companiesService.findById(id, request.user);
   }
 
   @Post()
@@ -47,6 +48,17 @@ export class CompaniesController {
     return this.companiesService.update(id, dto);
   }
 
+  @Patch(":id/location")
+  @Roles(UserRole.ADMIN)
+  @ManualLocationAdjustmentMutation()
+  updateLocation(
+    @Param("id") id: string,
+    @Body() dto: UpdateCompanyLocationDto,
+    @Req() request: AuthenticatedHttpRequest,
+  ) {
+    return this.companiesService.updateLocation(id, dto, request.user);
+  }
+
   @Post("sync/:cnpj")
   @Roles(UserRole.ADMIN)
   syncByCnpj(@Param("cnpj") cnpj: string) {
@@ -54,8 +66,8 @@ export class CompaniesController {
   }
 
   @Get(":id/details")
-  getDetails(@Param("id") id: string) {
-    return this.companiesService.getDetails(id);
+  getDetails(@Param("id") id: string, @Req() request: AuthenticatedHttpRequest) {
+    return this.companiesService.getDetails(id, request.user);
   }
 
   @Post(":id/details")
@@ -113,13 +125,16 @@ export class CompaniesController {
 
   @Post(":id/validate-location")
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
-  validateLocation(@Param("id") id: string, @Body() dto: ValidateLocationDto) {
-    return this.companiesService.validateLocation(id, dto);
+  validateLocation(
+    @Param("id") id: string,
+    @Body() dto: ValidateLocationDto,
+    @Req() request: AuthenticatedHttpRequest,
+  ) {
+    return this.companiesService.validateLocation(id, dto, request.user);
   }
 
   @Post(":id/location-candidates")
   @Roles(UserRole.ADMIN, UserRole.MANAGER)
-  @FrozenDatasetReadOnly()
   @Throttle({ default: { ttl: 60000, limit: 5 } })
   getLocationCandidates(@Param("id") id: string, @Body() dto: LocationCandidatesRequestDto) {
     return this.companiesService.getLocationCandidates(id, dto.confirmPaidRequest);
