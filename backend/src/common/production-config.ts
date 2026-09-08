@@ -1,4 +1,5 @@
 export type ProductionConfig = {
+  nodeEnv?: string;
   databaseUrl?: string;
   directUrl?: string;
   jwtSecret?: string;
@@ -145,6 +146,9 @@ export function validateProductionConfig(config: ProductionConfig): string[] {
     !isValidEmailAddress(config.resendTestRecipient.trim())
   ) {
     errors.push("RESEND_TEST_RECIPIENT deve ser um e-mail válido quando configurado.");
+  }
+  if (config.nodeEnv?.trim().toLowerCase() === "production" && config.resendTestRecipient?.trim()) {
+    errors.push("RESEND_TEST_RECIPIENT não pode ser configurado em produção.");
   }
 
   return errors;

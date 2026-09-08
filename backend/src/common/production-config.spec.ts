@@ -91,3 +91,16 @@ test("configuração de produção rejeita segredo fraco e credenciais ausentes"
     true,
   );
 });
+
+test("configuração de produção rejeita relay de e-mail de teste", () => {
+  const errors = validateProductionConfig({
+    ...validConfig,
+    nodeEnv: "production",
+    resendTestRecipient: "test@example.com",
+  });
+
+  assert.equal(
+    errors.some((error) => error.includes("RESEND_TEST_RECIPIENT")),
+    true,
+  );
+});

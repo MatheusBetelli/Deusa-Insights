@@ -19,7 +19,9 @@ test("entrega e-mail diretamente quando o destinatário não é redirecionado", 
 
 test("redireciona o MVP para o e-mail configurado e preserva o destinatário no aviso", () => {
   const previousRecipient = process.env.RESEND_TEST_RECIPIENT;
+  const previousNodeEnv = process.env.NODE_ENV;
   process.env.RESEND_TEST_RECIPIENT = "deusaalimentos01@gmail.com";
+  delete process.env.NODE_ENV;
 
   try {
     assert.deepEqual(resolveEmailDelivery("brunokmorgado@gmail.com"), {
@@ -29,5 +31,26 @@ test("redireciona o MVP para o e-mail configurado e preserva o destinatário no 
   } finally {
     if (previousRecipient === undefined) delete process.env.RESEND_TEST_RECIPIENT;
     else process.env.RESEND_TEST_RECIPIENT = previousRecipient;
+    if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousNodeEnv;
+  }
+});
+
+test("produção nunca redireciona e-mail para RESEND_TEST_RECIPIENT", () => {
+  const previousRecipient = process.env.RESEND_TEST_RECIPIENT;
+  const previousNodeEnv = process.env.NODE_ENV;
+  process.env.RESEND_TEST_RECIPIENT = "deusaalimentos01@gmail.com";
+  process.env.NODE_ENV = "production";
+
+  try {
+    assert.deepEqual(resolveEmailDelivery("brunokmorgado@gmail.com"), {
+      recipientEmail: "brunokmorgado@gmail.com",
+      isRelay: false,
+    });
+  } finally {
+    if (previousRecipient === undefined) delete process.env.RESEND_TEST_RECIPIENT;
+    else process.env.RESEND_TEST_RECIPIENT = previousRecipient;
+    if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousNodeEnv;
   }
 });

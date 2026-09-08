@@ -1,6 +1,7 @@
 import { validateProductionConfig } from "./production-config";
 
 const errors = validateProductionConfig({
+  nodeEnv: process.env.NODE_ENV,
   databaseUrl: process.env.DATABASE_URL,
   directUrl: process.env.DIRECT_URL,
   jwtSecret: process.env.JWT_SECRET,
