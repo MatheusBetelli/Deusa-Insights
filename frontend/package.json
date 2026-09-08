@@ -17,6 +17,7 @@
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "start:gcp": "node .output/server/index.mjs",
+    "check:node-artifact": "node ../scripts/check-frontend-node-artifact.cjs",
     "lint": "eslint . --max-warnings 0",
     "deadcode": "knip --no-config-hints",
     "typecheck": "tsc --noEmit",

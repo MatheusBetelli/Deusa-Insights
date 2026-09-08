@@ -1,4 +1,4 @@
-name: Deploy Backend Canary
+name: Deploy Production Canary
 
 on:
   workflow_dispatch:
@@ -7,8 +7,12 @@ on:
         description: "SHA validado da main que será publicado"
         required: true
         type: string
-      canary_url:
-        description: "URL HTTPS da revisão canary para smoke de health (opcional)"
+      backend_canary_url:
+        description: "URL HTTPS do backend canary para smoke (opcional)"
+        required: false
+        type: string
+      frontend_canary_url:
+        description: "URL HTTPS do frontend canary para smoke (opcional)"
         required: false
         type: string
 
@@ -18,19 +22,20 @@ permissions:
   id-token: write
 
 concurrency:
-  group: production-backend
+  group: production-canary
   cancel-in-progress: false
 
 jobs:
   deploy-canary:
-    name: Build, Push & Deploy without Traffic
+    name: Build, Push & Deploy Full Stack without Traffic
     runs-on: ubuntu-latest
     environment: production
     env:
       PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
       REGION: ${{ vars.GCP_REGION }}
       ARTIFACT_REPOSITORY: ${{ vars.GCP_ARTIFACT_REPOSITORY }}
-      CLOUD_RUN_SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
+      BACKEND_SERVICE: ${{ vars.CLOUD_RUN_BACKEND_SERVICE }}
+      FRONTEND_SERVICE: ${{ vars.CLOUD_RUN_FRONTEND_SERVICE }}
       WIF_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
       DEPLOY_SERVICE_ACCOUNT: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
       RELEASE_INPUT: ${{ inputs.release_sha }}
@@ -46,7 +51,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for variable in PROJECT_ID REGION ARTIFACT_REPOSITORY CLOUD_RUN_SERVICE WIF_PROVIDER DEPLOY_SERVICE_ACCOUNT; do
+          for variable in PROJECT_ID REGION ARTIFACT_REPOSITORY BACKEND_SERVICE FRONTEND_SERVICE WIF_PROVIDER DEPLOY_SERVICE_ACCOUNT; do
             if [[ -z "${!variable}" ]]; then
               echo "GitHub variable ausente: ${variable}" >&2
               exit 1
@@ -57,7 +62,8 @@ jobs:
           git merge-base --is-ancestor "${RELEASE_SHA}" origin/main
           git checkout --detach "${RELEASE_SHA}"
           echo "sha=${RELEASE_SHA}" >> "${GITHUB_OUTPUT}"
-          echo "image=${REGION}-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REPOSITORY}/backend:${RELEASE_SHA}" >> "${GITHUB_OUTPUT}"
+          echo "backend_image=${REGION}-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REPOSITORY}/backend:${RELEASE_SHA}" >> "${GITHUB_OUTPUT}"
+          echo "frontend_image=${REGION}-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REPOSITORY}/frontend:${RELEASE_SHA}" >> "${GITHUB_OUTPUT}"
 
       - name: Confirmar CI verde para o SHA selecionado
         env:
@@ -100,37 +106,67 @@ jobs:
       - name: Configurar Google Cloud CLI
         uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
 
-      - name: Confirmar serviço previamente provisionado
+      - name: Confirmar serviços previamente provisionados
         run: |
-          gcloud run services describe "${CLOUD_RUN_SERVICE}" \
+          set -euo pipefail
+          gcloud run services describe "${BACKEND_SERVICE}" \
+            --project="${PROJECT_ID}" \
+            --region="${REGION}" \
+            --format='value(metadata.name)'
+          gcloud run services describe "${FRONTEND_SERVICE}" \
             --project="${PROJECT_ID}" \
             --region="${REGION}" \
             --format='value(metadata.name)'
 
-      - name: Construir e publicar imagem imutável
+      - name: Construir e publicar imagens imutáveis
         env:
-          IMAGE_URI: ${{ steps.release.outputs.image }}
+          BACKEND_IMAGE: ${{ steps.release.outputs.backend_image }}
+          FRONTEND_IMAGE: ${{ steps.release.outputs.frontend_image }}
         run: |
+          set -euo pipefail
           gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
-          docker build --file backend/Dockerfile --tag "${IMAGE_URI}" backend/
-          docker push "${IMAGE_URI}"
+          docker build --file backend/Dockerfile --tag "${BACKEND_IMAGE}" backend/
+          docker build --file frontend/Dockerfile --tag "${FRONTEND_IMAGE}" frontend/
+          docker push "${BACKEND_IMAGE}"
+          docker push "${FRONTEND_IMAGE}"
 
-      - name: Criar revisão canário sem tráfego
+      - name: Registrar digests publicados
         env:
-          IMAGE_URI: ${{ steps.release.outputs.image }}
+          BACKEND_IMAGE: ${{ steps.release.outputs.backend_image }}
+          FRONTEND_IMAGE: ${{ steps.release.outputs.frontend_image }}
         run: |
-          gcloud run deploy "${CLOUD_RUN_SERVICE}" \
+          set -euo pipefail
+          echo "Backend digest: $(gcloud artifacts docker images describe "${BACKEND_IMAGE}" --project="${PROJECT_ID}" --format='value(image_summary.digest)')" >> "${GITHUB_STEP_SUMMARY}"
+          echo "Frontend digest: $(gcloud artifacts docker images describe "${FRONTEND_IMAGE}" --project="${PROJECT_ID}" --format='value(image_summary.digest)')" >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Criar revisão backend canary sem tráfego
+        env:
+          BACKEND_IMAGE: ${{ steps.release.outputs.backend_image }}
+        run: |
+          gcloud run deploy "${BACKEND_SERVICE}" \
             --project="${PROJECT_ID}" \
             --region="${REGION}" \
-            --image="${IMAGE_URI}" \
+            --image="${BACKEND_IMAGE}" \
             --no-traffic \
             --tag=canary \
             --quiet
 
-      - name: Smoke de saúde do canário
-        if: ${{ inputs.canary_url != '' }}
+      - name: Criar revisão frontend canary sem tráfego
         env:
-          CANARY_URL: ${{ inputs.canary_url }}
+          FRONTEND_IMAGE: ${{ steps.release.outputs.frontend_image }}
+        run: |
+          gcloud run deploy "${FRONTEND_SERVICE}" \
+            --project="${PROJECT_ID}" \
+            --region="${REGION}" \
+            --image="${FRONTEND_IMAGE}" \
+            --no-traffic \
+            --tag=canary \
+            --quiet
+
+      - name: Smoke de saúde do backend canary
+        if: ${{ inputs.backend_canary_url != '' }}
+        env:
+          CANARY_URL: ${{ inputs.backend_canary_url }}
         run: |
           set -euo pipefail
           for path in /health/live /health/ready; do
@@ -139,15 +175,29 @@ jobs:
             echo "Smoke passou: ${path}"
           done
 
+      - name: Smoke de saúde do frontend canary
+        if: ${{ inputs.frontend_canary_url != '' }}
+        env:
+          CANARY_URL: ${{ inputs.frontend_canary_url }}
+        run: |
+          set -euo pipefail
+          for path in /login /api/health/ready; do
+            curl --fail --silent --show-error --retry 3 --retry-delay 5 \
+              "${CANARY_URL%/}${path}" >/dev/null
+            echo "Smoke passou: ${path}"
+          done
+
       - name: Registrar entrega
         env:
-          IMAGE_URI: ${{ steps.release.outputs.image }}
+          BACKEND_IMAGE: ${{ steps.release.outputs.backend_image }}
+          FRONTEND_IMAGE: ${{ steps.release.outputs.frontend_image }}
           RELEASE_SHA: ${{ steps.release.outputs.sha }}
         run: |
           {
-            echo "### Backend canário criado"
+            echo "### Canário full-stack criado"
             echo "- Commit: \`${RELEASE_SHA}\`"
-            echo "- Imagem: \`${IMAGE_URI}\`"
-            echo "- Tráfego: 0%"
-            echo "- Próximo gate: smoke test e promoção gradual conforme DEPLOY.md"
+            echo "- Backend: \`${BACKEND_IMAGE}\`"
+            echo "- Frontend: \`${FRONTEND_IMAGE}\`"
+            echo "- Tráfego: 0% em ambos os serviços"
+            echo "- Próximo gate: E2E, observabilidade e promoção gradual conforme DEPLOY.md"
           } >> "${GITHUB_STEP_SUMMARY}"
