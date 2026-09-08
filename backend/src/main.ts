@@ -7,6 +7,7 @@ import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import helmet from "helmet";
 import cookieParser from "cookie-parser";
 import { AppModule } from "./app.module";
+import { createCorsOriginValidator, createCorsPreflightGuard } from "./common/cors-origin";
 import { createOriginProtectionMiddleware } from "./common/origin-protection.middleware";
 import { validateProductionConfig } from "./common/production-config";
 import { createRequestIdMiddleware } from "./common/request-id.middleware";
@@ -30,6 +31,7 @@ function validateProductionEnv(
   jwtSecret: string,
 ): void {
   const errors = validateProductionConfig({
+    nodeEnv: configService.get<string>("NODE_ENV"),
     databaseUrl: configService.get<string>("DATABASE_URL"),
     directUrl: configService.get<string>("DIRECT_URL"),
     jwtSecret,
@@ -135,34 +137,12 @@ async function bootstrap() {
   );
 
   // Cookies de sessao exigem bloqueio ativo de CSRF; CORS sozinho nao impede o envio da requisicao.
+  app.use(createCorsPreflightGuard(isProduction, allowedOriginSet));
   app.use(createOriginProtectionMiddleware(isProduction, allowedOriginSet));
 
   // ── CORS — restritivo em produção, permissivo em desenvolvimento ────────
   app.enableCors({
-    origin: (
-      origin: string | undefined,
-      callback: (err: Error | null, allow?: boolean) => void,
-    ) => {
-      // Sem origin = server-to-server (curl, Postman) → permitir em dev, bloquear em prod
-      if (!origin) {
-        callback(null, !isProduction);
-        return;
-      }
-
-      // Em desenvolvimento: permitir qualquer localhost
-      if (!isProduction && /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
-        callback(null, true);
-        return;
-      }
-
-      // Origens explicitamente configuradas por ambiente
-      if (allowedOrigins.includes(origin)) {
-        callback(null, true);
-        return;
-      }
-
-      callback(new Error(`CORS bloqueado: origem não permitida → ${origin}`), false);
-    },
+    origin: createCorsOriginValidator(isProduction, allowedOriginSet),
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "Cookie", "X-Request-ID"],
