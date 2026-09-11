@@ -3,13 +3,21 @@ name: Migrate Production Database
 on:
   workflow_dispatch:
     inputs:
+      mode:
+        description: "Modo da execução: somente status ou deploy controlado"
+        required: true
+        type: choice
+        options:
+          - status
+          - deploy
+        default: status
       release_sha:
         description: "SHA da main que será usado para revisar e executar a migration"
         required: true
         type: string
       recovery_confirmation:
         description: "Digite BACKUP_CONFIRMED somente depois de confirmar backup/recuperação no Supabase"
-        required: true
+        required: false
         type: string
 
 permissions:
@@ -30,6 +38,7 @@ jobs:
       WIF_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
       MIGRATION_SERVICE_ACCOUNT: ${{ vars.GCP_MIGRATION_SERVICE_ACCOUNT }}
       EXPECTED_MIGRATION: 20260911120000_add_follow_up_to_lead_interactions
+      MODE: ${{ inputs.mode }}
       RELEASE_INPUT: ${{ inputs.release_sha }}
       RECOVERY_CONFIRMATION: ${{ inputs.recovery_confirmation }}
 
@@ -44,10 +53,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          [[ "${RECOVERY_CONFIRMATION}" == "BACKUP_CONFIRMED" ]] || {
-            echo "A confirmação de backup/recuperação não foi fornecida." >&2
+          [[ "${MODE}" == "status" || "${MODE}" == "deploy" ]] || {
+            echo "Modo inválido: ${MODE}" >&2
             exit 1
           }
+          if [[ "${MODE}" == "deploy" && "${RECOVERY_CONFIRMATION}" != "BACKUP_CONFIRMED" ]]; then
+            echo "A confirmação de backup/recuperação não foi fornecida para deploy." >&2
+            exit 1
+          fi
           for variable in PROJECT_ID WIF_PROVIDER MIGRATION_SERVICE_ACCOUNT; do
             [[ -n "${!variable}" ]] || {
               echo "GitHub variable ausente: ${variable}" >&2
@@ -129,7 +142,16 @@ jobs:
           npm ci
           npx prisma generate --schema prisma/schema.prisma
 
-      - name: Identificar somente a migration pendente esperada
+      - name: Executar prisma migrate status
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          DATABASE_URL="$(gcloud secrets versions access latest --secret=DATABASE_URL --project="${PROJECT_ID}")" \
+          DIRECT_URL="$(gcloud secrets versions access latest --secret=DIRECT_URL --project="${PROJECT_ID}")" \
+          npx prisma migrate status --schema prisma/schema.prisma
+
+      - name: Identificar migrations pendentes
         working-directory: backend
         shell: bash
         run: |
@@ -156,7 +178,7 @@ jobs:
             const applied = new Set(appliedRows.map((row) => row.migration_name));
             const pending = localMigrations.filter((name) => !applied.has(name));
             console.log(`Migrations pendentes: ${pending.join(", ") || "nenhuma"}`);
-            if (pending.length !== 1 || pending[0] !== expected) {
+            if (process.env.MODE === "deploy" && (pending.length !== 1 || pending[0] !== expected)) {
               throw new Error(`Esperada somente ${expected}; encontrado: ${pending.join(", ") || "nenhuma"}`);
             }
           })()
@@ -168,6 +190,7 @@ jobs:
           NODE
 
       - name: Aplicar somente migrations pendentes
+        if: inputs.mode == 'deploy'
         working-directory: backend
         shell: bash
         run: |
@@ -180,6 +203,7 @@ jobs:
           echo "Migration executada: ${EXPECTED_MIGRATION}; duração: ${duration_seconds}s"
 
       - name: Confirmar schema e status após migration
+        if: inputs.mode == 'deploy'
         working-directory: backend
         shell: bash
         run: |
