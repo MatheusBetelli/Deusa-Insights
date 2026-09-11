@@ -1,0 +1,210 @@
+name: Migrate Production Database
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: "SHA da main que será usado para revisar e executar a migration"
+        required: true
+        type: string
+      recovery_confirmation:
+        description: "Digite BACKUP_CONFIRMED somente depois de confirmar backup/recuperação no Supabase"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: production-database-migration
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    name: Review and Apply Prisma Migration
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      WIF_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+      MIGRATION_SERVICE_ACCOUNT: ${{ vars.GCP_MIGRATION_SERVICE_ACCOUNT }}
+      EXPECTED_MIGRATION: 20260911120000_add_follow_up_to_lead_interactions
+      RELEASE_INPUT: ${{ inputs.release_sha }}
+      RECOVERY_CONFIRMATION: ${{ inputs.recovery_confirmation }}
+
+    steps:
+      - name: Checkout da release selecionada
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.release_sha }}
+
+      - name: Validar release e confirmações obrigatórias
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "${RECOVERY_CONFIRMATION}" == "BACKUP_CONFIRMED" ]] || {
+            echo "A confirmação de backup/recuperação não foi fornecida." >&2
+            exit 1
+          }
+          for variable in PROJECT_ID WIF_PROVIDER MIGRATION_SERVICE_ACCOUNT; do
+            [[ -n "${!variable}" ]] || {
+              echo "GitHub variable ausente: ${variable}" >&2
+              exit 1
+            }
+          done
+
+          RELEASE_SHA="$(git rev-parse "${RELEASE_INPUT}^{commit}")"
+          git merge-base --is-ancestor "${RELEASE_SHA}" origin/main
+          test -f "backend/prisma/migrations/${EXPECTED_MIGRATION}/migration.sql"
+          echo "Release validada: ${RELEASE_SHA}"
+
+      - name: Revisar migration sem executar SQL
+        shell: bash
+        run: |
+          set -euo pipefail
+          SQL_FILE="backend/prisma/migrations/${EXPECTED_MIGRATION}/migration.sql"
+          if grep -Eiq '(^|[[:space:]])(DROP|TRUNCATE|DELETE)([[:space:]]|$)' "${SQL_FILE}"; then
+            echo "A migration contém operação destrutiva proibida." >&2
+            exit 1
+          fi
+          grep -Fq 'ADD COLUMN IF NOT EXISTS "nextContactAt"' "${SQL_FILE}"
+          grep -Fq 'ADD COLUMN IF NOT EXISTS "followUpCompletedAt"' "${SQL_FILE}"
+          echo "Migration incremental revisada: ${EXPECTED_MIGRATION}"
+
+      - name: Confirmar CI verde para a release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer ${GITHUB_TOKEN}" \
+            "https://api.github.com/repos/${REPOSITORY}/actions/runs?head_sha=${RELEASE_SHA}&per_page=100" |
+            node -e '
+              let input = "";
+              process.stdin.on("data", (chunk) => { input += chunk; });
+              process.stdin.on("end", () => {
+                const data = JSON.parse(input);
+                const passed = (data.workflow_runs || []).some((run) =>
+                  run.name === "CI - Integracao Continua (Deusa Analytics)" &&
+                  run.event === "push" &&
+                  run.head_sha === process.env.RELEASE_SHA &&
+                  run.status === "completed" &&
+                  run.conclusion === "success"
+                );
+                if (!passed) {
+                  console.error(`Nenhum CI push verde encontrado para ${process.env.RELEASE_SHA}.`);
+                  process.exit(1);
+                }
+                console.log(`CI push verde confirmado para ${process.env.RELEASE_SHA}.`);
+              });
+            '
+
+      - name: Autenticar no Google Cloud via WIF
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+          workload_identity_provider: ${{ env.WIF_PROVIDER }}
+          service_account: ${{ env.MIGRATION_SERVICE_ACCOUNT }}
+
+      - name: Configurar Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@aa5489c8933f4cc7a4f7d45035b3b1440c9c10db # v3
+
+      - name: Confirmar secrets versionados sem imprimir valores
+        shell: bash
+        run: |
+          set -euo pipefail
+          for secret in DATABASE_URL DIRECT_URL; do
+            gcloud secrets describe "${secret}" --project="${PROJECT_ID}" --format='value(name)'
+            gcloud secrets versions describe latest --secret="${secret}" --project="${PROJECT_ID}" --format='value(name,state)'
+          done
+
+      - name: Instalar Prisma e preparar client
+        working-directory: backend
+        run: |
+          npm ci
+          npx prisma generate --schema prisma/schema.prisma
+
+      - name: Identificar somente a migration pendente esperada
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          DATABASE_URL="$(gcloud secrets versions access latest --secret=DATABASE_URL --project="${PROJECT_ID}")" \
+          DIRECT_URL="$(gcloud secrets versions access latest --secret=DIRECT_URL --project="${PROJECT_ID}")" \
+          EXPECTED_MIGRATION="${EXPECTED_MIGRATION}" \
+          node <<'NODE'
+          const fs = require("node:fs");
+          const path = require("node:path");
+          const { PrismaClient } = require("@prisma/client");
+
+          const migrationsPath = path.join(process.cwd(), "prisma", "migrations");
+          const localMigrations = fs.readdirSync(migrationsPath)
+            .filter((name) => fs.statSync(path.join(migrationsPath, name)).isDirectory())
+            .sort();
+          const expected = process.env.EXPECTED_MIGRATION;
+          const prisma = new PrismaClient();
+
+          (async () => {
+            const appliedRows = await prisma.$queryRawUnsafe(
+              'SELECT migration_name FROM "_prisma_migrations" WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL ORDER BY migration_name',
+            );
+            const applied = new Set(appliedRows.map((row) => row.migration_name));
+            const pending = localMigrations.filter((name) => !applied.has(name));
+            console.log(`Migrations pendentes: ${pending.join(", ") || "nenhuma"}`);
+            if (pending.length !== 1 || pending[0] !== expected) {
+              throw new Error(`Esperada somente ${expected}; encontrado: ${pending.join(", ") || "nenhuma"}`);
+            }
+          })()
+            .finally(() => prisma.$disconnect())
+            .catch((error) => {
+              console.error(error.message);
+              process.exitCode = 1;
+            });
+          NODE
+
+      - name: Aplicar somente migrations pendentes
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          start_epoch="$(date +%s)"
+          DATABASE_URL="$(gcloud secrets versions access latest --secret=DATABASE_URL --project="${PROJECT_ID}")" \
+          DIRECT_URL="$(gcloud secrets versions access latest --secret=DIRECT_URL --project="${PROJECT_ID}")" \
+          npx prisma migrate deploy --schema prisma/schema.prisma
+          duration_seconds=$(( $(date +%s) - start_epoch ))
+          echo "Migration executada: ${EXPECTED_MIGRATION}; duração: ${duration_seconds}s"
+
+      - name: Confirmar schema e status após migration
+        working-directory: backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          DATABASE_URL="$(gcloud secrets versions access latest --secret=DATABASE_URL --project="${PROJECT_ID}")" \
+          DIRECT_URL="$(gcloud secrets versions access latest --secret=DIRECT_URL --project="${PROJECT_ID}")" \
+          npx prisma migrate status --schema prisma/schema.prisma
+          DATABASE_URL="$(gcloud secrets versions access latest --secret=DATABASE_URL --project="${PROJECT_ID}")" \
+          DIRECT_URL="$(gcloud secrets versions access latest --secret=DIRECT_URL --project="${PROJECT_ID}")" \
+          EXPECTED_MIGRATION="${EXPECTED_MIGRATION}" \
+          node <<'NODE'
+          const { PrismaClient } = require("@prisma/client");
+          const prisma = new PrismaClient();
+          (async () => {
+            const columns = await prisma.$queryRawUnsafe(
+              'SELECT column_name, is_nullable FROM information_schema.columns WHERE table_schema = \'public\' AND table_name = \'lead_interactions\' AND column_name IN (\'nextContactAt\', \'followUpCompletedAt\') ORDER BY column_name',
+            );
+            console.log(`Colunas verificadas: ${columns.map((row) => `${row.column_name}:${row.is_nullable}`).join(", ")}`);
+            if (columns.length !== 2 || columns.some((row) => row.is_nullable !== "YES")) {
+              throw new Error("As duas colunas esperadas não estão presentes como opcionais.");
+            }
+          })()
+            .finally(() => prisma.$disconnect())
+            .catch((error) => {
+              console.error(error.message);
+              process.exitCode = 1;
+            });
+          NODE
