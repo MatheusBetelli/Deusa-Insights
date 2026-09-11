@@ -353,24 +353,47 @@ function findDuplicateLeadIndex<
       telefoneEncontrado?: string | null;
     };
   },
->(lead: T, validLeads: T[]): number {
+>(lead: T, validLeads: T[], candidateIndexes?: number[]): number {
   const comp = lead.company;
   const city = (comp.cidade || "").toLowerCase().trim();
   if (!comp.latitude || !comp.longitude) return -1;
 
-  return validLeads.findIndex((existingItem) => {
-    const existingComp = existingItem.company;
-    const existingCity = (existingComp.cidade || "").toLowerCase().trim();
-    if (city !== existingCity || !existingComp.latitude || !existingComp.longitude) {
-      return false;
+  const indexes = candidateIndexes ?? validLeads.map((_item, index) => index);
+  return (
+    indexes.find((index) => {
+      const existingItem = validLeads[index];
+      const existingComp = existingItem.company;
+      const existingCity = (existingComp.cidade || "").toLowerCase().trim();
+      if (city !== existingCity || !existingComp.latitude || !existingComp.longitude) {
+        return false;
+      }
+
+      const latDiff = Math.abs(comp.latitude! - existingComp.latitude);
+      const lonDiff = Math.abs(comp.longitude! - existingComp.longitude);
+      if (latDiff > 0.0015 || lonDiff > 0.0015) return false;
+
+      return sharesBrandOrPhone(comp, existingComp);
+    }) ?? -1
+  );
+}
+
+function collectDuplicateCandidateIndexes(
+  city: string,
+  latitude: number,
+  longitude: number,
+  duplicateBuckets: Map<string, number[]>,
+  bucketSize: number,
+): number[] {
+  const latitudeBucket = Math.floor(latitude / bucketSize);
+  const longitudeBucket = Math.floor(longitude / bucketSize);
+  const candidateIndexes = new Set<number>();
+  for (let latOffset = -1; latOffset <= 1; latOffset += 1) {
+    for (let lonOffset = -1; lonOffset <= 1; lonOffset += 1) {
+      const key = `${city}|${latitudeBucket + latOffset}|${longitudeBucket + lonOffset}`;
+      for (const index of duplicateBuckets.get(key) ?? []) candidateIndexes.add(index);
     }
-
-    const latDiff = Math.abs(comp.latitude! - existingComp.latitude);
-    const lonDiff = Math.abs(comp.longitude! - existingComp.longitude);
-    if (latDiff > 0.0015 || lonDiff > 0.0015) return false;
-
-    return sharesBrandOrPhone(comp, existingComp);
-  });
+  }
+  return Array.from(candidateIndexes).sort((a, b) => a - b);
 }
 
 function deduplicateValidLeads<
@@ -389,6 +412,12 @@ function deduplicateValidLeads<
   },
 >(rawValidLeads: T[]): T[] {
   const validLeads: T[] = [];
+  const duplicateBuckets = new Map<string, number[]>();
+  const bucketSize = 0.0015;
+
+  function bucketKey(city: string, latitude: number, longitude: number): string {
+    return `${city}|${Math.floor(latitude / bucketSize)}|${Math.floor(longitude / bucketSize)}`;
+  }
 
   for (const lead of rawValidLeads) {
     const comp = lead.company;
@@ -398,7 +427,18 @@ function deduplicateValidLeads<
     }
 
     const isClient = comp.clientAccounts.some((account) => account.isCurrentClient);
-    const duplicateIdx = findDuplicateLeadIndex(lead, validLeads);
+    const city = (comp.cidade || "").toLowerCase().trim();
+    const duplicateIdx = findDuplicateLeadIndex(
+      lead,
+      validLeads,
+      collectDuplicateCandidateIndexes(
+        city,
+        comp.latitude,
+        comp.longitude,
+        duplicateBuckets,
+        bucketSize,
+      ),
+    );
 
     if (duplicateIdx !== -1) {
       const existingItem = validLeads[duplicateIdx];
@@ -417,6 +457,11 @@ function deduplicateValidLeads<
     }
 
     validLeads.push(lead);
+    const index = validLeads.length - 1;
+    const key = bucketKey(city, comp.latitude, comp.longitude);
+    const bucket = duplicateBuckets.get(key) ?? [];
+    bucket.push(index);
+    duplicateBuckets.set(key, bucket);
   }
 
   return validLeads;
@@ -444,8 +489,47 @@ export class MapOpportunitiesService {
     // Buscar apenas leads ativos criados pelos fluxos autorizados.
     const leads = await this.prisma.lead.findMany({
       where: buildMapWhere(actor, params),
-      include: {
-        company: { include: { details: true, contacts: true, cnaes: true, clientAccounts: true } },
+      select: {
+        id: true,
+        companyId: true,
+        score: true,
+        status: true,
+        potentialLevel: true,
+        company: {
+          select: {
+            id: true,
+            cnpj: true,
+            razaoSocial: true,
+            nomeFantasia: true,
+            situacaoCadastral: true,
+            cnaePrincipal: true,
+            uf: true,
+            cidade: true,
+            bairro: true,
+            cep: true,
+            logradouro: true,
+            numero: true,
+            complemento: true,
+            latitude: true,
+            longitude: true,
+            origemCoordenada: true,
+            statusVerificacaoEndereco: true,
+            confiancaVerificacao: true,
+            telefoneEncontrado: true,
+            nomeEncontrado: true,
+            categoriaEncontrada: true,
+            details: { select: { telefone: true, email: true } },
+            contacts: {
+              where: { active: true },
+              select: { type: true, value: true, active: true, isPrimary: true },
+            },
+            cnaes: { select: { cnaeCode: true } },
+            clientAccounts: {
+              where: { isCurrentClient: true },
+              select: { isCurrentClient: true },
+            },
+          },
+        },
         assignedTo: { select: { name: true } },
       },
       orderBy: { score: "desc" },

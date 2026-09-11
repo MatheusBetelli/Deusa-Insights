@@ -7,6 +7,7 @@ import type {
   UpdateLeadPayload,
 } from "@/types/lead";
 import type { CreateCommercialActionPayload } from "@/types/commercialAction";
+import type { CommercialActivitiesQuery, CommercialActivity } from "@/types/commercialActivity";
 import type { PaginatedResponse } from "@/types/pagination";
 
 export const leadsService = {
@@ -18,6 +19,8 @@ export const leadsService = {
   convertLead: (id: string) => apiRequest<Lead>(`/leads/${id}/convert`, { method: "POST" }),
   discardLead: (id: string) => apiRequest<Lead>(`/leads/${id}/discard`, { method: "POST" }),
   getInteractions: (id: string) => apiRequest<LeadInteraction[]>(`/leads/${id}/interactions`),
+  getCommercialActivities: (query?: CommercialActivitiesQuery) =>
+    apiRequest<PaginatedResponse<CommercialActivity>>("/commercial-activities", {}, query),
   createInteraction: (id: string, payload: CreateLeadInteractionPayload) =>
     apiRequest<LeadInteraction>(`/leads/${id}/interactions`, {
       method: "POST",
@@ -28,6 +31,13 @@ export const leadsService = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+  completeFollowUp: (leadId: string, interactionId: string) =>
+    apiRequest<LeadInteraction>(
+      `/leads/${leadId}/interactions/${interactionId}/follow-up/complete`,
+      {
+        method: "POST",
+      },
+    ),
   createLead: (payload: { companyId: string }) =>
     apiRequest<Lead>("/leads", { method: "POST", body: JSON.stringify(payload) }),
   autoAssignTerritory: () =>

@@ -144,6 +144,10 @@ function brandedErrorResponse(): Response {
 
 function withSecurityHeaders(response: Response, request: Request): Response {
   const headers = new Headers(response.headers);
+  const pathname = new URL(request.url).pathname;
+  if (pathname.startsWith("/assets/")) {
+    headers.set("cache-control", "public, max-age=31536000, immutable");
+  }
   headers.set("x-content-type-options", "nosniff");
   headers.set("x-frame-options", "DENY");
   headers.set("content-security-policy", getContentSecurityPolicy());

@@ -323,7 +323,10 @@ export class LeadsService {
         },
         assignedTo: { select: safeAssignedToSelect },
         interactions: {
-          include: { user: { select: safeAssignedToSelect } },
+          include: {
+            user: { select: safeAssignedToSelect },
+            userLegacy: { select: safeAssignedToSelect },
+          },
           orderBy: { createdAt: "desc" },
         },
       },

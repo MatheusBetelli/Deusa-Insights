@@ -1,10 +1,11 @@
-import { Transform } from "class-transformer";
-import { IsEnum, IsOptional, IsString, MaxLength } from "class-validator";
+import { Transform, Type } from "class-transformer";
+import { IsDate, IsEnum, IsOptional, IsString, MaxLength } from "class-validator";
 
 export enum CommercialActionType {
   VISITA = "VISITA",
   LIGACAO = "LIGACAO",
   WHATSAPP = "WHATSAPP",
+  ENVIO = "ENVIO",
   EMAIL = "EMAIL",
   REUNIAO = "REUNIAO",
   RETORNO = "RETORNO",
@@ -21,4 +22,9 @@ export class CreateCommercialActionDto {
   @IsString()
   @MaxLength(2000)
   description?: string;
+
+  @IsOptional()
+  @Type(() => Date)
+  @IsDate()
+  nextContactAt?: Date;
 }

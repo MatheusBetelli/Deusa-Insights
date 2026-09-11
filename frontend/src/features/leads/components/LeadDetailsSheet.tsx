@@ -700,6 +700,11 @@ export function LeadDetailsSheet({ leadId, open, onOpenChange, onUpdated }: Lead
                             {formatDateTime(interaction.createdAt)}
                           </span>
                         </div>
+                        {(interaction.user?.name || interaction.userLegacy?.name) && (
+                          <div className="mt-1 text-[10px] font-semibold text-[#1061AF]">
+                            Registrado por: {interaction.user?.name || interaction.userLegacy?.name}
+                          </div>
+                        )}
                         <p className="mt-1 text-[#475569]">{interaction.description}</p>
                       </div>
                     ))

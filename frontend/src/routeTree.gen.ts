@@ -26,6 +26,7 @@ import { Route as AppFunilComercialRouteImport } from './routes/_app/funil-comer
 import { Route as AppDashboardRouteImport } from './routes/_app/dashboard'
 import { Route as AppConfiguracoesRouteImport } from './routes/_app/configuracoes'
 import { Route as AppBaseDeDadosRouteImport } from './routes/_app/base-de-dados'
+import { Route as AppAtividadesComerciaisRouteImport } from './routes/_app/atividades-comerciais'
 import { Route as AppLeadsB2bLeadIdRouteImport } from './routes/_app/leads-b2b/$leadId'
 
 const SetPasswordRoute = SetPasswordRouteImport.update({
@@ -112,6 +113,11 @@ const AppBaseDeDadosRoute = AppBaseDeDadosRouteImport.update({
   path: '/base-de-dados',
   getParentRoute: () => AppRoute,
 } as any)
+const AppAtividadesComerciaisRoute = AppAtividadesComerciaisRouteImport.update({
+  id: '/atividades-comerciais',
+  path: '/atividades-comerciais',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppLeadsB2bLeadIdRoute = AppLeadsB2bLeadIdRouteImport.update({
   id: '/$leadId',
   path: '/$leadId',
@@ -123,6 +129,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRouteWithChildren
   '/reset-password': typeof ResetPasswordRoute
   '/set-password': typeof SetPasswordRoute
+  '/atividades-comerciais': typeof AppAtividadesComerciaisRoute
   '/base-de-dados': typeof AppBaseDeDadosRoute
   '/configuracoes': typeof AppConfiguracoesRoute
   '/dashboard': typeof AppDashboardRoute
@@ -142,6 +149,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRouteWithChildren
   '/reset-password': typeof ResetPasswordRoute
   '/set-password': typeof SetPasswordRoute
+  '/atividades-comerciais': typeof AppAtividadesComerciaisRoute
   '/base-de-dados': typeof AppBaseDeDadosRoute
   '/configuracoes': typeof AppConfiguracoesRoute
   '/dashboard': typeof AppDashboardRoute
@@ -163,6 +171,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRouteWithChildren
   '/reset-password': typeof ResetPasswordRoute
   '/set-password': typeof SetPasswordRoute
+  '/_app/atividades-comerciais': typeof AppAtividadesComerciaisRoute
   '/_app/base-de-dados': typeof AppBaseDeDadosRoute
   '/_app/configuracoes': typeof AppConfiguracoesRoute
   '/_app/dashboard': typeof AppDashboardRoute
@@ -184,6 +193,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/reset-password'
     | '/set-password'
+    | '/atividades-comerciais'
     | '/base-de-dados'
     | '/configuracoes'
     | '/dashboard'
@@ -203,6 +213,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/reset-password'
     | '/set-password'
+    | '/atividades-comerciais'
     | '/base-de-dados'
     | '/configuracoes'
     | '/dashboard'
@@ -223,6 +234,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/reset-password'
     | '/set-password'
+    | '/_app/atividades-comerciais'
     | '/_app/base-de-dados'
     | '/_app/configuracoes'
     | '/_app/dashboard'
@@ -367,6 +379,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppBaseDeDadosRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/atividades-comerciais': {
+      id: '/_app/atividades-comerciais'
+      path: '/atividades-comerciais'
+      fullPath: '/atividades-comerciais'
+      preLoaderRoute: typeof AppAtividadesComerciaisRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/leads-b2b/$leadId': {
       id: '/_app/leads-b2b/$leadId'
       path: '/$leadId'
@@ -390,6 +409,7 @@ const AppLeadsB2bRouteWithChildren = AppLeadsB2bRoute._addFileChildren(
 )
 
 interface AppRouteChildren {
+  AppAtividadesComerciaisRoute: typeof AppAtividadesComerciaisRoute
   AppBaseDeDadosRoute: typeof AppBaseDeDadosRoute
   AppConfiguracoesRoute: typeof AppConfiguracoesRoute
   AppDashboardRoute: typeof AppDashboardRoute
@@ -404,6 +424,7 @@ interface AppRouteChildren {
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppAtividadesComerciaisRoute: AppAtividadesComerciaisRoute,
   AppBaseDeDadosRoute: AppBaseDeDadosRoute,
   AppConfiguracoesRoute: AppConfiguracoesRoute,
   AppDashboardRoute: AppDashboardRoute,

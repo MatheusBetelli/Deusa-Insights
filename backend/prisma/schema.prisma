@@ -311,6 +311,8 @@ model LeadInteraction {
 
   type           String
   description    String
+  nextContactAt  DateTime?
+  followUpCompletedAt DateTime?
   createdAt      DateTime @default(now())
 
   lead           Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
@@ -319,6 +321,7 @@ model LeadInteraction {
 
   @@index([leadId])
   @@index([userId])
+  @@index([nextContactAt, followUpCompletedAt])
   @@map("lead_interactions")
 }
 

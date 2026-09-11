@@ -777,9 +777,9 @@ function LeadDetail() {
                     </span>
                   </div>
                   <p className="mt-1 text-xs leading-relaxed text-[#475569]">{item.description}</p>
-                  {item.user && (
+                  {(item.user || item.userLegacy) && (
                     <div className="mt-2 text-[10px] font-semibold text-[#64748B]">
-                      Registrado por: {item.user.name}
+                      Registrado por: {item.user?.name || item.userLegacy?.name}
                     </div>
                   )}
                 </div>

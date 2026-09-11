@@ -25,11 +25,14 @@ export type UserSummary = {
 export type LeadInteraction = {
   id: string;
   leadId: string;
-  userId: string;
+  userId: string | null;
   type: string;
   description: string;
+  nextContactAt?: string | null;
+  followUpCompletedAt?: string | null;
   createdAt: string;
   user?: UserSummary;
+  userLegacy?: UserSummary;
 };
 
 export type ScoreBreakdown = {

@@ -119,6 +119,7 @@ POST /leads/:id/convert
 POST /leads/:id/discard
 GET /leads/:id/interactions
 POST /leads/:id/interactions
+GET /commercial-activities
 ```
 
 Imports:

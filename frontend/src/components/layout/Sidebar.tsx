@@ -4,6 +4,7 @@ import {
   Funnel,
   LayoutDashboard,
   Building2,
+  ClipboardList,
   MapPinned,
   Settings,
   PanelLeftClose,
@@ -64,6 +65,13 @@ const navigationGroups: NavGroup[] = [
   {
     title: "Gestão de Dados",
     items: [
+      {
+        to: "/atividades-comerciais",
+        label: "Atividades Comerciais",
+        icon: ClipboardList,
+        badge: null,
+        roles: ["ADMIN", "MANAGER", "SALES"],
+      },
       {
         to: "/importar-cnpjs",
         label: "Importar CNPJs",

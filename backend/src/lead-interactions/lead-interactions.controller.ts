@@ -35,4 +35,14 @@ export class LeadInteractionsController {
   ) {
     return this.leadInteractionsService.createCommercialAction(leadId, dto, request.user);
   }
+
+  @Post(":interactionId/follow-up/complete")
+  @CommercialActionMutation()
+  completeFollowUp(
+    @Param("id") leadId: string,
+    @Param("interactionId") interactionId: string,
+    @Req() request: AuthenticatedHttpRequest,
+  ) {
+    return this.leadInteractionsService.completeFollowUp(leadId, interactionId, request.user);
+  }
 }

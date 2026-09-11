@@ -9,6 +9,18 @@ test("ação comercial aceita tipos previstos e observação opcional", async ()
   assert.equal(errors.length, 0);
 });
 
+test("ação comercial aceita ENVIO sem invalidar tipos históricos", async () => {
+  const envioErrors = await validate(plainToInstance(CreateCommercialActionDto, { type: "ENVIO" }));
+  const emailErrors = await validate(plainToInstance(CreateCommercialActionDto, { type: "EMAIL" }));
+  const reuniaoErrors = await validate(
+    plainToInstance(CreateCommercialActionDto, { type: "REUNIAO" }),
+  );
+
+  assert.equal(envioErrors.length, 0);
+  assert.equal(emailErrors.length, 0);
+  assert.equal(reuniaoErrors.length, 0);
+});
+
 test("ação comercial rejeita tipo inválido, observação longa e userId", async () => {
   const errors = await validate(
     plainToInstance(CreateCommercialActionDto, {

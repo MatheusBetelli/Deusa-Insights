@@ -9,27 +9,20 @@ import {
 } from "@/components/ui/dialog";
 import { formatDateTime } from "@/lib/commercial-formatters";
 import { leadsService } from "@/services/leadsService";
+import {
+  COMMERCIAL_ACTION_LABELS,
+  COMMERCIAL_ACTION_TYPES,
+  commercialActionLabel,
+} from "@/types/commercialAction";
 import type { CommercialActionType } from "@/types/commercialAction";
-import { COMMERCIAL_ACTION_TYPES } from "@/types/commercialAction";
 import type { LeadInteraction } from "@/types/lead";
 import type { MapOpportunity } from "@/types/mapOpportunity";
-import { Loader2, MessageSquarePlus } from "lucide-react";
+import { CalendarClock, Loader2, MessageSquarePlus } from "lucide-react";
 
 type MapCommercialActionDialogProps = {
   point: MapOpportunity | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-};
-
-const ACTION_LABELS: Record<CommercialActionType, string> = {
-  VISITA: "Visita",
-  LIGACAO: "Ligação",
-  WHATSAPP: "WhatsApp",
-  EMAIL: "E-mail",
-  REUNIAO: "Reunião",
-  RETORNO: "Retorno",
-  SEM_INTERESSE: "Sem interesse",
-  OUTRO: "Outro",
 };
 
 export function MapCommercialActionDialog({
@@ -39,6 +32,8 @@ export function MapCommercialActionDialog({
 }: MapCommercialActionDialogProps) {
   const [type, setType] = useState<CommercialActionType>("VISITA");
   const [description, setDescription] = useState("");
+  const [scheduleFollowUp, setScheduleFollowUp] = useState(false);
+  const [nextContactAt, setNextContactAt] = useState("");
   const [history, setHistory] = useState<LeadInteraction[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -49,6 +44,8 @@ export function MapCommercialActionDialog({
     let cancelled = false;
     setType("VISITA");
     setDescription("");
+    setScheduleFollowUp(false);
+    setNextContactAt("");
     setHistory([]);
     setError(null);
     setLoadingHistory(true);
@@ -78,13 +75,25 @@ export function MapCommercialActionDialog({
 
     setSaving(true);
     setError(null);
+    if (scheduleFollowUp && !nextContactAt) {
+      setError("Informe a data e o horário do próximo contato.");
+      setSaving(false);
+      return;
+    }
     try {
+      const parsedNextContact = scheduleFollowUp ? new Date(nextContactAt) : null;
+      if (parsedNextContact && Number.isNaN(parsedNextContact.getTime())) {
+        throw new Error("Informe uma data e um horário válidos para o próximo contato.");
+      }
       const created = await leadsService.createCommercialAction(point.id, {
         type,
         description: description.trim() || undefined,
+        nextContactAt: parsedNextContact?.toISOString(),
       });
       setHistory((current) => [created, ...current]);
       setDescription("");
+      setScheduleFollowUp(false);
+      setNextContactAt("");
       toast.success("Ação comercial registrada no histórico.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Não foi possível registrar a ação.");
@@ -121,7 +130,7 @@ export function MapCommercialActionDialog({
             >
               {COMMERCIAL_ACTION_TYPES.map((actionType) => (
                 <option key={actionType} value={actionType}>
-                  {ACTION_LABELS[actionType]}
+                  {COMMERCIAL_ACTION_LABELS[actionType]}
                 </option>
               ))}
             </select>
@@ -143,6 +152,34 @@ export function MapCommercialActionDialog({
               {description.length}/2000
             </span>
           </label>
+
+          <div className="rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] p-3">
+            <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-[#0B1F33]">
+              <input
+                type="checkbox"
+                checked={scheduleFollowUp}
+                onChange={(event) => setScheduleFollowUp(event.target.checked)}
+                className="h-4 w-4 accent-[#1061AF]"
+              />
+              <CalendarClock className="h-4 w-4 text-[#1061AF]" />
+              Agendar próximo contato
+            </label>
+            {scheduleFollowUp && (
+              <label className="mt-3 block">
+                <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-[#64748B]">
+                  Data e horário
+                </span>
+                <input
+                  type="datetime-local"
+                  value={nextContactAt}
+                  onChange={(event) => setNextContactAt(event.target.value)}
+                  min={new Date().toISOString().slice(0, 16)}
+                  className="h-11 w-full rounded-lg border border-[#DDE5EF] bg-white px-3 text-sm text-[#0B1F33] outline-none focus:border-[#1061AF] focus:ring-2 focus:ring-[#1061AF]/15"
+                  required
+                />
+              </label>
+            )}
+          </div>
 
           {error && (
             <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
@@ -178,17 +215,22 @@ export function MapCommercialActionDialog({
                   className="rounded-lg border border-[#EEF2F7] bg-[#F8FAFC] p-3"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                    <strong className="text-[#0B1F33]">{item.type}</strong>
+                    <strong className="text-[#0B1F33]">{commercialActionLabel(item.type)}</strong>
                     <time className="text-[11px] text-[#64748B]">
                       {formatDateTime(item.createdAt)}
                     </time>
                   </div>
                   <div className="mt-1 text-[11px] font-semibold text-[#1061AF]">
-                    {item.user?.name || "Usuário autenticado"}
+                    {item.user?.name || item.userLegacy?.name || "Usuário autenticado"}
                   </div>
                   {item.description && (
                     <p className="mt-1 whitespace-pre-wrap break-words text-xs text-[#475569]">
                       {item.description}
+                    </p>
+                  )}
+                  {item.nextContactAt && !item.followUpCompletedAt && (
+                    <p className="mt-2 text-[11px] font-semibold text-[#1061AF]">
+                      Próximo contato: {formatDateTime(item.nextContactAt)}
                     </p>
                   )}
                 </article>
