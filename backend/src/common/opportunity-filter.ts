@@ -16,11 +16,11 @@ import { isNonFoodBusiness } from "./non-food-filter";
  */
 
 export const TARGET_OPPORTUNITY_CNAES = new Set<string>([
-  "4711301", // Hipermercados 🏬
-  "4711302", // Supermercados 🛒
-  "4712100", // Minimercados / Mercados 🏪
-  "4721102", // Mercearias / revenda de panificados 🥖
-  "4722901", // Açougues 🥩
+  "4711301", // Hipermercados 
+  "4711302", // Supermercados 
+  "4712100", // Minimercados / Mercados 
+  "4721102", // Mercearias / revenda de panificados 
+  "4722901", // Açougues 
 ]);
 
 // Tabela de centroides municipais (IBGE / OpenStreetMap)
