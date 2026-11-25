@@ -1,0 +1,179 @@
+[
+  {
+    "kind": "frontend-http",
+    "path": "/login",
+    "status": 200,
+    "finalUrl": "/login",
+    "html": true
+  },
+  {
+    "kind": "frontend-http",
+    "path": "/reset-password",
+    "status": 200,
+    "finalUrl": "/reset-password",
+    "html": true
+  },
+  {
+    "kind": "frontend-http",
+    "path": "/set-password",
+    "status": 200,
+    "finalUrl": "/reset-password",
+    "html": true
+  },
+  {
+    "kind": "frontend-http",
+    "path": "/dashboard",
+    "status": 200,
+    "finalUrl": "/dashboard",
+    "html": true
+  },
+  {
+    "kind": "frontend-http",
+    "path": "/leads-b2b",
+    "status": 200,
+    "finalUrl": "/leads-b2b",
+    "html": true
+  },
+  {
+    "kind": "frontend-http",
+    "path": "/leads-b2b/qa-missing",
+    "status": 200,
+    "finalUrl": "/leads-b2b/qa-missing",
+    "html": true
+  },
+  {
+    "kind": "frontend-http",
+    "path": "/mapa-oportunidades",
+    "status": 200,
+    "finalUrl": "/mapa-oportunidades",
+    "html": true
+  },
+  {
+    "kind": "frontend-http",
+    "path": "/mapa-de-calor",
+    "status": 200,
+    "finalUrl": "/mapa-de-calor",
+    "html": true
+  },
+  {
+    "kind": "frontend-http",
+    "path": "/base-de-dados",
+    "status": 200,
+    "finalUrl": "/base-de-dados",
+    "html": true
+  },
+  {
+    "kind": "frontend-http",
+    "path": "/recomendacoes",
+    "status": 200,
+    "finalUrl": "/recomendacoes",
+    "html": true
+  },
+  {
+    "kind": "frontend-http",
+    "path": "/regioes-prioritarias",
+    "status": 200,
+    "finalUrl": "/regioes-prioritarias",
+    "html": true
+  },
+  {
+    "kind": "frontend-http",
+    "path": "/rotas-inteligentes",
+    "status": 200,
+    "finalUrl": "/rotas-inteligentes",
+    "html": true
+  },
+  {
+    "kind": "frontend-http",
+    "path": "/funil-comercial",
+    "status": 200,
+    "finalUrl": "/funil-comercial",
+    "html": true
+  },
+  {
+    "kind": "frontend-http",
+    "path": "/atividades-comerciais",
+    "status": 200,
+    "finalUrl": "/atividades-comerciais",
+    "html": true
+  },
+  {
+    "kind": "frontend-http",
+    "path": "/importar-cnpjs",
+    "status": 200,
+    "finalUrl": "/importar-cnpjs",
+    "html": true
+  },
+  {
+    "kind": "frontend-http",
+    "path": "/configuracoes",
+    "status": 200,
+    "finalUrl": "/configuracoes",
+    "html": true
+  },
+  {
+    "kind": "api",
+    "path": "/health/live",
+    "status": 200,
+    "noSniff": "nosniff"
+  },
+  {
+    "kind": "api",
+    "path": "/health/ready",
+    "status": 200,
+    "noSniff": "nosniff"
+  },
+  {
+    "kind": "api",
+    "path": "/auth/me",
+    "status": 401,
+    "noSniff": "nosniff"
+  },
+  {
+    "kind": "api",
+    "path": "/dashboard/summary",
+    "status": 401,
+    "noSniff": "nosniff"
+  },
+  {
+    "kind": "api",
+    "path": "/leads",
+    "status": 401,
+    "noSniff": "nosniff"
+  },
+  {
+    "kind": "api",
+    "path": "/map/opportunities",
+    "status": 401,
+    "noSniff": "nosniff"
+  },
+  {
+    "kind": "api",
+    "path": "/pipeline",
+    "status": 401,
+    "noSniff": "nosniff"
+  },
+  {
+    "kind": "api",
+    "path": "/commercial-activities",
+    "status": 401,
+    "noSniff": "nosniff"
+  },
+  {
+    "kind": "api",
+    "path": "/users",
+    "status": 401,
+    "noSniff": "nosniff"
+  },
+  {
+    "kind": "api",
+    "path": "/companies",
+    "status": 401,
+    "noSniff": "nosniff"
+  },
+  {
+    "kind": "api-invalid-input",
+    "path": "/auth/login",
+    "status": 400
+  }
+]

@@ -5,7 +5,8 @@
     "src/**/*.test.{ts,tsx}",
     "scripts/data/import-data.js",
     "scripts/data/compare-data.js",
-    "scripts/data/prepare-data.js"
+    "scripts/data/prepare-data.js",
+    "scripts/qa-authenticated.cjs"
   ],
-  "project": ["src/**/*.{ts,tsx,css}", "scripts/data/**/*.js"]
+  "project": ["src/**/*.{ts,tsx,css}", "scripts/data/**/*.js", "scripts/qa-authenticated.cjs"]
 }

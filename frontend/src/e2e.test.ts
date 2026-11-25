@@ -165,3 +165,40 @@ test("E2E: Servidor Frontend Dev Server responde em http://localhost:8080", asyn
   const res = await fetch(FRONTEND_URL, { redirect: "manual" });
   assert.ok(res.status === 200 || res.status === 307 || res.status === 302);
 });
+
+test(
+  "E2E: contratos de leitura e escopo do papel autenticado",
+  { skip: missingCredentialsReason },
+  async () => {
+    const cookie = await getSessionCookie();
+    async function read(path: string, status = 200) {
+      const response = await fetch(BACKEND_URL + path, { headers: { Cookie: cookie } });
+      assert.equal(response.status, status, path);
+      const body = await response.text();
+      assert.ok(!/"(?:passwordHash|invitationTokenHash|stack|accessToken)"\s*:/.test(body), path);
+      return JSON.parse(body);
+    }
+    const profile = await read("/auth/me");
+    assert.ok(["ADMIN", "MANAGER", "SALES"].includes(profile.role));
+    if (process.env.E2E_EXPECTED_ROLE) assert.equal(profile.role, process.env.E2E_EXPECTED_ROLE);
+    const page = await read("/leads?page=1&pageSize=1");
+    if (page.items.length)
+      assert.equal(
+        (await read("/leads/" + encodeURIComponent(page.items[0].id))).id,
+        page.items[0].id,
+      );
+    const map = await read("/map/opportunities");
+    assert.ok(
+      Array.isArray(map) &&
+        map.every((item: { isClient?: unknown }) => typeof item.isClient === "boolean"),
+    );
+    const activities = await read("/commercial-activities");
+    assert.ok(Array.isArray(activities.items));
+    assert.ok(Array.isArray(await read("/notifications")));
+    assert.ok(Array.isArray(await read("/companies")));
+    const users = await read("/users", profile.role === "SALES" ? 403 : 200);
+    if (profile.role !== "SALES") assert.ok(Array.isArray(users));
+    const history = await read("/imports", profile.role === "ADMIN" ? 200 : 403);
+    if (profile.role === "ADMIN") assert.ok(Array.isArray(history));
+  },
+);
