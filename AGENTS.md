@@ -34,3 +34,9 @@ Git history uses Conventional Commit-style prefixes, usually `feat:` or `fix:` w
 ## Security & Agent-Specific Data Rules
 
 Do not commit `.env` files or secrets. Seeds require explicit local variables such as `RUN_SEED=true`. For commercial data, preserve the frozen dataset unless the user explicitly requests a change. Reuse PostgreSQL/cache before paid APIs; broad Google Places/Geocoding discovery or batch enrichment requires prior approval with volume and cost context.
+
+## Module ownership and local workflows
+
+Read `docs/architecture.md` when implementing or moving modules. Frontend domain code belongs in `frontend/src/features/<domain>`; route files own routing, validation and metadata. Keep shared HTTP transport in `services/api.ts` and shared visual primitives in `components/`. Preserve existing backend NestJS module boundaries.
+
+Project-local skills: `.agents/skills/deusa-development/SKILL.md` for implementation and refactoring; `.agents/skills/deusa-production-review/SKILL.md` for release reviews. Existing dataset-freeze and commercial API cost rules continue to apply.

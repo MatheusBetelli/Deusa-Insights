@@ -25,7 +25,10 @@ import {
 import { DeusaLogo } from "./Logo";
 import { AuthService, type User as AuthUser } from "@/lib/auth";
 import { formatRelativeTime } from "@/lib/commercial-formatters";
-import { notificationsService, type AppNotification } from "@/services/notificationsService";
+import {
+  notificationsService,
+  type AppNotification,
+} from "@/features/notifications/api/notificationsService";
 import { toast } from "sonner";
 
 interface TopbarProps {

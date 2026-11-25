@@ -1,6 +1,6 @@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Phone, MessageCircle, Mail, PhoneCall, ChevronDown, Copy } from "lucide-react";
-import type { Company } from "@/types/company";
+import type { Company } from "@/features/companies/types/company";
 import { toast } from "sonner";
 
 export interface ContactItem {

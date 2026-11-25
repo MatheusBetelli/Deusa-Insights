@@ -8,15 +8,15 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { formatDateTime } from "@/lib/commercial-formatters";
-import { leadsService } from "@/services/leadsService";
+import { leadsService } from "@/features/leads/api/leadsService";
 import {
   COMMERCIAL_ACTION_LABELS,
   COMMERCIAL_ACTION_TYPES,
   commercialActionLabel,
-} from "@/types/commercialAction";
-import type { CommercialActionType } from "@/types/commercialAction";
-import type { LeadInteraction } from "@/types/lead";
-import type { MapOpportunity } from "@/types/mapOpportunity";
+} from "@/features/leads/types/commercialAction";
+import type { CommercialActionType } from "@/features/leads/types/commercialAction";
+import type { LeadInteraction } from "@/features/leads/types/lead";
+import type { MapOpportunity } from "@/features/map/types/mapOpportunity";
 import { CalendarClock, Loader2, MessageSquarePlus } from "lucide-react";
 
 type MapCommercialActionDialogProps = {

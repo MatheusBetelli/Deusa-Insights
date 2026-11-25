@@ -1,0 +1,1077 @@
+import { EmptyState, ErrorState, LoadingState } from "@/components/common/InterfaceStates";
+import {
+  AvisoLocalizacaoAproximada,
+  ConfiancaBadge,
+  PendenteBadge,
+  StatusVerificacaoBadge,
+} from "@/components/common/QualityBadges";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { extractCompanyContacts } from "@/features/leads/components/LeadContactsPopover";
+import {
+  companyName,
+  formatCnae,
+  formatCnpj,
+  formatDateTime,
+  potentialLabels,
+  statusLabels,
+} from "@/lib/commercial-formatters";
+import { publicRuntimeEnv } from "@/lib/runtime-env";
+import { companiesService } from "@/features/companies/api/companiesService";
+import { leadsService } from "@/features/leads/api/leadsService";
+import type { Lead, LeadInteraction, LeadStatus } from "@/features/leads/types/lead";
+import { getRouteApi, Link } from "@tanstack/react-router";
+import {
+  ArrowLeft,
+  CalendarClock,
+  Copy,
+  Mail,
+  MapPin,
+  MessageSquare,
+  Navigation,
+  Pencil,
+  Phone,
+  PhoneCall,
+  ShoppingBag,
+  UserCheck,
+  X,
+} from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
+
+const STORE_URL = publicRuntimeEnv.VITE_STORE_URL || "https://loja.deusalimentos.com.br";
+
+export function LeadDetail() {
+  const leadRequestSequence = useRef(0);
+  const { leadId } = Route.useParams();
+  const [lead, setLead] = useState<Lead | null>(null);
+  const [interactions, setInteractions] = useState<LeadInteraction[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Modais de interação, planejamento de visita e edição cadastral
+  const [showInteractionModal, setShowInteractionModal] = useState(false);
+  const [showVisitModal, setShowVisitModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+
+  const [interactionForm, setInteractionForm] = useState({
+    type: "Ligação comercial",
+    result: "CONTACTED",
+    description: "",
+    nextActionDate: "",
+  });
+
+  const [visitForm, setVisitForm] = useState({
+    date: "",
+    notes: "",
+  });
+
+  const [editForm, setEditForm] = useState({
+    telefone: "",
+    email: "",
+    nomeFantasia: "",
+    razaoSocial: "",
+    logradouro: "",
+    numero: "",
+    bairro: "",
+    cep: "",
+    cidade: "",
+    uf: "",
+  });
+
+  function handleOpenEditModal() {
+    if (!lead) return;
+    const c = lead.company;
+    const contacts = extractCompanyContacts(c);
+    const ph = contacts.find((contact) => contact.type === "phone")?.value || "";
+    const em = contacts.find((contact) => contact.type === "email")?.value || "";
+    setEditForm({
+      telefone: ph,
+      email: em,
+      nomeFantasia: c.nomeFantasia || "",
+      razaoSocial: c.razaoSocial || "",
+      logradouro: c.logradouro || "",
+      numero: c.numero || "",
+      bairro: c.bairro || "",
+      cep: c.cep || "",
+      cidade: c.cidade || "",
+      uf: c.uf || "",
+    });
+    setShowEditModal(true);
+  }
+
+  async function handleSaveCompanyDetails(e: React.FormEvent) {
+    e.preventDefault();
+    if (!lead) return;
+
+    try {
+      const tasks = [];
+      const phoneDigits = editForm.telefone.replace(/\D/g, "");
+      if (phoneDigits) {
+        tasks.push(
+          companiesService.createContact(lead.company.id, {
+            type:
+              phoneDigits.length === 11 && phoneDigits.slice(2).startsWith("9")
+                ? "WHATSAPP"
+                : "PHONE",
+            value: editForm.telefone.trim(),
+            source: "MANUAL",
+            isPrimary: true,
+          }),
+        );
+      }
+      if (editForm.email.trim()) {
+        tasks.push(
+          companiesService.createContact(lead.company.id, {
+            type: "EMAIL",
+            value: editForm.email.trim(),
+            source: "MANUAL",
+            isPrimary: true,
+          }),
+        );
+      }
+      if (tasks.length === 0) {
+        toast.error("Informe telefone ou e-mail para adicionar um contato comercial.");
+        return;
+      }
+      await Promise.all(tasks);
+
+      toast.success("Contatos comerciais salvos sem alterar o cadastro importado.");
+      setShowEditModal(false);
+      await loadLead();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Falha ao salvar contatos.");
+    }
+  }
+
+  const loadLead = useCallback(async () => {
+    const requestId = ++leadRequestSequence.current;
+    setLoading(true);
+    setError(null);
+    try {
+      const [leadData, interactionData] = await Promise.all([
+        leadsService.getLead(leadId),
+        leadsService.getInteractions(leadId),
+      ]);
+      if (requestId !== leadRequestSequence.current) return;
+      setLead(leadData);
+      setInteractions(interactionData);
+    } catch (err) {
+      if (requestId !== leadRequestSequence.current) return;
+      setError(err instanceof Error ? err.message : "Não foi possível carregar a oportunidade.");
+    } finally {
+      if (requestId === leadRequestSequence.current) {
+        setLoading(false);
+      }
+    }
+  }, [leadId]);
+
+  useEffect(() => {
+    void loadLead();
+    return () => {
+      leadRequestSequence.current += 1;
+    };
+  }, [loadLead]);
+
+  async function handleSaveInteraction(e: React.FormEvent) {
+    e.preventDefault();
+    if (!lead) return;
+    let newStatus: LeadStatus | undefined = undefined;
+    let descriptionText = interactionForm.description.trim();
+
+    switch (interactionForm.result) {
+      case "CONTACTED":
+        newStatus = "CONTACTED";
+        if (!descriptionText) descriptionText = "Contato comercial realizado com sucesso.";
+        break;
+      case "INTERESTED":
+        newStatus = "INTERESTED";
+        if (!descriptionText) descriptionText = "Cliente demonstrou interesse nos produtos Deusa.";
+        break;
+      case "LINK_B2B_SENT":
+        newStatus = "LINK_B2B_SENT";
+        if (!descriptionText) descriptionText = `Link B2B enviado: ${STORE_URL}`;
+        break;
+      case "NEGOTIATION":
+        newStatus = "NEGOTIATION";
+        if (!descriptionText) descriptionText = "Negociação comercial iniciada / Proposta enviada.";
+        break;
+      case "NOT_INTERESTED":
+        newStatus = "NOT_INTERESTED";
+        if (!descriptionText) descriptionText = "Sem interesse comercial no momento.";
+        break;
+      case "NO_ANSWER":
+        if (!descriptionText) descriptionText = "Tentativa de contato realizada - sem resposta.";
+        break;
+    }
+
+    try {
+      await leadsService.createInteraction(lead.id, {
+        type: newStatus === "LINK_B2B_SENT" ? "B2B_LINK_SENT" : interactionForm.type,
+        description: descriptionText,
+        newStatus,
+        nextActionAt: interactionForm.nextActionDate
+          ? new Date(interactionForm.nextActionDate).toISOString()
+          : undefined,
+      });
+
+      toast.success("Interação registrada e status comercial atualizado!");
+      setShowInteractionModal(false);
+      setInteractionForm({
+        type: "Ligação comercial",
+        result: "CONTACTED",
+        description: "",
+        nextActionDate: "",
+      });
+      await loadLead();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Falha ao registrar interação.");
+    }
+  }
+
+  async function handleSaveVisit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!lead) return;
+    if (!visitForm.date) {
+      toast.error("Selecione a data da visita presencial.");
+      return;
+    }
+
+    try {
+      await leadsService.createInteraction(lead.id, {
+        type: "Visita presencial agendada",
+        description: `Visita comercial planejada para ${new Date(visitForm.date).toLocaleDateString("pt-BR")}. ${visitForm.notes ? `Obs: ${visitForm.notes}` : ""}`,
+        newStatus: "NEGOTIATION",
+        nextActionAt: new Date(visitForm.date).toISOString(),
+      });
+
+      toast.success("Visita presencial planejada e adicionada ao funil!");
+      setShowVisitModal(false);
+      setVisitForm({ date: "", notes: "" });
+      await loadLead();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Falha ao agendar visita.");
+    }
+  }
+
+  async function handleSendStoreLink() {
+    if (!lead) return;
+    const contacts = extractCompanyContacts(lead.company);
+    const mobileContact = contacts.find(
+      (contact) => contact.type === "phone" && contact.canWhatsapp,
+    );
+    const message = encodeURIComponent(
+      `Olá! Somos da Deusa Alimentos. Segue o link da nossa loja oficial B2B para pedidos: ${STORE_URL}`,
+    );
+
+    if (mobileContact) {
+      window.open(`https://wa.me/${mobileContact.raw}?text=${message}`, "_blank");
+    } else {
+      window.open(`https://wa.me/?text=${message}`, "_blank");
+    }
+
+    try {
+      await leadsService.createInteraction(lead.id, {
+        type: "B2B_LINK_SENT",
+        description: `Link B2B enviado: ${STORE_URL}`,
+        newStatus: "LINK_B2B_SENT",
+      });
+      toast.success("Envio do link B2B registrado no histórico.");
+      await loadLead();
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Não foi possível registrar o envio do link B2B.",
+      );
+    }
+  }
+
+  async function handleCopyStoreLink() {
+    try {
+      await navigator.clipboard.writeText(STORE_URL);
+      toast.success("Link B2B copiado.");
+    } catch {
+      toast.error("Não foi possível copiar o link B2B neste navegador.");
+    }
+  }
+
+  async function handleCopyContactValue(label: string, value: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success(`${label} copiado.`);
+    } catch {
+      toast.error(`Não foi possível copiar ${label.toLowerCase()} neste navegador.`);
+    }
+  }
+
+  if (loading) return <LoadingState message="Carregando detalhes da oportunidade comercial..." />;
+
+  if (error) {
+    return (
+      <div>
+        <PageHeader
+          title="Erro ao carregar oportunidade"
+          subtitle="Não foi possível buscar os dados no backend."
+        />
+        <ErrorState
+          description={error}
+          action={
+            <button
+              onClick={loadLead}
+              className="h-9 rounded-lg bg-[#0B1F33] px-3 text-xs font-bold text-white"
+            >
+              Tentar novamente
+            </button>
+          }
+        />
+      </div>
+    );
+  }
+
+  if (!lead) {
+    return (
+      <div>
+        <PageHeader
+          title="Oportunidade não encontrada"
+          subtitle="O registro solicitado não existe no sistema."
+        />
+        <EmptyState
+          title="Lead indisponível"
+          description="Volte para a lista de leads B2B e selecione uma oportunidade válida."
+          action={
+            <Link
+              to="/leads-b2b"
+              className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#0B1F33] px-4 text-sm font-bold text-white"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Voltar para leads
+            </Link>
+          }
+        />
+      </div>
+    );
+  }
+
+  const company = lead.company;
+  const isRealCnpj =
+    /^\d{14}$/.test(company.cnpj.replace(/\D/g, "")) &&
+    !company.cnpj.startsWith("G-") &&
+    !company.cnpj.startsWith("GOOGLE-");
+  const contacts = extractCompanyContacts(company);
+  const phoneContact = contacts.find((contact) => contact.type === "phone");
+  const emailContact = contacts.find((contact) => contact.type === "email");
+  const phone = phoneContact?.value || null;
+  const email = emailContact?.value || null;
+  const phoneCopyValue = phoneContact?.value ?? "";
+  const emailCopyValue = emailContact?.value ?? "";
+  const waUrl = phoneContact?.canWhatsapp
+    ? `https://wa.me/${phoneContact.raw}?text=${encodeURIComponent(`Olá, gostaria de apresentar as soluções comerciais da Deusa Alimentos para o ${companyName(company)}.`)}`
+    : null;
+  const telUrl = phoneContact ? `tel:${phoneContact.raw}` : null;
+  const mailUrl = email ? `mailto:${email}` : null;
+  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${companyName(company)}, ${company.logradouro || ""} ${company.numero || ""}, ${company.cidade}/${company.uf}`)}`;
+
+  const scoreColor =
+    lead.potentialLevel === "CRITICAL"
+      ? "text-[#ED1C24]"
+      : lead.potentialLevel === "HIGH"
+        ? "text-[#C2410C]"
+        : "text-[#1061AF]";
+  const levelBadgeClass =
+    lead.potentialLevel === "CRITICAL"
+      ? "bg-red-50 text-red-700 border-red-200"
+      : lead.potentialLevel === "HIGH"
+        ? "bg-amber-50 text-amber-800 border-amber-200"
+        : "bg-blue-50 text-blue-800 border-blue-200";
+
+  return (
+    <div className="space-y-6">
+      {/* ── Page Header ── */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-bold uppercase tracking-widest text-[#1061AF]">
+              Oportunidade Comercial
+            </span>
+            <span
+              className={`rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase ${levelBadgeClass}`}
+            >
+              {potentialLabels[lead.potentialLevel]}
+            </span>
+          </div>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-[#0B1F33]">
+            {companyName(company)}
+          </h1>
+          <p className="mt-0.5 text-sm text-[#64748B]">
+            {company.cidade}/{company.uf} · CNAE {formatCnae(company.cnaePrincipal)}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Link
+            to="/leads-b2b"
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#DDE5EF] bg-white px-3.5 text-xs font-bold text-[#0B1F33] transition hover:border-[#1061AF]"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Voltar para Leads
+          </Link>
+          <button
+            onClick={handleOpenEditModal}
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#DDE5EF] bg-white px-3.5 text-xs font-bold text-[#0B1F33] transition hover:border-[#1061AF]"
+          >
+            <Pencil className="h-3.5 w-3.5 text-[#1061AF]" />
+            Editar contatos
+          </button>
+          <button
+            onClick={() => setShowInteractionModal(true)}
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#0B1F33] px-4 text-xs font-bold text-white transition hover:bg-[#1061AF]"
+          >
+            <PhoneCall className="h-4 w-4 text-[#FFF200]" />
+            Registrar contato
+          </button>
+          <button
+            onClick={() => void handleSendStoreLink()}
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#128C7E] px-4 text-xs font-bold text-white transition hover:bg-[#075E54]"
+          >
+            <ShoppingBag className="h-4 w-4" />
+            Enviar loja
+          </button>
+          <button
+            onClick={() => void handleCopyStoreLink()}
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#DDE5EF] bg-white px-3.5 text-xs font-bold text-[#0B1F33] transition hover:border-[#1061AF]"
+          >
+            <Copy className="h-3.5 w-3.5 text-[#1061AF]" />
+            Copiar B2B
+          </button>
+        </div>
+      </div>
+
+      {/* ── Seção Superior: Identificação e Oportunidade ── */}
+      <div className="grid gap-5 lg:grid-cols-3">
+        {/* Card 1: Identificação Cadastral */}
+        <div className="rounded-xl border border-[#DDE5EF] bg-white p-5 shadow-sm lg:col-span-2">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between border-b border-[#E2E8F0] pb-4">
+            <div>
+              <h2 className="text-base font-bold text-[#0B1F33]">Identificação da Empresa</h2>
+              <p className="text-xs text-[#64748B]">{company.razaoSocial}</p>
+            </div>
+            {isRealCnpj && (
+              <span className="inline-flex items-center rounded-md bg-[#F1F5F9] px-2.5 py-1 text-xs font-bold text-[#0B1F33]">
+                CNPJ {formatCnpj(company.cnpj)}
+              </span>
+            )}
+          </div>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="rounded-lg bg-[#F8FAFC] p-3">
+              <span className="block text-[10px] font-bold uppercase tracking-wide text-[#64748B]">
+                Cidade / UF
+              </span>
+              <span className="mt-0.5 block text-xs font-semibold text-[#0B1F33]">
+                {company.cidade}/{company.uf}
+              </span>
+            </div>
+            <div className="rounded-lg bg-[#F8FAFC] p-3">
+              <span className="block text-[10px] font-bold uppercase tracking-wide text-[#64748B]">
+                Bairro
+              </span>
+              <span className="mt-0.5 block text-xs font-semibold text-[#0B1F33]">
+                {company.bairro || "-"}
+              </span>
+            </div>
+            <div className="rounded-lg bg-[#F8FAFC] p-3">
+              <span className="block text-[10px] font-bold uppercase tracking-wide text-[#64748B]">
+                Endereço
+              </span>
+              <span className="mt-0.5 block truncate text-xs font-semibold text-[#0B1F33]">
+                {company.logradouro ? `${company.logradouro}, ${company.numero || "S/N"}` : "-"}
+              </span>
+            </div>
+            <div className="rounded-lg bg-[#F8FAFC] p-3">
+              <span className="block text-[10px] font-bold uppercase tracking-wide text-[#64748B]">
+                CNAE Principal
+              </span>
+              <span className="mt-0.5 block text-xs font-semibold text-[#0B1F33]">
+                {formatCnae(company.cnaePrincipal)}
+              </span>
+            </div>
+            <div className="rounded-lg bg-[#F8FAFC] p-3">
+              <span className="block text-[10px] font-bold uppercase tracking-wide text-[#64748B]">
+                Porte
+              </span>
+              <span className="mt-0.5 block text-xs font-semibold text-[#0B1F33]">
+                {company.porte || "-"}
+              </span>
+            </div>
+            <div className="rounded-lg bg-[#F8FAFC] p-3">
+              <span className="block text-[10px] font-bold uppercase tracking-wide text-[#64748B]">
+                Situação Cadastral
+              </span>
+              <span className="mt-0.5 block text-xs font-semibold text-emerald-700">
+                {company.situacaoCadastral}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Card 2: Pontuação da Oportunidade */}
+        <div className="rounded-xl border border-[#DDE5EF] bg-white p-5 shadow-sm flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-3">
+              <h2 className="text-base font-bold text-[#0B1F33]">Pontuação & Potencial</h2>
+              <span className="text-xs font-bold text-[#64748B]">Score Deusa</span>
+            </div>
+
+            <div className="mt-4 flex items-center gap-4">
+              <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-[#0B1F33] p-2 text-center text-white shadow-sm">
+                <div>
+                  <span className="block text-[9px] font-bold uppercase text-[#FFF200]">Score</span>
+                  <span className="text-2xl font-bold tabular-nums">{lead.score}</span>
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-[#64748B]">Classificação</div>
+                <div className={`text-base font-bold ${scoreColor}`}>
+                  {potentialLabels[lead.potentialLevel]} Potencial ({lead.score}/100)
+                </div>
+                <div className="mt-0.5 text-xs text-[#475569]">
+                  Etapa atual:{" "}
+                  <strong className="text-[#0B1F33]">{statusLabels[lead.status]}</strong>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 space-y-1.5 border-t border-[#E2E8F0] pt-3">
+              <div className="text-[11px] font-bold uppercase text-[#64748B]">
+                Responsável Atual
+              </div>
+              <div className="flex items-center gap-2 text-xs font-semibold text-[#0B1F33]">
+                <UserCheck className="h-4 w-4 text-[#1061AF]" />
+                {lead.assignedTo?.name || "Não atribuído"}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 pt-3 border-t border-[#E2E8F0]">
+            <a
+              href={mapsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] py-2 text-xs font-bold text-[#0B1F33] transition hover:border-[#1061AF]"
+            >
+              <Navigation className="h-3.5 w-3.5 text-[#1061AF]" />
+              Ver localização no Google Maps
+            </a>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Seção de Contatos Disponíveis (Canais Reais) ── */}
+      <section className="rounded-xl border border-[#DDE5EF] bg-white p-5 shadow-sm">
+        <h2 className="text-base font-bold text-[#0B1F33]">Contatos & Ações Comerciais</h2>
+        <p className="mt-0.5 text-xs text-[#64748B]">
+          Utilize os canais abaixo para abordagem comercial direta ou agendamento de visita
+          presencial.
+        </p>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          {/* Canal WhatsApp */}
+          <div
+            className={`rounded-xl border p-4 transition ${waUrl ? "border-emerald-200 bg-emerald-50/40" : "border-[#E2E8F0] bg-[#F8FAFC] opacity-60"}`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase text-[#0B1F33]">WhatsApp</span>
+              <MessageSquare
+                className={`h-4 w-4 ${waUrl ? "text-emerald-600" : "text-[#94A3B8]"}`}
+              />
+            </div>
+            <div className="mt-2 text-xs font-semibold text-[#0B1F33]">
+              {phone || "Não cadastrado"}
+            </div>
+            {waUrl ? (
+              <a
+                href={waUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-3 inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg bg-[#16A34A] text-xs font-bold text-white transition hover:bg-emerald-700"
+              >
+                Iniciar conversa no WhatsApp
+              </a>
+            ) : (
+              <span className="mt-3 block text-center text-[11px] text-[#64748B]">
+                Canal indisponível
+              </span>
+            )}
+          </div>
+
+          {/* Canal Telefone */}
+          <div
+            className={`rounded-xl border p-4 transition ${telUrl ? "border-blue-200 bg-blue-50/40" : "border-[#E2E8F0] bg-[#F8FAFC] opacity-60"}`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase text-[#0B1F33]">Telefone / Ligação</span>
+              <Phone className={`h-4 w-4 ${telUrl ? "text-[#1061AF]" : "text-[#94A3B8]"}`} />
+            </div>
+            <div className="mt-2 text-xs font-semibold text-[#0B1F33]">
+              {phone || "Não cadastrado"}
+            </div>
+            {telUrl ? (
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <a
+                  href={telUrl}
+                  className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-[#1061AF] text-xs font-bold text-white transition hover:bg-[#0B1F33]"
+                >
+                  Fazer ligação
+                </a>
+                <button
+                  type="button"
+                  onClick={() => void handleCopyContactValue("Telefone", phoneCopyValue)}
+                  className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-blue-200 bg-white text-xs font-bold text-[#1061AF] transition hover:bg-blue-50"
+                >
+                  Copiar
+                </button>
+              </div>
+            ) : (
+              <span className="mt-3 block text-center text-[11px] text-[#64748B]">
+                Canal indisponível
+              </span>
+            )}
+          </div>
+
+          {/* Canal E-mail */}
+          <div
+            className={`rounded-xl border p-4 transition ${mailUrl ? "border-sky-200 bg-sky-50/40" : "border-[#E2E8F0] bg-[#F8FAFC] opacity-60"}`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase text-[#0B1F33]">E-mail Comercial</span>
+              <Mail className={`h-4 w-4 ${mailUrl ? "text-sky-600" : "text-[#94A3B8]"}`} />
+            </div>
+            <div className="mt-2 truncate text-xs font-semibold text-[#0B1F33]">
+              {email || "Não cadastrado"}
+            </div>
+            {mailUrl ? (
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <a
+                  href={mailUrl}
+                  className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-sky-700 text-xs font-bold text-white transition hover:bg-sky-800"
+                >
+                  Enviar e-mail
+                </a>
+                <button
+                  type="button"
+                  onClick={() => void handleCopyContactValue("E-mail", emailCopyValue)}
+                  className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-sky-200 bg-white text-xs font-bold text-sky-700 transition hover:bg-sky-50"
+                >
+                  Copiar
+                </button>
+              </div>
+            ) : (
+              <span className="mt-3 block text-center text-[11px] text-[#64748B]">
+                Canal indisponível
+              </span>
+            )}
+          </div>
+
+          {/* Ação Enviar Loja B2B */}
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-4">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase text-[#0B1F33]">Loja B2B</span>
+              <ShoppingBag className="h-4 w-4 text-emerald-700" />
+            </div>
+            <div className="mt-2 text-xs font-semibold text-[#0B1F33] truncate">{STORE_URL}</div>
+            <button
+              onClick={() => void handleSendStoreLink()}
+              className="mt-3 inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg bg-[#128C7E] text-xs font-bold text-white transition hover:bg-[#075E54]"
+            >
+              Enviar loja
+            </button>
+            <button
+              onClick={() => void handleCopyStoreLink()}
+              className="mt-2 inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-white text-xs font-bold text-emerald-800 transition hover:bg-emerald-50"
+            >
+              Copiar link
+            </button>
+          </div>
+
+          {/* Ação Planejar Visita Presencial */}
+          <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-4">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase text-[#0B1F33]">Visita Presencial</span>
+              <MapPin className="h-4 w-4 text-amber-700" />
+            </div>
+            <div className="mt-2 text-xs font-semibold text-[#0B1F33]">Abordagem em campo</div>
+            <button
+              onClick={() => setShowVisitModal(true)}
+              className="mt-3 inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg bg-[#0B1F33] text-xs font-bold text-white transition hover:bg-[#1061AF]"
+            >
+              Planejar visita
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Próxima Ação & Histórico de Interações ── */}
+      <div className="grid gap-5 lg:grid-cols-3">
+        {/* Card Próxima Ação */}
+        <div className="rounded-xl border border-[#DDE5EF] bg-white p-5 shadow-sm flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-3">
+              <h2 className="text-base font-bold text-[#0B1F33]">Próxima Ação</h2>
+              <CalendarClock className="h-4 w-4 text-[#1061AF]" />
+            </div>
+
+            <div className="mt-4 rounded-xl border border-[#FFF200]/80 bg-[#FFFBEB] p-4">
+              <div className="text-xs font-bold uppercase text-amber-900">
+                Agendamento Comercial
+              </div>
+              <div className="mt-1 text-sm font-bold text-[#0B1F33]">
+                {lead.nextActionAt
+                  ? formatDateTime(lead.nextActionAt)
+                  : "Sem próxima ação definida"}
+              </div>
+              <p className="mt-1 text-xs text-[#64748B]">
+                Último contato registrado: {formatDateTime(lead.lastContactAt)}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 space-y-2 pt-3 border-t border-[#E2E8F0]">
+            <button
+              onClick={() => setShowInteractionModal(true)}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#0B1F33] py-2 text-xs font-bold text-white transition hover:bg-[#1061AF]"
+            >
+              <PhoneCall className="h-3.5 w-3.5 text-[#FFF200]" />
+              Registrar novo resultado
+            </button>
+          </div>
+        </div>
+
+        {/* Histórico Comercial */}
+        <div className="rounded-xl border border-[#DDE5EF] bg-white p-5 shadow-sm lg:col-span-2">
+          <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-3">
+            <h2 className="text-base font-bold text-[#0B1F33]">
+              Histórico Comercial de Interações
+            </h2>
+            <span className="text-xs font-bold text-[#64748B]">
+              {interactions.length} registro(s)
+            </span>
+          </div>
+
+          <div className="mt-4 space-y-3 max-h-[360px] overflow-y-auto pr-1">
+            {interactions.length === 0 ? (
+              <EmptyState
+                title="Sem interações registradas"
+                description="Abra uma conversa ou registe o primeiro contato para iniciar o histórico comercial."
+              />
+            ) : (
+              interactions.map((item) => (
+                <div
+                  key={item.id}
+                  className="rounded-xl border border-[#DDE5EF] bg-[#F8FAFC] p-3.5"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-bold text-[#0B1F33]">{item.type}</span>
+                    <span className="text-[11px] text-[#64748B]">
+                      {formatDateTime(item.createdAt)}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs leading-relaxed text-[#475569]">{item.description}</p>
+                  {(item.user || item.userLegacy) && (
+                    <div className="mt-2 text-[10px] font-semibold text-[#64748B]">
+                      Registrado por: {item.user?.name || item.userLegacy?.name}
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Seção de Qualidade dos Dados ── */}
+      <section className="rounded-xl border border-[#DDE5EF] bg-white p-5 shadow-sm">
+        <h2 className="text-base font-bold text-[#0B1F33]">Verificação e Integridade Cadastral</h2>
+        <p className="mt-0.5 text-xs text-[#64748B]">
+          Qualidade dos dados e transparência das coordenadas no mapa.
+        </p>
+
+        <AvisoLocalizacaoAproximada origemCoordenada={company.origemCoordenada} className="mt-3" />
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-lg bg-[#F8FAFC] p-3">
+            <span className="block text-[10px] font-bold uppercase text-[#64748B]">
+              Confiança Cadastral
+            </span>
+            <div className="mt-1 flex items-center justify-between">
+              <ConfiancaBadge confianca={company.confiancaVerificacao} />
+            </div>
+          </div>
+          <div className="rounded-lg bg-[#F8FAFC] p-3">
+            <span className="block text-[10px] font-bold uppercase text-[#64748B]">
+              Status Verificação
+            </span>
+            <div className="mt-1 flex items-center justify-between">
+              <StatusVerificacaoBadge status={company.statusVerificacaoEndereco} />
+            </div>
+          </div>
+          <div className="rounded-lg bg-[#F8FAFC] p-3">
+            <span className="block text-[10px] font-bold uppercase text-[#64748B]">Pendência</span>
+            <div className="mt-1 flex items-center justify-between">
+              <PendenteBadge pendente={company.pendenteValidacao} />
+            </div>
+          </div>
+          <div className="rounded-lg bg-[#F8FAFC] p-3">
+            <span className="block text-[10px] font-bold uppercase text-[#64748B]">
+              Origem da Coordenada
+            </span>
+            <span className="mt-1 block text-xs font-semibold text-[#0B1F33]">
+              {company.origemCoordenada || "Receita Federal"}
+            </span>
+          </div>
+        </div>
+      </section>
+
+      {/* ── MODAL 1: Registrar Interação Comercial ── */}
+      {showInteractionModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-2xl border border-[#DDE5EF] bg-white p-6 shadow-xl">
+            <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-3">
+              <h3 className="text-base font-bold text-[#0B1F33]">Registrar Interação Comercial</h3>
+              <button
+                onClick={() => setShowInteractionModal(false)}
+                className="rounded-lg p-1 text-[#64748B] hover:bg-[#F1F5F9]"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveInteraction} className="mt-4 space-y-4">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wide text-[#64748B]">
+                  Tipo de Contato
+                </label>
+                <select
+                  value={interactionForm.type}
+                  onChange={(e) =>
+                    setInteractionForm((prev) => ({ ...prev, type: e.target.value }))
+                  }
+                  className="mt-1.5 h-9 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-xs text-[#0B1F33] outline-none focus:border-[#1061AF]"
+                >
+                  <option>Ligação comercial</option>
+                  <option>Mensagem de WhatsApp</option>
+                  <option>Visita presencial</option>
+                  <option>Reunião comercial</option>
+                  <option>E-mail comercial</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wide text-[#64748B]">
+                  Resultado / Etapa do Funil
+                </label>
+                <select
+                  value={interactionForm.result}
+                  onChange={(e) =>
+                    setInteractionForm((prev) => ({ ...prev, result: e.target.value }))
+                  }
+                  className="mt-1.5 h-9 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-xs font-bold text-[#0B1F33] outline-none focus:border-[#1061AF]"
+                >
+                  <option value="CONTACTED">Contato realizado (Mover para Contatado)</option>
+                  <option value="INTERESTED">Demonstrou interesse (Mover para Interessado)</option>
+                  <option value="LINK_B2B_SENT">Link B2B enviado</option>
+                  <option value="NEGOTIATION">Em negociação / Proposta enviada</option>
+                  <option value="NO_ANSWER">Tentativa realizada (Sem resposta)</option>
+                  <option value="NOT_INTERESTED">Sem interesse no momento</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wide text-[#64748B]">
+                  Próxima Ação (Data / Hora)
+                </label>
+                <input
+                  type="datetime-local"
+                  value={interactionForm.nextActionDate}
+                  onChange={(e) =>
+                    setInteractionForm((prev) => ({ ...prev, nextActionDate: e.target.value }))
+                  }
+                  className="mt-1.5 h-9 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-xs text-[#0B1F33] outline-none focus:border-[#1061AF]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wide text-[#64748B]">
+                  Observações do Vendedor
+                </label>
+                <textarea
+                  rows={3}
+                  value={interactionForm.description}
+                  onChange={(e) =>
+                    setInteractionForm((prev) => ({ ...prev, description: e.target.value }))
+                  }
+                  placeholder="Detalhe o que foi conversado ou combinado..."
+                  className="mt-1.5 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] p-3 text-xs text-[#0B1F33] outline-none focus:border-[#1061AF]"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowInteractionModal(false)}
+                  className="h-9 rounded-lg border border-[#DDE5EF] px-4 text-xs font-bold text-[#64748B] hover:bg-[#F1F5F9]"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="h-9 rounded-lg bg-[#0B1F33] px-4 text-xs font-bold text-white transition hover:bg-[#1061AF]"
+                >
+                  Salvar Interação
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL 2: Planejar Visita Presencial ── */}
+      {showVisitModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-2xl border border-[#DDE5EF] bg-white p-6 shadow-xl">
+            <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-3">
+              <h3 className="text-base font-bold text-[#0B1F33]">Planejar Visita Presencial</h3>
+              <button
+                onClick={() => setShowVisitModal(false)}
+                className="rounded-lg p-1 text-[#64748B] hover:bg-[#F1F5F9]"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveVisit} className="mt-4 space-y-4">
+              <div className="rounded-lg bg-[#F8FAFC] p-3 border border-[#E2E8F0]">
+                <div className="text-[11px] font-bold text-[#64748B]">Destino da Visita:</div>
+                <div className="text-xs font-bold text-[#0B1F33]">{companyName(company)}</div>
+                <div className="text-[11px] text-[#64748B]">
+                  {company.logradouro
+                    ? `${company.logradouro}, ${company.numero || "S/N"}`
+                    : company.cidade}{" "}
+                  · {company.cidade}/{company.uf}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wide text-[#64748B]">
+                  Data e Hora Planejada
+                </label>
+                <input
+                  type="datetime-local"
+                  required
+                  value={visitForm.date}
+                  onChange={(e) => setVisitForm((prev) => ({ ...prev, date: e.target.value }))}
+                  className="mt-1.5 h-9 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-xs text-[#0B1F33] outline-none focus:border-[#1061AF]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wide text-[#64748B]">
+                  Observações da Rota / Visita
+                </label>
+                <textarea
+                  rows={3}
+                  value={visitForm.notes}
+                  onChange={(e) => setVisitForm((prev) => ({ ...prev, notes: e.target.value }))}
+                  placeholder="Ex: Falar com o comprador de mercearia no período da manhã..."
+                  className="mt-1.5 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] p-3 text-xs text-[#0B1F33] outline-none focus:border-[#1061AF]"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowVisitModal(false)}
+                  className="h-9 rounded-lg border border-[#DDE5EF] px-4 text-xs font-bold text-[#64748B] hover:bg-[#F1F5F9]"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="h-9 rounded-lg bg-[#0B1F33] px-4 text-xs font-bold text-white transition hover:bg-[#1061AF]"
+                >
+                  Agendar Visita
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL 3: Editar Contatos do Mercado ── */}
+      {showEditModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-lg rounded-2xl border border-[#DDE5EF] bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-3">
+              <div>
+                <h3 className="text-base font-bold text-[#0B1F33]">Editar Contatos do Mercado</h3>
+                <p className="text-xs text-[#64748B]">
+                  Adicione telefone ou e-mail sem alterar dados importados, CNPJ ou localização.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowEditModal(false)}
+                className="rounded-lg p-1 text-[#64748B] hover:bg-[#F1F5F9]"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveCompanyDetails} className="mt-4 space-y-4">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wide text-[#64748B]">
+                    Telefone Principal
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="(16) 99999-9999"
+                    value={editForm.telefone}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, telefone: e.target.value }))}
+                    className="mt-1.5 h-9 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-xs text-[#0B1F33] outline-none focus:border-[#1061AF]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wide text-[#64748B]">
+                    E-mail Comercial
+                  </label>
+                  <input
+                    type="email"
+                    placeholder="comercial@mercado.com.br"
+                    value={editForm.email}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, email: e.target.value }))}
+                    className="mt-1.5 h-9 w-full rounded-lg border border-[#DDE5EF] bg-[#F8FAFC] px-3 text-xs text-[#0B1F33] outline-none focus:border-[#1061AF]"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#E2E8F0]">
+                <button
+                  type="button"
+                  onClick={() => setShowEditModal(false)}
+                  className="h-9 rounded-lg border border-[#DDE5EF] px-4 text-xs font-bold text-[#64748B] hover:bg-[#F1F5F9]"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="h-9 rounded-lg bg-[#0B1F33] px-4 text-xs font-bold text-white transition hover:bg-[#1061AF]"
+                >
+                  Salvar contatos
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const Route = getRouteApi("/_app/leads-b2b/$leadId");

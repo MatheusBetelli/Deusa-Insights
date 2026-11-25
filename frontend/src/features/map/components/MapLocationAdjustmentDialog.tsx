@@ -5,7 +5,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { MapOpportunity } from "@/types/mapOpportunity";
+import type { MapOpportunity } from "@/features/map/types/mapOpportunity";
 import { Loader2, MapPin } from "lucide-react";
 
 type CoordinatePair = {

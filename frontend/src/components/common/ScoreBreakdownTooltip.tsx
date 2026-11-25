@@ -1,4 +1,4 @@
-import type { PotentialLevel, ScoreBreakdown } from "@/types/lead";
+import type { PotentialLevel, ScoreBreakdown } from "@/features/leads/types/lead";
 import { Info, MapPin } from "lucide-react";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { potentialLabels } from "@/lib/commercial-formatters";

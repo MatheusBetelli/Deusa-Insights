@@ -1,4 +1,4 @@
-import type { LeadStatus, PotentialLevel } from "@/types/lead";
+import type { LeadStatus, PotentialLevel } from "@/features/leads/types/lead";
 
 export const statusLabels: Record<LeadStatus, string> = {
   NEW: "Novo",

@@ -1,4 +1,4 @@
-import type { ClientAccountStatus } from "@/types/company";
+import type { ClientAccountStatus } from "@/features/companies/types/company";
 
 export function hasCurrentClientAccount(
   accounts: readonly ClientAccountStatus[] | null | undefined,

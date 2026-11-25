@@ -1,0 +1,51 @@
+import { apiRequest, apiTextRequest } from "@/services/api";
+import type {
+  CreateLeadInteractionPayload,
+  Lead,
+  LeadInteraction,
+  LeadQuery,
+  UpdateLeadPayload,
+} from "@/features/leads/types/lead";
+import type { CreateCommercialActionPayload } from "@/features/leads/types/commercialAction";
+import type {
+  CommercialActivitiesQuery,
+  CommercialActivity,
+} from "@/features/activities/types/commercialActivity";
+import type { PaginatedResponse } from "@/types/pagination";
+
+export const leadsService = {
+  getLeads: (query?: LeadQuery) => apiRequest<Lead[]>("/leads", {}, query),
+  getLeadsPage: (query?: LeadQuery) => apiRequest<PaginatedResponse<Lead>>("/leads", {}, query),
+  getLead: (id: string) => apiRequest<Lead>(`/leads/${id}`),
+  updateLead: (id: string, payload: UpdateLeadPayload) =>
+    apiRequest<Lead>(`/leads/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  convertLead: (id: string) => apiRequest<Lead>(`/leads/${id}/convert`, { method: "POST" }),
+  discardLead: (id: string) => apiRequest<Lead>(`/leads/${id}/discard`, { method: "POST" }),
+  getInteractions: (id: string) => apiRequest<LeadInteraction[]>(`/leads/${id}/interactions`),
+  getCommercialActivities: (query?: CommercialActivitiesQuery) =>
+    apiRequest<PaginatedResponse<CommercialActivity>>("/commercial-activities", {}, query),
+  createInteraction: (id: string, payload: CreateLeadInteractionPayload) =>
+    apiRequest<LeadInteraction>(`/leads/${id}/interactions`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  createCommercialAction: (id: string, payload: CreateCommercialActionPayload) =>
+    apiRequest<LeadInteraction>(`/leads/${id}/interactions/commercial-actions`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  completeFollowUp: (leadId: string, interactionId: string) =>
+    apiRequest<LeadInteraction>(
+      `/leads/${leadId}/interactions/${interactionId}/follow-up/complete`,
+      {
+        method: "POST",
+      },
+    ),
+  createLead: (payload: { companyId: string }) =>
+    apiRequest<Lead>("/leads", { method: "POST", body: JSON.stringify(payload) }),
+  autoAssignTerritory: () =>
+    apiRequest<{ success: boolean; message: string; assignedCount: number }>("/leads/auto-assign", {
+      method: "POST",
+    }),
+  exportCsv: (query?: LeadQuery) => apiTextRequest("/leads/export.csv", {}, query),
+};

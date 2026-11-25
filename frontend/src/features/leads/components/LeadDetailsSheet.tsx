@@ -23,11 +23,11 @@ import {
   statusLabels,
 } from "@/lib/commercial-formatters";
 import { publicRuntimeEnv } from "@/lib/runtime-env";
-import { leadsService } from "@/services/leadsService";
-import { companiesService } from "@/services/companiesService";
-import type { Lead, LeadStatus } from "@/types/lead";
+import { leadsService } from "@/features/leads/api/leadsService";
+import { companiesService } from "@/features/companies/api/companiesService";
+import type { Lead, LeadStatus } from "@/features/leads/types/lead";
 import { hasCurrentClientAccount } from "@/lib/client-status";
-import type { CompanyDetailsResponse } from "@/types/company-details";
+import type { CompanyDetailsResponse } from "@/features/companies/types/company-details";
 import {
   Building2,
   CheckCircle2,
