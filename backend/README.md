@@ -195,31 +195,9 @@ curl -X POST http://localhost:3001/imports/cnpj \
 
 ## Provider de CNPJ
 
-O módulo `Imports` usa a interface `CnpjProvider`:
+A busca por CSV da Receita foi encerrada. O histórico continua disponível. O upload autorizado usa código de cliente e CNPJ exato e executa uma transação por arquivo. O congelamento bloqueia os dois endpoints de escrita antes do serviço.
 
-```ts
-searchCompaniesByCityAndCnae(payload)
-getCompanyByCnpj(cnpj)
-```
-
-A implementação ativa é `ReceitaFederalProvider`.
-
-Fonte real atual:
-
-```text
-dadosCNAE/sp_4712100_estabelecimentos.csv
-```
-
-Esse CSV foi filtrado a partir do layout ESTABELE da Receita Federal para CNAE `4712100` no estado de SP. O provider carrega o arquivo em memória, indexa por código TOM do município e mapeia os registros para o modelo interno `ExternalCompany`.
-
-O provider mock foi removido do fluxo funcional atual. Permanecem apenas placeholders para integrações futuras:
-
-- `MinhaReceitaProvider`
-- `DadosAbertosProvider`
-
-### Coordenadas e rastreabilidade
-
-A base ESTABELE da Receita Federal não fornece latitude e longitude dos estabelecimentos. Quando a cidade está mapeada, o sistema gera uma coordenada visual aproximada usando centroide municipal com jitter determinístico por CNPJ.
+### Coordenadas históricas
 
 Campos importantes:
 
@@ -232,18 +210,6 @@ Importante: coordenadas com origem em centroide/jitter são apenas aproximaçõe
 ## Regras implementadas
 
 - CNPJ único em `Company`.
-- Importação normaliza CNPJ/CNAE e faz upsert de empresas.
-- Importação cria leads automaticamente.
-- Importação preserva campos de qualidade cadastral:
-  - `origemCoordenada`
-  - `statusVerificacaoEndereco`
-  - `confiancaVerificacao`
-  - `enderecoCompleto`
-  - `pendenteValidacao`
-  - `motivosPendencia`
-  - `pontuacaoOportunidade`
-  - `nivelOportunidade`
-  - `motivoPontuacao`
 - `potentialLevel`:
   - `0-49 LOW`
   - `50-74 MEDIUM`

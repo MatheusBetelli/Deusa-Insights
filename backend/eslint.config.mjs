@@ -3,7 +3,7 @@ import sonarjs from "eslint-plugin-sonarjs";
 import globals from "globals";
 import tseslint from "typescript-eslint";
 
-const projectFiles = ["src/**/*.ts", "prisma/**/*.ts", "scripts/generate-quality-report.ts"];
+const projectFiles = ["src/**/*.ts", "prisma/**/*.ts"];
 
 export default tseslint.config(
   { ignores: ["dist", "coverage", "node_modules"] },

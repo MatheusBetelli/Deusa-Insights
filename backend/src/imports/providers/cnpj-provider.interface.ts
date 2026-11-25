@@ -1,10 +1,3 @@
-export type CnpjSearchPayload = {
-  uf: string;
-  cityName: string;
-  cityIbgeCode?: string;
-  cnaeCode: string;
-  limit: number;
-};
 
 export type ExternalCompany = {
   cnpj: string;
@@ -48,7 +41,6 @@ export type ExternalCompany = {
 };
 
 export interface CnpjProvider {
-  searchCompaniesByCityAndCnae(payload: CnpjSearchPayload): Promise<ExternalCompany[]>;
   getCompanyByCnpj(cnpj: string): Promise<ExternalCompany | null>;
 }
 

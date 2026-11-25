@@ -295,3 +295,15 @@ test("operacoes administrativas declaram papeis no backend", () => {
   assert.deepStrictEqual(validateLocationRoles, [UserRole.ADMIN, UserRole.MANAGER]);
   assert.deepStrictEqual(updateLocationRoles, [UserRole.ADMIN]);
 });
+
+test("cookie bruto com encoding inválido retorna 401 sem consultar usuário", async () => {
+  const guard = new AuthGuard(
+    { verifyAsync: async () => assert.fail("Não deve verificar cookie malformado") } as never,
+    { get: () => "test-secret" } as never,
+    { user: { findUnique: async () => assert.fail("Não deve consultar usuário") } } as never,
+  );
+  const context = {
+    switchToHttp: () => ({ getRequest: () => ({ headers: { cookie: "auth_token=%E0%A4%A" } }) }),
+  } as never;
+  await assert.rejects(() => guard.canActivate(context), UnauthorizedException);
+});

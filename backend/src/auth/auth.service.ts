@@ -10,6 +10,7 @@ import { ChangePasswordDto } from "./dto/change-password.dto";
 import { LoginDto } from "./dto/login.dto";
 import { ResetPasswordDto } from "./dto/reset-password.dto";
 import { SetPasswordDto } from "./dto/set-password.dto";
+import { maskEmailForLogs } from "../common/lgpd.utils";
 import { escapeHtml } from "../common/html-safety";
 
 const DUMMY_PASSWORD_HASH = "$2b$12$LHnUBoIInYMJZXnrv95KwOp0eaXS0xp/NCr8/Tzrf5dNJKZlSPLHK";
@@ -152,7 +153,7 @@ export class AuthService {
         const redactedResetLink = resetLink.replace(/token=[^&]+/, "token=<redacted>");
         console.log(`\n======================================================`);
         console.log(`[LINK DE REDEFINIÇÃO DE SENHA GERADO - MODO DEV]`);
-        console.log(`Link gerado para ${user.email}: ${redactedResetLink}`);
+        console.log(`Link gerado para ${maskEmailForLogs(user.email)}: ${redactedResetLink}`);
         console.log(`======================================================\n`);
       }
       return;

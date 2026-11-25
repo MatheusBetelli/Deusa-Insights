@@ -13,6 +13,7 @@ export const Route = createFileRoute("/_app")({
     } catch {
       throw redirect({
         to: "/login",
+        reloadDocument: true,
       });
     }
   },

@@ -214,3 +214,43 @@ test("setPassword ativa a conta e impede o segundo uso do convite", async () => 
 
   await assert.rejects(() => service.setPassword(dto), BadRequestException);
 });
+
+test("recuperação sem provedor não registra e-mail completo nem token", async () => {
+  const originalApiKey = process.env.RESEND_API_KEY;
+  const originalEnv = process.env.NODE_ENV;
+  const originalLog = console.log;
+  const logs: string[] = [];
+  try {
+    delete process.env.RESEND_API_KEY;
+    process.env.NODE_ENV = "development";
+    console.log = (...args: unknown[]) => {
+      logs.push(args.map(String).join(" "));
+    };
+    const service = new AuthService(
+      {
+        user: {
+          findUnique: async () => ({
+            id: "qa",
+            name: "QA",
+            email: "qa.private@example.test",
+            updatedAt: new Date(),
+          }),
+        },
+      } as never,
+      { signAsync: async () => "secret-reset-token" } as never,
+    );
+    await service.forgotPassword("qa.private@example.test");
+    assert.ok(logs.length > 0);
+    assert.ok(
+      logs.every(
+        (line) => !line.includes("qa.private@example.test") && !line.includes("secret-reset-token"),
+      ),
+    );
+  } finally {
+    console.log = originalLog;
+    if (originalApiKey === undefined) delete process.env.RESEND_API_KEY;
+    else process.env.RESEND_API_KEY = originalApiKey;
+    if (originalEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = originalEnv;
+  }
+});

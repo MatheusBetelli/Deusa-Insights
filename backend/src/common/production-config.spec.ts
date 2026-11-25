@@ -104,3 +104,19 @@ test("configuração de produção rejeita relay de e-mail de teste", () => {
     true,
   );
 });
+
+test("configuração rejeita URL PostgreSQL malformada e loopback IPv6", () => {
+  for (const databaseUrl of [
+    "postgresql://",
+    "postgresql://[",
+    "postgresql:///",
+    "postgresql://user:pass@[::1]:5432/db",
+    "postgresql://user:pass@0.0.0.0/db",
+  ]) {
+    assert.ok(
+      validateProductionConfig({ ...validConfig, databaseUrl }).some((error) =>
+        error.includes("DATABASE_URL"),
+      ),
+    );
+  }
+});

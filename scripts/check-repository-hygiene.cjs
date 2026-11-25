@@ -15,7 +15,6 @@ const trackedEnvironmentFiles = trackedFiles.filter(
 );
 const allowedBackendScripts = new Set([
   "backend/scripts/.gitkeep",
-  "backend/scripts/generate-quality-report.ts",
 ]);
 const unexpectedBackendScripts = trackedFiles.filter(
   (file) => file.startsWith("backend/scripts/") && !allowedBackendScripts.has(file),

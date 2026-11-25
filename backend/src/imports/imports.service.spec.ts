@@ -4,7 +4,7 @@ import { BadRequestException } from "@nestjs/common";
 import { ImportsService } from "./imports.service";
 
 function makeEmptyService() {
-  return new ImportsService({} as never, {} as never, {} as never, {} as never);
+  return new ImportsService({} as never);
 }
 
 test("importação rejeita XLSX corrompido e formato XLS legado antes de acessar o banco", async () => {
@@ -74,20 +74,14 @@ test("importação Excel usa identificadores estáveis e não inventa empresas o
       },
     },
     $transaction: async (callback: (client: typeof transactionClient) => Promise<void>) =>
-      callback(transactionClient),
+      callback({
+        ...transactionClient,
+        company: prisma.company,
+        clientAccount: { ...transactionClient.clientAccount, ...prisma.clientAccount },
+        lead: { ...transactionClient.lead, ...prisma.lead },
+      } as typeof transactionClient),
   };
-  const companiesService = {
-    upsertCompany: async () => {
-      throw new Error("A importação de clientes não deve criar empresas");
-    },
-  };
-
-  const service = new ImportsService(
-    prisma as never,
-    companiesService as never,
-    {} as never,
-    {} as never,
-  );
+  const service = new ImportsService(prisma as never);
   const result = await service.importClientsFromExcelBuffer(buffer, "clientes.csv");
 
   assert.equal(result.totalLinhasProcessadas, 5);
@@ -114,4 +108,30 @@ test("importação Excel usa identificadores estáveis e não inventa empresas o
   const linkedLeadCreate = (leadWrites[0].create ?? {}) as Record<string, unknown>;
   assert.equal("score" in linkedLeadCreate, false);
   assert.equal("potentialLevel" in linkedLeadCreate, false);
+});
+test("falha em linha posterior aborta a única transação do arquivo", async () => {
+  let transactions = 0;
+  let attemptedWrites = 0;
+  const prisma = {
+    $transaction: async (work: (transaction: unknown) => Promise<unknown>) => {
+      transactions++;
+      return work({
+        clientAccount: {
+          findUnique: async () => null,
+          upsert: async () => {
+            if (++attemptedWrites === 2) throw new Error("falha simulada");
+          },
+        },
+      });
+    },
+  };
+  await assert.rejects(
+    new ImportsService(prisma as never).importClientsFromExcelBuffer(
+      Buffer.from("codigo,nome\nA,Loja A\nB,Loja B"),
+      "qa.csv",
+    ),
+    /falha simulada/,
+  );
+  assert.equal(transactions, 1);
+  assert.equal(attemptedWrites, 2);
 });

@@ -162,7 +162,7 @@ Quando `origemCoordenada` contem `centroide` ou `jitter`, a coordenada e apenas 
 | Confirmado | PATCH | `/cnaes/:id` | none | `UpdateCnaeDto` | `Cnae` | Nao consumido pelo React atual | Endpoint administrativo futuro |
 | Confirmado | GET | `/imports` | none | none | `ImportJob[]` | `/importar-cnpjs` | Historico recente, backend limita a 100 |
 | Confirmado | GET | `/imports/:id` | none | none | `ImportJob` | Nao identificado em tela principal | Service existe no React |
-| Confirmado | POST | `/imports/cnpj` | none | `ImportCnpjPayload` | `{ job: ImportJob; companies: Company[] }` | `/importar-cnpjs` | Escreve no banco; usa `ReceitaFederalProvider` e CSV real |
+| Legado | POST | `/imports/cnpj` | ADMIN | — | 410 após os guardas | — | DatasetFreeze pode recusar antes com 403 |
 | Confirmado | GET | `/map/opportunities` | none | none | `MapOpportunity[]` | `/mapa-oportunidades` | Rota efetiva do mapa de oportunidades; `/mapa-de-calor` redireciona para esta tela |
 | Confirmado | GET | `/pipeline` | none | none | `Pipeline` | `/funil-comercial` | Agrupa leads por status do funil |
 | Confirmado | GET | `/users` | none | none | `UserSummary[]` | Nao consumido pelo React atual | Pode apoiar filtros/responsaveis no Angular futuro |
@@ -434,7 +434,7 @@ Tela atual: `/consulta-cnpj`.
 
 Observacoes:
 
-- Usa `ReceitaFederalProvider`.
+- Sincronização por CSV encerrada. O provider retorna 410 para CNPJ válido após os guardas.
 - Faz upsert de empresa.
 - Retorna `404` quando o CNPJ nao existe no provider configurado.
 
@@ -460,37 +460,7 @@ O upload de clientes aceita somente `.xlsx` (OOXML) e `.csv`. O formato binário
 
 #### POST `/imports/cnpj`
 
-Body:
-
-```ts
-type ImportCnpjPayload = {
-  uf: string;
-  cityName: string;
-  cityIbgeCode?: string;
-  cnaeCode: string;
-  limit: number; // 1..5000
-};
-```
-
-Response:
-
-```ts
-type ImportCnpjResponse = {
-  job: ImportJob;
-  companies: Company[];
-};
-```
-
-Status: Confirmado.
-
-Tela atual: `/importar-cnpjs`.
-
-Observacoes:
-
-- Este endpoint escreve no banco.
-- Cria `ImportJob`.
-- Busca dados reais no CSV `dadosCNAE/sp_4712100_estabelecimentos.csv` via `ReceitaFederalProvider`.
-- Faz upsert de empresas e cria/atualiza leads.
+Busca territorial encerrada. O endpoint preserva autenticação, autorização e congelamento. Quando autorizado pelos guardas, responde 410 antes de qualquer escrita.
 
 #### GET `/imports`
 

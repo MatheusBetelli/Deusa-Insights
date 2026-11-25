@@ -30,7 +30,9 @@ function extractTokenFromRequest(request: AuthenticationRequest): string | undef
   // 2. Cookie header bruto (fallback se middleware não executou)
   const rawCookieHeader = request.headers?.cookie;
   if (rawCookieHeader) {
-    const match = rawCookieHeader.match(/(?:^|;\s*)(?:auth_token|deusa_auth_token|accessToken)=([^;]+)/);
+    const match = rawCookieHeader.match(
+      /(?:^|;\s*)(?:auth_token|deusa_auth_token|accessToken)=([^;]+)/,
+    );
     if (match && match[1]) {
       return decodeURIComponent(match[1].trim());
     }
@@ -55,11 +57,10 @@ export class AuthGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext) {
     const request = context.switchToHttp().getRequest<AuthenticationRequest>();
-    const token = extractTokenFromRequest(request);
-
-    if (!token) throw new UnauthorizedException("Token de autenticação não informado");
-
     try {
+      const token = extractTokenFromRequest(request);
+      if (!token) throw new UnauthorizedException("Token de autenticação não informado");
+
       const payload = await this.jwtService.verifyAsync(token, {
         secret: this.configService.get<string>("JWT_SECRET"),
         algorithms: ["HS256"],

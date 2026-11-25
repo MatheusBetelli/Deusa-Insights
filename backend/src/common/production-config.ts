@@ -16,7 +16,7 @@ export type ProductionConfig = {
 function isLocalhostOrigin(origin: string): boolean {
   try {
     const { hostname } = new URL(origin);
-    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]";
   } catch {
     return false;
   }
@@ -31,13 +31,18 @@ function isValidProductionOrigin(origin: string): boolean {
   }
 }
 
-function isLocalDatabaseUrl(databaseUrl: string): boolean {
+function isValidDatabaseUrl(databaseUrl: string): boolean {
   try {
-    const hostname = new URL(databaseUrl).hostname;
-    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+    const parsed = new URL(databaseUrl);
+    return ["postgres:", "postgresql:"].includes(parsed.protocol) && !!parsed.hostname;
   } catch {
     return false;
   }
+}
+
+function isLocalDatabaseUrl(databaseUrl: string): boolean {
+  const hostname = new URL(databaseUrl).hostname;
+  return ["localhost", "127.0.0.1", "[::1]", "0.0.0.0", "[::]"].includes(hostname);
 }
 
 function isPlaceholderDatabaseUrl(databaseUrl: string): boolean {
@@ -55,8 +60,8 @@ function validateDatabaseConfig(config: ProductionConfig): string[] {
 
   if (!databaseUrl) {
     errors.push("DATABASE_URL não está definida.");
-  } else if (!/^postgres(?:ql)?:\/\//i.test(databaseUrl)) {
-    errors.push("DATABASE_URL deve usar PostgreSQL.");
+  } else if (!isValidDatabaseUrl(databaseUrl)) {
+    errors.push("DATABASE_URL deve ser uma URL PostgreSQL válida com host.");
   } else if (isLocalDatabaseUrl(databaseUrl)) {
     errors.push("DATABASE_URL não pode apontar para localhost em produção.");
   } else if (isPlaceholderDatabaseUrl(databaseUrl)) {

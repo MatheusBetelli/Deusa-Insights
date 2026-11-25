@@ -74,4 +74,13 @@ skills-lock.json
 # Scratch & Temporary Audit Scripts
 backend/scripts/*.ts
 !backend/scripts/.gitkeep
-!backend/scripts/generate-quality-report.ts
+
+# Versioned project development guidance
+!.agents/
+.agents/*
+!.agents/skills/
+.agents/skills/*
+!.agents/skills/deusa-development/
+!.agents/skills/deusa-development/SKILL.md
+!.agents/skills/deusa-production-review/
+!.agents/skills/deusa-production-review/SKILL.md

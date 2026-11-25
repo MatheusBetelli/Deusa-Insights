@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Param, Post, UploadedFile, UseGuards, UseInterceptors } from "@nestjs/common";
+import { GoneException, BadRequestException, Controller, Get, Param, Post, UploadedFile, UseGuards, UseInterceptors } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { Throttle } from "@nestjs/throttler";
 import { AuthGuard } from "../auth/auth.guard";
@@ -6,7 +6,7 @@ import { Roles } from "../auth/roles.decorator";
 import { RolesGuard } from "../auth/roles.guard";
 import { DatasetFreezeGuard } from "../common/dataset-freeze.guard";
 import { UserRole } from "@prisma/client";
-import { ImportCnpjDto } from "./dto/import-cnpj.dto";
+
 import { ImportsService } from "./imports.service";
 
 const MAX_EXCEL_UPLOAD_BYTES = 5 * 1024 * 1024;
@@ -32,8 +32,8 @@ export class ImportsController {
 
   @Post("cnpj")
   @Throttle({ default: { ttl: 60000, limit: 20 } })
-  importCnpj(@Body() dto: ImportCnpjDto) {
-    return this.importsService.importCnpj(dto);
+  importCnpj() {
+    throw new GoneException("A busca por CNPJ foi encerrada. Consulte a carteira existente.");
   }
 
   @Post("excel-clients")
