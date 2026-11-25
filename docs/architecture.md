@@ -20,7 +20,7 @@ O backend já usa módulos por domínio. Preserve essa organização, os módulo
 
 ## Invariantes de produção
 
-Autorização permanece no servidor: autenticação, roles e escopo de carteira. Não substitua guardas por controles da interface. Preserve DTOs, cookies, endpoints, tratamento de HTML e respostas sem detalhes internos. Dataset congelado e APIs pagas seguem as skills existentes; refatorar não autoriza mudar dados. A carteira usa `ClientAccount.isCurrentClient`, sem inferência por rede ou raiz de CNPJ.
+Autorização permanece no servidor: autenticação, roles e escopo de carteira. Não substitua guardas por controles da interface. Preserve DTOs, cookies, endpoints, tratamento de HTML e respostas sem detalhes internos. Preserve o congelamento dos dados e o controle de APIs pagas; refatorar não autoriza mudar dados. A carteira usa `ClientAccount.isCurrentClient`, sem inferência por rede ou raiz de CNPJ.
 
 Não versionar segredos. Use os engines dos manifests (Node 22.13 ou superior compatível e npm 10+). Não instalar ou atualizar dependências como efeito colateral de uma reorganização.
 
@@ -30,16 +30,9 @@ Na raiz: `npm run typecheck`, `npm run lint`, `npm test`, `npm run deadcode`, `n
 
 Para mudanças visuais, valide desktop, tablet e mobile com foco, overflow e estados de erro. Para uma entrega, valide também ambiente, banco, migrações, backup/restauração, HTTPS, observabilidade e fluxos autenticados; checks locais não substituem essa evidência.
 
-## Skills locais
-
-- `.agents/skills/deusa-development/SKILL.md`: implementação e manutenção por domínio.
-- `.agents/skills/deusa-production-review/SKILL.md`: revisão de entrega e limites da evidência.
-
-Essas skills são arquivos opcionais locais, ignorados pelo Git; não estarão disponíveis em clones novos sem configuração local. As regras essenciais de arquitetura, congelamento de dados e custos de APIs permanecem documentadas neste repositório. Não adicionar cópias divergentes das mesmas instruções em vários diretórios.
-
 ## Verificação desta reorganização — 24/11/2026
 
-Executados com sucesso: `npm run typecheck`, `npm run lint`, `npm run test` (158 backend e 27 frontend), `npm run deadcode`, `npm run hygiene`, `npm run build` (inclui `check:node-artifact`) e `git diff --check`. As duas skills passaram no `quick_validate.py` do skill-creator. O artefato Node contém entrada do servidor e assets, sem arquivos de ambiente. O build emitiu aviso de depreciação de `punycode`.
+Executados com sucesso: `npm run typecheck`, `npm run lint`, `npm run test` (158 backend e 27 frontend), `npm run deadcode`, `npm run hygiene`, `npm run build` (inclui `check:node-artifact`) e `git diff --check`. O artefato Node contém entrada do servidor e assets, sem arquivos de ambiente. O build emitiu aviso de depreciação de `punycode`.
 
 A execução local usou Node 22.12.0, abaixo do mínimo declarado na raiz (22.13.0). A pipeline deve repetir os checks com a versão suportada antes da publicação.
 

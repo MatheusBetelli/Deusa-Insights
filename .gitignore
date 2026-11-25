@@ -74,9 +74,3 @@ skills-lock.json
 # Scratch & Temporary Audit Scripts
 backend/scripts/*.ts
 !backend/scripts/.gitkeep
-
-# Local-only project skills
-!.agents/
-.agents/*
-!.agents/skills/
-.agents/skills/*

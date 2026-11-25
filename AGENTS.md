@@ -6,7 +6,7 @@ This npm monorepo has two main packages:
 
 - `backend/`: NestJS REST API. Source lives in `backend/src`, organized by modules such as `auth`, `dashboard`, `leads`, `companies`, `map-opportunities`, and `users`. Prisma files and migrations are in `backend/prisma`.
 - `frontend/`: React 19, Vite, TanStack Start/Router app. Routes are in `frontend/src/routes`, API clients in `frontend/src/services`, UI in `frontend/src/components`, and assets in `frontend/src/assets`.
-- `docs/`, `scripts/`, `supabase/`, `.agents/`, and `.codex/` contain project docs, automation, deployment/database support, and agent-specific instructions.
+- `docs/`, `scripts/`, and `supabase/` contain project documentation, automation, deployment, and database support.
 
 ## Build, Test, and Development Commands
 
@@ -38,5 +38,3 @@ Do not commit `.env` files or secrets. Seeds require explicit local variables su
 ## Module ownership and local workflows
 
 Read `docs/architecture.md` when implementing or moving modules. Frontend domain code belongs in `frontend/src/features/<domain>`; route files own routing, validation and metadata. Keep shared HTTP transport in `services/api.ts` and shared visual primitives in `components/`. Preserve existing backend NestJS module boundaries.
-
-Optional local skills may be kept at `.agents/skills/deusa-development/SKILL.md` for implementation and refactoring and `.agents/skills/deusa-production-review/SKILL.md` for release reviews. These files are ignored by Git and are not available in a fresh GitHub clone unless added locally. The dataset-freeze and commercial API cost rules in this repository remain in force.
