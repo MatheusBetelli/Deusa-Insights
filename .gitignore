@@ -75,12 +75,8 @@ skills-lock.json
 backend/scripts/*.ts
 !backend/scripts/.gitkeep
 
-# Versioned project development guidance
+# Local-only project skills
 !.agents/
 .agents/*
 !.agents/skills/
 .agents/skills/*
-!.agents/skills/deusa-development/
-!.agents/skills/deusa-development/SKILL.md
-!.agents/skills/deusa-production-review/
-!.agents/skills/deusa-production-review/SKILL.md

@@ -35,7 +35,7 @@ Para mudanças visuais, valide desktop, tablet e mobile com foco, overflow e est
 - `.agents/skills/deusa-development/SKILL.md`: implementação e manutenção por domínio.
 - `.agents/skills/deusa-production-review/SKILL.md`: revisão de entrega e limites da evidência.
 
-As skills ficam no repositório e não alteram configuração global. As regras comerciais existentes continuam válidas. Não adicionar cópias divergentes das mesmas instruções em vários diretórios.
+Essas skills são arquivos opcionais locais, ignorados pelo Git; não estarão disponíveis em clones novos sem configuração local. As regras essenciais de arquitetura, congelamento de dados e custos de APIs permanecem documentadas neste repositório. Não adicionar cópias divergentes das mesmas instruções em vários diretórios.
 
 ## Verificação desta reorganização — 24/11/2026
 

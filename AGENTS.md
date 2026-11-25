@@ -39,4 +39,4 @@ Do not commit `.env` files or secrets. Seeds require explicit local variables su
 
 Read `docs/architecture.md` when implementing or moving modules. Frontend domain code belongs in `frontend/src/features/<domain>`; route files own routing, validation and metadata. Keep shared HTTP transport in `services/api.ts` and shared visual primitives in `components/`. Preserve existing backend NestJS module boundaries.
 
-Project-local skills: `.agents/skills/deusa-development/SKILL.md` for implementation and refactoring; `.agents/skills/deusa-production-review/SKILL.md` for release reviews. Existing dataset-freeze and commercial API cost rules continue to apply.
+Optional local skills may be kept at `.agents/skills/deusa-development/SKILL.md` for implementation and refactoring and `.agents/skills/deusa-production-review/SKILL.md` for release reviews. These files are ignored by Git and are not available in a fresh GitHub clone unless added locally. The dataset-freeze and commercial API cost rules in this repository remain in force.
